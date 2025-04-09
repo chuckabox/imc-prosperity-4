@@ -156,8 +156,9 @@ class Trader:
         self.squid_ink_prices = []
         self.squid_ink_ema_short = None
         self.squid_ink_ema_long = None
-        self.squid_ink_short_window = 600
-        self.squid_ink_long_window = 1400 
+        self.ema_short_window = 5
+        self.ema_long_window = 15
+        self.squid_ink_mid_prices = []
 
 
     # define easier sell and buy order functions
@@ -357,7 +358,56 @@ class Trader:
             self.send_buy_order('KELP', buy_price, max_buy, msg=f"KELP: MARKET MADE Buy {max_buy} @ {buy_price}")
             self.send_sell_order('KELP', sell_price, -max_sell, msg=f"KELP: MARKET MADE Sell {max_sell} @ {sell_price}")
 
-    def trade_squid_ink(self, state):
+    def trade_squid_ink_mm(self, state):
+        # this is the same logic as kelp!
+        # position limits
+        low = -50
+        high = 50
+
+        position = state.position.get("SQUID_INK", 0)
+
+        max_buy = high - position
+        max_sell = position - low
+
+        order_book = state.order_depths['SQUID_INK']
+        sell_orders = order_book.sell_orders
+        buy_orders = order_book.buy_orders
+
+        if len(sell_orders) != 0 and len(buy_orders) != 0:
+            ask, _ = list(sell_orders.items())[-1] # worst ask
+            bid, _ = list(buy_orders.items())[-1]  # worst bid
+            
+            fair_price = int(math.ceil((ask + bid) / 2))  # try changing this to floor maybe
+
+            decimal_fair_price = (ask + bid) / 2
+
+            logger.print(f"SQUID_INK FAIR PRICE: {decimal_fair_price}")
+            self.search_buys(state, 'SQUID_INK', decimal_fair_price, depth=3)
+            self.search_sells(state, 'SQUID_INK', decimal_fair_price, depth=3)
+
+            # Check if there's another market maker
+            best_ask = self.get_ask(state, 'SQUID_INK', fair_price)
+            best_bid =  self.get_bid(state, 'SQUID_INK', fair_price)
+
+            # our ordinary market
+            buy_price = math.floor(decimal_fair_price) - 2
+            sell_price = math.ceil(decimal_fair_price) + 2
+        
+            # update market if someone else is better than us
+            if best_ask is not None and best_bid is not None:
+                ask = best_ask
+                bid = best_bid
+                
+                sell_price = ask - 1
+                buy_price = bid + 1
+
+            max_buy =  50 - self.squid_ink_position - self.squid_ink_buy_orders # MAXIMUM SIZE OF MARKET ON BUY SIDE
+            max_sell = self.squid_ink_position + 50 - self.squid_ink_sell_orders # MAXIMUM SIZE OF MARKET ON SELL SIDE
+
+            self.send_buy_order('SQUID_INK', buy_price, max_buy, msg=f"SQUID_INK: MARKET MADE Buy {max_buy} @ {buy_price}")
+            self.send_sell_order('SQUID_INK', sell_price, -max_sell, msg=f"SQUID_INK: MARKET MADE Sell {max_sell} @ {sell_price}")
+
+    def trade_squid_ink_momentum(self, state):
         order_book = state.order_depths['SQUID_INK']
         position = state.position.get("SQUID_INK", 0)
         
@@ -370,18 +420,18 @@ class Trader:
             self.squid_ink_prices.append(mid_price)
             
             # window stuff
-            max_history = max(self.squid_ink_short_window, self.squid_ink_long_window) * 3
+            max_history = max(self.ema_short_window, self.ema_long_window) * 3
             if len(self.squid_ink_prices) > max_history:
                 self.squid_ink_prices = self.squid_ink_prices[-max_history:]
             
             # EMA
-            if len(self.squid_ink_prices) >= self.squid_ink_long_window:
+            if len(self.squid_ink_prices) >= self.ema_long_window:
                 if self.squid_ink_ema_short is None:
-                    self.squid_ink_ema_short = sum(self.squid_ink_prices[-self.squid_ink_short_window:]) / self.squid_ink_short_window
-                    self.squid_ink_ema_long = sum(self.squid_ink_prices[-self.squid_ink_long_window:]) / self.squid_ink_long_window
+                    self.squid_ink_ema_short = sum(self.squid_ink_prices[-self.ema_short_window:]) / self.ema_short_window
+                    self.squid_ink_ema_long = sum(self.squid_ink_prices[-self.ema_long_window:]) / self.ema_long_window
                 else:
-                    alpha_short = 2 / (self.squid_ink_short_window + 1)
-                    alpha_long = 2 / (self.squid_ink_long_window + 1)
+                    alpha_short = 2 / (self.ema_short_window + 1)
+                    alpha_long = 2 / (self.ema_long_window + 1)
                     self.squid_ink_ema_short = (mid_price * alpha_short) + (self.squid_ink_ema_short * (1 - alpha_short))
                     self.squid_ink_ema_long = (mid_price * alpha_long) + (self.squid_ink_ema_long * (1 - alpha_long))
                 
@@ -471,7 +521,7 @@ class Trader:
             
             else:
                 # only market make
-                logger.print(f"SQUID_INK: Building price history ({len(self.squid_ink_prices)}/{self.squid_ink_long_window})")
+                logger.print(f"SQUID_INK: Building price history ({len(self.squid_ink_prices)}/{self.ema_long_window})")
                 fair_price = mid_price
                 buy_price = fair_price - spread
                 sell_price = fair_price + spread
@@ -485,6 +535,56 @@ class Trader:
                                 msg=f"SQUID_INK: INIT SELL {max_sell} @ {sell_price}")
         else:
             logger.print("SQUID_INK: Insufficient market data")
+    
+    def update_squid_ink_history(self, mid_price):
+        self.squid_ink_mid_prices.append(mid_price)
+
+        max_len = max(self.ema_short_window, self.ema_long_window) * 3
+        if len(self.squid_ink_mid_prices) > max_len:
+            self.squid_ink_mid_prices = self.squid_ink_mid_prices[-max_len:]
+
+        alpha_short = 2 / (self.ema_short_window + 1)
+        alpha_long = 2 / (self.ema_long_window + 1)
+
+        if self.squid_ink_ema_short is None:
+            self.squid_ink_ema_short = mid_price
+            self.squid_ink_ema_long = mid_price
+        else:
+            self.squid_ink_ema_short = alpha_short * mid_price + (1 - alpha_short) * self.squid_ink_ema_short
+            self.squid_ink_ema_long = alpha_long * mid_price + (1 - alpha_long) * self.squid_ink_ema_long
+    
+    def get_squid_regime(self):
+        if len(self.squid_ink_mid_prices) < self.ema_long_window:
+            return "market_making"
+
+        trend_strength = self.squid_ink_ema_short - self.squid_ink_ema_long
+        volatility = np.std(self.squid_ink_mid_prices[-self.ema_long_window:])
+        
+        logger.print(f"SQUID_INK: trend = {trend_strength:.2f}, vol = {volatility:.2f}")
+
+        return "momentum" if abs(trend_strength) > volatility else "market_making"
+    
+    def trade_squid_ink(self, state):
+        order_depth = state.order_depths["SQUID_INK"]
+
+        if len(order_depth.buy_orders) == 0 or len(order_depth.sell_orders) == 0:
+            logger.print("SQUID_INK: Skipping, no bid/ask")
+            return
+
+        best_bid = max(order_depth.buy_orders)
+        best_ask = min(order_depth.sell_orders)
+        mid_price = (best_bid + best_ask) / 2
+
+        self.update_squid_ink_history(mid_price)
+        regime = self.get_squid_regime()
+        logger.print(f"SQUID_INK REGIME: {regime}")
+
+        if regime == "market_making":
+            self.trade_squid_ink_mm(state)
+        else:
+            self.trade_squid_ink_momentum(state)
+
+
     # TODO: UPDATE WHENEVER YOU ADD A NEW PRODUCT
     def reset_orders(self, state):
         self.orders = {}
