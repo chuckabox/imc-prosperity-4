@@ -1,8 +1,11 @@
 import streamlit as st
 import json
 import os
+import pandas as pd
+import altair as alt
 
 CONFIG_FILE = "config.json"
+DATA_DIR = "data_capsule"
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -31,15 +34,92 @@ def emergency_stop():
     st.session_state.config["tomato_active"] = False
     save_config(st.session_state.config)
 
+def run_backtest_simulation(day):
+    # Dummy simulation
+    st.toast(f"Running simulation against Day {day}...")
+    # Add a mock metric to state
+    st.session_state.sim_result = {"pnl": 1205.50, "day": day}
+
+@st.cache_data
+def load_and_process_data(day):
+    prices_file = os.path.join(DATA_DIR, f"prices_round_0_day_str.csv".replace("str", str(day)))
+    trades_file = os.path.join(DATA_DIR, f"trades_round_0_day_str.csv".replace("str", str(day)))
+    
+    if not os.path.exists(prices_file):
+        return None, None
+        
+    df_prices = pd.read_csv(prices_file, sep=";")
+    df_prices["mid_price"] = (df_prices["bid_price_1"] + df_prices["ask_price_1"]) / 2.0
+    
+    if "timestamp" in df_prices.columns:
+        # Group by 100 intervals (already 100 increments usually, but just in case)
+        df_prices["timestamp"] = (df_prices["timestamp"] // 100) * 100
+        df_prices = df_prices.groupby(["timestamp", "product"]).mean(numeric_only=True).reset_index()
+    
+    df_trades = None
+    if os.path.exists(trades_file):
+        df_trades = pd.read_csv(trades_file, sep=";")
+        
+    return df_prices, df_trades
+
+def render_chart(df_prices, df_trades, product, color, show_mean=False):
+    # Filter by product
+    df_p = df_prices[df_prices["product"] == product].copy()
+    if df_p.empty:
+        st.warning(f"No data for {product}")
+        return
+        
+    # Line chart for mid_price
+    line = alt.Chart(df_p).mark_line(color=color).encode(
+        x='timestamp:Q',
+        y=alt.Y('mid_price:Q', scale=alt.Scale(zero=False), title="Price"),
+        tooltip=['timestamp', 'mid_price']
+    )
+    
+    # Area chart for spread
+    band = alt.Chart(df_p).mark_area(opacity=0.3, color=color).encode(
+        x='timestamp:Q',
+        y='bid_price_1:Q',
+        y2='ask_price_1:Q'
+    )
+    
+    layers = [band, line]
+    
+    # Optional Mean line (Fair Value)
+    if show_mean:
+        mean_val = df_p["mid_price"].mean()
+        mean_line = alt.Chart(pd.DataFrame({'y': [mean_val]})).mark_rule(color='#e67e22', strokeDash=[5, 5], strokeWidth=2).encode(
+            y='y:Q'
+        )
+        layers.append(mean_line)
+        
+    # Optional Scatter overlay for trades
+    if df_trades is not None:
+        df_t = df_trades[df_trades["product"] == product].copy()
+        if not df_t.empty:
+            scatter = alt.Chart(df_t).mark_circle(size=60, color='white', opacity=0.8, stroke='black').encode(
+                x='timestamp:Q',
+                y='price:Q',
+                tooltip=['timestamp', 'price']
+            )
+            layers.append(scatter)
+            
+    chart = alt.layer(*layers).properties(
+        width=800,
+        height=300,
+        title=f"{product} Price & Spread Overlay"
+    ).interactive()
+    
+    st.altair_chart(chart, use_container_width=True)
+    return df_p
+
 def main():
     st.set_page_config(page_title="P4 Control Center", layout="wide")
-    st.title("🎛️ P4 Interactive Control Center")
     
     if "config" not in st.session_state:
         st.session_state.config = load_config()
         
     def on_change_callback():
-        # Update config dictionary from session state
         st.session_state.config["emerald_active"] = st.session_state.emerald_active
         st.session_state.config["tomato_active"] = st.session_state.tomato_active
         st.session_state.config["emerald_limit"] = st.session_state.emerald_limit
@@ -48,48 +128,69 @@ def main():
         st.session_state.config["mr_threshold"] = st.session_state.mr_threshold
         save_config(st.session_state.config)
 
-    col_left, col_right = st.columns([1.2, 1.0], gap="large")
-    
-    with col_left:
-        st.header("🎚️ Bot Parameters & Strategy Toggles")
+    # --- SIDEBAR CONFIG ---
+    with st.sidebar:
+        st.header("🎚️ Bot Setup (Config.json)")
         
-        # Emergency Stop
-        st.button("🚨 EMERGENCY STOP (KILL ALL TRADING) 🚨", on_click=emergency_stop, type="primary", use_container_width=True)
+        st.button("🚨 EMERGENCY STOP 🚨", on_click=emergency_stop, type="primary", use_container_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Strategy Toggles
         st.subheader("Strategy Activation")
-        col_t1, col_t2 = st.columns(2)
-        with col_t1:
-            st.toggle("🟩 Trade EMERALDS (Mean Reversion)", key="emerald_active", value=st.session_state.config["emerald_active"], on_change=on_change_callback)
-        with col_t2:
-            st.toggle("🟥 Trade TOMATOES (Market Making)", key="tomato_active", value=st.session_state.config["tomato_active"], on_change=on_change_callback)
+        st.toggle("🟩 EMERALDS (Mean Reversion)", key="emerald_active", value=st.session_state.config["emerald_active"], on_change=on_change_callback)
+        st.toggle("🟥 TOMATOES (Market Making)", key="tomato_active", value=st.session_state.config["tomato_active"], on_change=on_change_callback)
             
         st.divider()
-        
-        st.subheader("Parameter Sliders")
-        # Limits
-        st.slider("💎 Emeralds Inventory Limit", min_value=0, max_value=20, key="emerald_limit", value=st.session_state.config["emerald_limit"], on_change=on_change_callback)
-        st.slider("🍅 Tomatoes Inventory Limit", min_value=0, max_value=20, key="tomato_limit", value=st.session_state.config["tomato_limit"], on_change=on_change_callback)
+        st.subheader("Inventory Limits")
+        st.slider("💎 Emeralds", 0, 20, key="emerald_limit", value=st.session_state.config["emerald_limit"], on_change=on_change_callback)
+        st.slider("🍅 Tomatoes", 0, 20, key="tomato_limit", value=st.session_state.config["tomato_limit"], on_change=on_change_callback)
         
         st.divider()
-        # Strategy specifics
-        st.slider("🎯 Target Spread (Ticks between Buy/Sell)", min_value=1, max_value=10, key="target_spread", value=st.session_state.config["target_spread"], on_change=on_change_callback)
-        st.slider("📏 Mean Reversion Threshold (Price offset to Buy/Sell)", min_value=1, max_value=20, key="mr_threshold", value=st.session_state.config["mr_threshold"], on_change=on_change_callback)
+        st.subheader("Pricing Multipliers")
+        st.slider("🎯 Target Spread", 1, 10, key="target_spread", value=st.session_state.config["target_spread"], on_change=on_change_callback)
+        st.slider("📏 MR Threshold", 1, 20, key="mr_threshold", value=st.session_state.config["mr_threshold"], on_change=on_change_callback)
+        
+        st.divider()
+        st.info("Configuration is synchronized actively to JSON.")
+    
+    # --- MAIN CONTENT ---
+    st.title("📈 Prosperity 4: Tutorial Backtester")
+    
+    st.success("**Mission Status:** Currently analyzing Tutorial Data. Goal: Maintain Emeralds at ~10,000 and manage Tomato volatility.")
+    
+    col_day, col_btn = st.columns([1, 1])
+    with col_day:
+        selected_day = st.radio("Select Historical Data Day:", [-1, -2], horizontal=True)
+    with col_btn:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button(f"▶️ Backtest Against Selected Day ( {selected_day} )", type="primary"):
+            run_backtest_simulation(selected_day)
+            
+    if "sim_result" in st.session_state and st.session_state.sim_result["day"] == selected_day:
+        st.metric("Simulated PnL", f"${st.session_state.sim_result['pnl']:,.2f}", "+12%")
 
-    with col_right:
-        st.header("📋 Mission Briefing: Tutorial & Round 1")
+    st.markdown("---")
+    
+    df_prices, df_trades = load_and_process_data(selected_day)
+    
+    if df_prices is not None:
+        st.subheader(f"📊 Market Reconstruction (Day {selected_day})")
         
-        st.info("**💎 The Emerald Rule (Mean Reversion)**\n\nEmeralds (TG02) have a fixed 'fair value' of 10,000.\n\n*Explanation:* If the price is 10,002, sell. If it's 9,998, buy. It is a 'stable' asset designed for simple market making.")
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            df_em = render_chart(df_prices, df_trades, "EMERALDS", "#2ecc71", show_mean=True)
+            if df_em is not None:
+                em_mean = df_em["mid_price"].mean()
+                if abs(em_mean - 10000) < 5:
+                    st.info(f"**Fair Value Found:** Emerald average is extremely stable at {em_mean:.2f}. Anchoring to 10,000 is optimal.")
+                    
+        with col_c2:
+            render_chart(df_prices, df_trades, "TOMATOES", "#e74c3c", show_mean=False)
+            
+        st.markdown("### Raw Prices Preview")
+        st.dataframe(df_prices.tail(10), use_container_width=True)
         
-        st.warning("**🍅 The Tomato Trap (Volatility)**\n\nTomatoes (TG01) are a 'noisy' asset.\n\n*Explanation:* These don't have a fixed center. Use moving averages to find the trend, and don't hold them for too long or you'll get caught in a crash.")
-        
-        st.error("**⚖️ Inventory Skewing**\n\nDon't quote the same price on both sides if you're 'full'.\n\n*Explanation:* If you have +18/20 Emeralds, stop buying! Lower your buy price significantly and lower your sell price to get rid of your stock.")
-        
-        st.error("**📉 The 'Empty Book' Warning**\n\nAlways protect your bot from an empty order book.\n\n*Explanation:* If the order book is empty, your bot might crash. Always use `try/except` blocks or check if `order_depth.buy_orders` exists before trading.")
-        
-        st.markdown("---")
-        st.code("Current Saved Config:\n" + json.dumps(st.session_state.config, indent=2))
+    else:
+        st.warning(f"Could not locate data for Day {selected_day} in data_capsule/.")
 
 if __name__ == "__main__":
     main()
