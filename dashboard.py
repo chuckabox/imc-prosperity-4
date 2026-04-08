@@ -127,14 +127,22 @@ def forge_trader():
         "mr_threshold": st.session_state.config["mr_threshold"]
     }
 
-    replacement_config = "self.config = " + json.dumps(config_rendered, indent=8)
+    # Use json.dumps but fix the capitalization for Python
+    replacement_config = "self.config = " + json.dumps(config_rendered, indent=8).replace("true", "True").replace("false", "False")
+    
     text = re.sub(r"self\.config\s*=\s*\{.*?\}", replacement_config, text, flags=re.DOTALL)
 
     text = re.sub(r"def load_config\(self\):.*?def send_sell_order", "def load_config(self):\n        pass\n\n    def send_sell_order", text, flags=re.DOTALL)
     text = text.replace("fair_value = 10000", f"fair_value = {derived_fv}")
 
-    st.session_state.forged_code = text
-    st.toast("Trader.py beautifully forged.")
+    # Validation Step: Dummy Check for Python Syntax
+    import ast
+    try:
+        ast.parse(text)
+        st.session_state.forged_code = text
+        st.toast("Trader.py beautifully forged and validated.")
+    except SyntaxError as e:
+        st.error(f"Forge failed! Generated code has a syntax error: {e}")
 
 def perform_auto_analysis():
     df1, _ = load_and_process_data(-1)
