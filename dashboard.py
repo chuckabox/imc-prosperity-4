@@ -3,6 +3,7 @@ import json
 import os
 import pandas as pd
 import altair as alt
+import re
 
 CONFIG_FILE = "config.json"
 DATA_DIR = "data_capsule"
@@ -37,7 +38,6 @@ def emergency_stop():
 def run_backtest_simulation(day):
     # Dummy simulation
     st.toast(f"Running simulation against Day {day}...")
-    # Add a mock metric to state
     st.session_state.sim_result = {"pnl": 1205.50, "day": day}
 
 @st.cache_data
@@ -52,7 +52,6 @@ def load_and_process_data(day):
     df_prices["mid_price"] = (df_prices["bid_price_1"] + df_prices["ask_price_1"]) / 2.0
     
     if "timestamp" in df_prices.columns:
-        # Group by 100 intervals (already 100 increments usually, but just in case)
         df_prices["timestamp"] = (df_prices["timestamp"] // 100) * 100
         df_prices = df_prices.groupby(["timestamp", "product"]).mean(numeric_only=True).reset_index()
     
@@ -63,20 +62,17 @@ def load_and_process_data(day):
     return df_prices, df_trades
 
 def render_chart(df_prices, df_trades, product, color, show_mean=False):
-    # Filter by product
     df_p = df_prices[df_prices["product"] == product].copy()
     if df_p.empty:
         st.warning(f"No data for {product}")
         return
         
-    # Line chart for mid_price
     line = alt.Chart(df_p).mark_line(color=color).encode(
         x='timestamp:Q',
         y=alt.Y('mid_price:Q', scale=alt.Scale(zero=False), title="Price"),
         tooltip=['timestamp', 'mid_price']
     )
     
-    # Area chart for spread
     band = alt.Chart(df_p).mark_area(opacity=0.3, color=color).encode(
         x='timestamp:Q',
         y='bid_price_1:Q',
@@ -85,7 +81,6 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
     
     layers = [band, line]
     
-    # Optional Mean line (Fair Value)
     if show_mean:
         mean_val = df_p["mid_price"].mean()
         mean_line = alt.Chart(pd.DataFrame({'y': [mean_val]})).mark_rule(color='#e67e22', strokeDash=[5, 5], strokeWidth=2).encode(
@@ -93,7 +88,6 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
         )
         layers.append(mean_line)
         
-    # Optional Scatter overlay for trades
     if df_trades is not None:
         df_t = df_trades[df_trades["product"] == product].copy()
         if not df_t.empty:
@@ -112,6 +106,50 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
     
     st.altair_chart(chart, use_container_width=True)
     return df_p
+
+def forge_trader():
+    if not os.path.exists("trader.py"):
+        st.error("trader.py template is missing from workspace!")
+        return
+        
+    with open("trader.py", "r") as f:
+        text = f.read()
+
+    derived_spread = max(1, int(st.session_state.analysis["tom_std"] / 2.0))
+    derived_fv = int(st.session_state.analysis["em_mean"])
+
+    config_rendered = {
+        "emerald_active": st.session_state.config["emerald_active"],
+        "tomato_active": st.session_state.config["tomato_active"],
+        "emerald_limit": st.session_state.config["emerald_limit"],
+        "tomato_limit": st.session_state.config["tomato_limit"],
+        "target_spread": derived_spread,
+        "mr_threshold": st.session_state.config["mr_threshold"]
+    }
+
+    replacement_config = "self.config = " + json.dumps(config_rendered, indent=8)
+    text = re.sub(r"self\.config\s*=\s*\{.*?\}", replacement_config, text, flags=re.DOTALL)
+
+    text = re.sub(r"def load_config\(self\):.*?def send_sell_order", "def load_config(self):\n        pass\n\n    def send_sell_order", text, flags=re.DOTALL)
+    text = text.replace("fair_value = 10000", f"fair_value = {derived_fv}")
+
+    st.session_state.forged_code = text
+    st.toast("Trader.py beautifully forged.")
+
+def perform_auto_analysis():
+    df1, _ = load_and_process_data(-1)
+    df2, _ = load_and_process_data(-2)
+    
+    if df1 is None or df2 is None:
+        st.error("Cannot run analysis! Ensure day_-1 and day_-2 CSVs are in data_capsule.")
+        return
+        
+    df = pd.concat([df1, df2])
+    em_mean = df[df["product"] == "EMERALDS"]["mid_price"].mean()
+    tom_std = df[df["product"] == "TOMATOES"]["mid_price"].std()
+    
+    st.session_state.analysis = {"em_mean": em_mean, "tom_std": tom_std}
+    st.toast("Analysis Successful!")
 
 def main():
     st.set_page_config(page_title="P4 Control Center", layout="wide")
@@ -153,44 +191,81 @@ def main():
         st.info("Configuration is synchronized actively to JSON.")
     
     # --- MAIN CONTENT ---
-    st.title("📈 Prosperity 4: Tutorial Backtester")
+    st.title("📈 Prosperity 4: Operations Console")
     
-    st.success("**Mission Status:** Currently analyzing Tutorial Data. Goal: Maintain Emeralds at ~10,000 and manage Tomato volatility.")
+    tab_backtest, tab_forge = st.tabs(["📉 Visual Backtester", "🛠️ One-Click Forge"])
     
-    col_day, col_btn = st.columns([1, 1])
-    with col_day:
-        selected_day = st.radio("Select Historical Data Day:", [-1, -2], horizontal=True)
-    with col_btn:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button(f"▶️ Backtest Against Selected Day ( {selected_day} )", type="primary"):
-            run_backtest_simulation(selected_day)
+    with tab_forge:
+        st.header("Upload Assembly Pipeline")
+        st.markdown("Compile your historical findings and current sidebar configurations into a single, sterile `trader.py` ready for IMC limits.")
+        
+        # 1. Scanning
+        st.markdown("### 1. Identify Assets")
+        d1 = os.path.exists(os.path.join(DATA_DIR, "prices_round_0_day_-1.csv"))
+        d2 = os.path.exists(os.path.join(DATA_DIR, "prices_round_0_day_-2.csv"))
+        if d1 and d2:
+            st.success("✅ Tutorial Day -1 and Day -2 files detected cleanly in `data_capsule/`.")
+        else:
+            st.error("❌ Missing required Tutorial Day data in `data_capsule/` for auto-analysis.")
             
-    if "sim_result" in st.session_state and st.session_state.sim_result["day"] == selected_day:
-        st.metric("Simulated PnL", f"${st.session_state.sim_result['pnl']:,.2f}", "+12%")
+        # 2. Analysis
+        st.markdown("### 2. Auto-Analysis Engine")
+        st.button("🔍 Run Auto-Analysis", on_click=perform_auto_analysis, disabled=not (d1 and d2))
+        
+        if "analysis" in st.session_state:
+            st.success("**Analysis Suite Complete.**")
+            st.metric("Derived Emerald Fair Value", f"{st.session_state.analysis['em_mean']:.1f}")
+            st.metric("Derived Tomato Volatility Factor", f"{st.session_state.analysis['tom_std']:.2f}")
+            
+            st.markdown("### 3. Execution")
+            st.button("🛠️ Forge Final Trader.py", on_click=forge_trader, type="primary")
+            
+            if "forged_code" in st.session_state:
+                st.download_button(
+                    label="⬇️ Download trader.py for Round 0 Upload",
+                    data=st.session_state.forged_code,
+                    file_name="trader.py",
+                    mime="text/x-python",
+                    type="primary"
+                )
+    
+    with tab_backtest:
+        st.success("**Mission Status:** Currently analyzing Tutorial Data. Goal: Maintain Emeralds at ~10,000 and manage Tomato volatility.")
+        
+        col_day, col_btn = st.columns([1, 1])
+        with col_day:
+            selected_day = st.radio("Select Historical Data Day:", [-1, -2], horizontal=True)
+        with col_btn:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button(f"▶️ Backtest Against Selected Day ( {selected_day} )", type="primary"):
+                run_backtest_simulation(selected_day)
+                
+        if "sim_result" in st.session_state and st.session_state.sim_result["day"] == selected_day:
+            st.metric("Simulated PnL", f"${st.session_state.sim_result['pnl']:,.2f}", "+12%")
 
-    st.markdown("---")
-    
-    df_prices, df_trades = load_and_process_data(selected_day)
-    
-    if df_prices is not None:
-        st.subheader(f"📊 Market Reconstruction (Day {selected_day})")
+        st.markdown("---")
         
-        col_c1, col_c2 = st.columns(2)
-        with col_c1:
-            df_em = render_chart(df_prices, df_trades, "EMERALDS", "#2ecc71", show_mean=True)
-            if df_em is not None:
-                em_mean = df_em["mid_price"].mean()
-                if abs(em_mean - 10000) < 5:
-                    st.info(f"**Fair Value Found:** Emerald average is extremely stable at {em_mean:.2f}. Anchoring to 10,000 is optimal.")
-                    
-        with col_c2:
-            render_chart(df_prices, df_trades, "TOMATOES", "#e74c3c", show_mean=False)
+        df_prices, df_trades = load_and_process_data(selected_day)
+        
+        if df_prices is not None:
+            st.subheader(f"📊 Market Reconstruction (Day {selected_day})")
             
-        st.markdown("### Raw Prices Preview")
-        st.dataframe(df_prices.tail(10), use_container_width=True)
-        
-    else:
-        st.warning(f"Could not locate data for Day {selected_day} in data_capsule/.")
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                df_em = render_chart(df_prices, df_trades, "EMERALDS", "#2ecc71", show_mean=True)
+                if df_em is not None:
+                    em_mean = df_em["mid_price"].mean()
+                    if abs(em_mean - 10000) < 5:
+                        st.info(f"**Fair Value Found:** Emerald average is extremely stable at {em_mean:.2f}. Anchoring to 10,000 is optimal.")
+                        
+            with col_c2:
+                render_chart(df_prices, df_trades, "TOMATOES", "#e74c3c", show_mean=False)
+                
+            st.markdown("### Raw Prices Preview")
+            st.dataframe(df_prices.tail(10), use_container_width=True)
+            
+        else:
+            st.warning(f"Could not locate data for Day {selected_day} in data_capsule/.")
 
 if __name__ == "__main__":
     main()
