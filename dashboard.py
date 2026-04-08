@@ -189,7 +189,7 @@ def main():
                   key="emerald_active", 
                   value=st.session_state.config["emerald_active"], 
                   on_change=on_change_callback,
-                  help="Mean Reversion strategy assumes the price will return to a central 'Fair Value' (like 10,000 for Emeralds). It buys when low and sells when high.")
+                  help="The 'Rubber Band' strategy. It assumes prices always snap back to the middle (like 10,000 for Emeralds).")
         st.toggle("🟥 TOMATOES (Market Making)", 
                   key="tomato_active", 
                   value=st.session_state.config["tomato_active"], 
@@ -198,16 +198,21 @@ def main():
             
         st.divider()
         st.subheader("Inventory Limits")
+        
+        # Safe-Fail Warning
+        if st.session_state.config["emerald_limit"] > 18 or st.session_state.config["tomato_limit"] > 18:
+            st.error("⚠️ DANGER: Trading at max capacity (20) means one bad move could get you liquidated. Keep this at 15-18 to be safe!")
+
         st.slider("💎 Emeralds", 0, 20, 
                   key="emerald_limit", 
                   value=st.session_state.config["emerald_limit"], 
                   on_change=on_change_callback,
-                  help="The maximum amount of Emeralds you can hold. Going over this gets you disqualified!")
+                  help="Think of this as your backpack size. You can't carry more than this. If the limit is 20, you can't own more than 20. Going over this gets you disqualified!")
         st.slider("🍅 Tomatoes", 0, 20, 
                   key="tomato_limit", 
                   value=st.session_state.config["tomato_limit"], 
                   on_change=on_change_callback,
-                  help="The maximum amount of Tomatoes you can hold. Going over this gets you disqualified!")
+                  help="Think of this as your backpack size. You can't carry more than this. If the limit is 20, you can't own more than 20. Going over this gets you disqualified!")
         
         st.divider()
         st.subheader("Pricing Multipliers")
@@ -215,7 +220,7 @@ def main():
                   key="target_spread", 
                   value=st.session_state.config["target_spread"], 
                   on_change=on_change_callback,
-                  help="The gap between your buy and sell price. A larger spread means more profit per trade but fewer fills.")
+                  help="This is like the 'aggressiveness' of your bot. High multiplier = higher prices, but fewer trades. Low multiplier = fast trades, but less profit per trade.")
         st.slider("📏 MR Threshold", 1, 20, 
                   key="mr_threshold", 
                   value=st.session_state.config["mr_threshold"], 
