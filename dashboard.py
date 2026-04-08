@@ -166,26 +166,61 @@ def main():
         st.session_state.config["mr_threshold"] = st.session_state.mr_threshold
         save_config(st.session_state.config)
 
-    # --- SIDEBAR CONFIG ---
+    # --- SIDEBAR & TRADING 101 ---
     with st.sidebar:
+        st.header("📚 Trading 101")
+        with st.expander("Show Cheat Sheet"):
+            st.info("**Bid**: The highest price someone is willing to pay to BUY.\n\n**Ask**: The lowest price someone is willing to accept to SELL.")
+            st.markdown("---")
+            st.write("_Remember: You want to buy low and sell high!_")
+
+        st.divider()
         st.header("🎚️ Bot Setup (Config.json)")
         
-        st.button("🚨 EMERGENCY STOP 🚨", on_click=emergency_stop, type="primary", use_container_width=True)
+        st.button("🚨 EMERGENCY STOP 🚨", 
+                  on_click=emergency_stop, 
+                  type="primary", 
+                  use_container_width=True,
+                  help="Instantly sets all limits to 0 and stops all trading logic.")
         st.markdown("<br>", unsafe_allow_html=True)
         
         st.subheader("Strategy Activation")
-        st.toggle("🟩 EMERALDS (Mean Reversion)", key="emerald_active", value=st.session_state.config["emerald_active"], on_change=on_change_callback)
-        st.toggle("🟥 TOMATOES (Market Making)", key="tomato_active", value=st.session_state.config["tomato_active"], on_change=on_change_callback)
+        st.toggle("🟩 EMERALDS (Mean Reversion)", 
+                  key="emerald_active", 
+                  value=st.session_state.config["emerald_active"], 
+                  on_change=on_change_callback,
+                  help="Mean Reversion strategy assumes the price will return to a central 'Fair Value' (like 10,000 for Emeralds). It buys when low and sells when high.")
+        st.toggle("🟥 TOMATOES (Market Making)", 
+                  key="tomato_active", 
+                  value=st.session_state.config["tomato_active"], 
+                  on_change=on_change_callback,
+                  help="Market Making strategy places both a Buy and a Sell order. You profit from the difference (the 'spread') between them.")
             
         st.divider()
         st.subheader("Inventory Limits")
-        st.slider("💎 Emeralds", 0, 20, key="emerald_limit", value=st.session_state.config["emerald_limit"], on_change=on_change_callback)
-        st.slider("🍅 Tomatoes", 0, 20, key="tomato_limit", value=st.session_state.config["tomato_limit"], on_change=on_change_callback)
+        st.slider("💎 Emeralds", 0, 20, 
+                  key="emerald_limit", 
+                  value=st.session_state.config["emerald_limit"], 
+                  on_change=on_change_callback,
+                  help="The maximum amount of Emeralds you can hold. Going over this gets you disqualified!")
+        st.slider("🍅 Tomatoes", 0, 20, 
+                  key="tomato_limit", 
+                  value=st.session_state.config["tomato_limit"], 
+                  on_change=on_change_callback,
+                  help="The maximum amount of Tomatoes you can hold. Going over this gets you disqualified!")
         
         st.divider()
         st.subheader("Pricing Multipliers")
-        st.slider("🎯 Target Spread", 1, 10, key="target_spread", value=st.session_state.config["target_spread"], on_change=on_change_callback)
-        st.slider("📏 MR Threshold", 1, 20, key="mr_threshold", value=st.session_state.config["mr_threshold"], on_change=on_change_callback)
+        st.slider("🎯 Target Spread", 1, 10, 
+                  key="target_spread", 
+                  value=st.session_state.config["target_spread"], 
+                  on_change=on_change_callback,
+                  help="The gap between your buy and sell price. A larger spread means more profit per trade but fewer fills.")
+        st.slider("📏 MR Threshold", 1, 20, 
+                  key="mr_threshold", 
+                  value=st.session_state.config["mr_threshold"], 
+                  on_change=on_change_callback,
+                  help="How far away from fair value the price must be before the Mean Reversion strategy triggers.")
         
         st.divider()
         st.info("Configuration is synchronized actively to JSON.")
@@ -210,15 +245,23 @@ def main():
             
         # 2. Analysis
         st.markdown("### 2. Auto-Analysis Engine")
-        st.button("🔍 Run Auto-Analysis", on_click=perform_auto_analysis, disabled=not (d1 and d2))
+        st.button("🔍 Run Auto-Analysis", 
+                  on_click=perform_auto_analysis, 
+                  disabled=not (d1 and d2),
+                  help="Determines the 'Fair Value' for Emeralds and the 'Volatility' for Tomatoes based on available CSV data.")
         
         if "analysis" in st.session_state:
+            st.info(f"**Teacher's Note:** I set Emerald Fair Value to {st.session_state.analysis['em_mean']:.0f} because that's the average mid-price found in your CSV data. Tomatoes require a dynamic spread because they are more 'noisy'.")
+            
             st.success("**Analysis Suite Complete.**")
             st.metric("Derived Emerald Fair Value", f"{st.session_state.analysis['em_mean']:.1f}")
             st.metric("Derived Tomato Volatility Factor", f"{st.session_state.analysis['tom_std']:.2f}")
             
             st.markdown("### 3. Execution")
-            st.button("🛠️ Forge Final Trader.py", on_click=forge_trader, type="primary")
+            st.button("🛠️ Forge Final Trader.py", 
+                      on_click=forge_trader, 
+                      type="primary",
+                      help="Injects analyzed results and current settings into a standalone trader.py script.")
             
             if "forged_code" in st.session_state:
                 st.download_button(
@@ -237,7 +280,9 @@ def main():
             selected_day = st.radio("Select Historical Data Day:", [-1, -2], horizontal=True)
         with col_btn:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button(f"▶️ Backtest Against Selected Day ( {selected_day} )", type="primary"):
+            if st.button(f"▶️ Backtest Against Selected Day ( {selected_day} )", 
+                         type="primary",
+                         help="Runs a simulated version of your trading logic against the historical market state."):
                 run_backtest_simulation(selected_day)
                 
         if "sim_result" in st.session_state and st.session_state.sim_result["day"] == selected_day:
