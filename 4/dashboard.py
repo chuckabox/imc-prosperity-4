@@ -358,14 +358,14 @@ def main():
         
         st.divider()
         st.subheader("Pricing Multipliers")
-        st.slider("🎯 Target Spread", 1, 10, 
+        st.slider("🎯 Target Spread", 1.0, 10.0, 
                   key="target_spread", 
-                  value=st.session_state.config["target_spread"], 
+                  value=float(st.session_state.config["target_spread"]), 
                   on_change=on_change_callback,
                   help="This is like the 'aggressiveness' of your bot. High multiplier = higher prices, but fewer trades. Low multiplier = fast trades, but less profit per trade.")
-        st.slider("📏 MR Threshold", 1, 20, 
+        st.slider("📏 MR Threshold", 1.0, 20.0, 
                   key="mr_threshold", 
-                  value=st.session_state.config["mr_threshold"], 
+                  value=float(st.session_state.config["mr_threshold"]), 
                   on_change=on_change_callback,
                   help="How far away from fair value the price must be before the Mean Reversion strategy triggers.")
         
