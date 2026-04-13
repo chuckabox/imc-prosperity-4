@@ -20,13 +20,26 @@ Follow these steps to get your first bot ready for upload:
 - **⚠️ Safety First**: Keep your limits between 15-18 to avoid disqualification!
 - **Click 'Forge Final'**: Back in the **One-Click Forge** tab, click the **Forge Final Trader.py** button. This creates a clean, standalone file with all your settings baked in.
 
-### 📤 4. Upload
-- **Download**: Click the download button that appears after forging.
-- **Upload**: Take the `trader.py` file and drag it into the **A.R.I.A. Uplink** on the IMC competition site.
+### 🧪 4. How to Backtest (Test before you upload!)
+Backtesting allows you to see how your bot *would have* performed in the past. 
+
+**Option A: The visual way (Recommended)**
+1.  In your terminal, run: `streamlit run 4/dashboard.py`
+2.  Switch to the **Backtester** tab in the dashboard.
+3.  Click **"Run Full Simulation"**.
+4.  Watch your PnL graph grow!
+
+**Option B: The quick way (No charts)**
+1.  In your terminal, run: `python 4/backtest_cli.py`
+2.  Look at the `Final PnL` number at the bottom. If it's positive, you're making money!
+
+### 📤 5. Upload
+- **Final Step**: Once you are happy with your backtest results, take the `trader.py` file and upload it to the IMC portal.
 
 ---
 
 ## 🧠 Trading Strategies Explained
+...
 
 - **Mean Reversion (The 'Rubber Band')**: This strategy assumes prices always snap back to the middle. It buys when the price is low and sells when it's high. Perfect for stable assets like Emeralds.
 - **Market Making**: This strategy places both a Buy and a Sell order at the same time. You profit from the "Spread" (the tiny gap between what people are paying and what they are asking for).
