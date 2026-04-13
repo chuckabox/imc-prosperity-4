@@ -14,6 +14,7 @@ from trader import Trader
 def run_cli_backtest(day):
     data_dir = os.path.join(os.path.dirname(__file__), "data_capsule")
     prices_file = os.path.join(data_dir, f"prices_round_0_day_{day}.csv")
+    trades_file = os.path.join(data_dir, f"trades_round_0_day_{day}.csv")
     
     if not os.path.exists(prices_file):
         print(f"Error: Could not find {prices_file}")
@@ -21,6 +22,7 @@ def run_cli_backtest(day):
 
     print(f"--- Starting Backtest for Day {day} ---")
     df_prices = pd.read_csv(prices_file, sep=";")
+    df_trades = pd.read_csv(trades_file, sep=";") if os.path.exists(trades_file) else None
     
     trader = Trader()
     listings = {
@@ -63,10 +65,12 @@ def run_cli_backtest(day):
             curr_ask = row["ask_price_1"]
             curr_bid = row["bid_price_1"]
             
+            # --- Fill Logic ---
             for order in order_list:
                 qty = order.quantity
                 price = order.price
                 
+                # A. Aggressive (Market Taking)
                 if qty > 0 and price >= curr_ask:
                     fill_qty = min(qty, 20 - positions[product])
                     if fill_qty > 0:
@@ -77,6 +81,26 @@ def run_cli_backtest(day):
                     if fill_qty > 0:
                         positions[product] -= fill_qty
                         cash += fill_qty * curr_bid
+                
+                # B. Passive (Market Making) - Use market trades
+                elif df_trades is not None:
+                    mkt_trades = df_trades[(df_trades["timestamp"] == ts) & (df_trades["product"] == product)]
+                    for _, trade in mkt_trades.iterrows():
+                        trade_price = int(trade["price"])
+                        trade_qty = 1 # Default since missing from CSV
+                        
+                        if qty > 0 and price >= trade_price:
+                            # Someone sold to us
+                            fill_qty = min(qty, 20 - positions[product], trade_qty)
+                            if fill_qty > 0:
+                                positions[product] += fill_qty
+                                cash -= fill_qty * price
+                        elif qty < 0 and price <= trade_price:
+                            # Someone bought from us
+                            fill_qty = min(-qty, positions[product] + 20, trade_qty)
+                            if fill_qty > 0:
+                                positions[product] -= fill_qty
+                                cash += fill_qty * price
         
         mtm_pnl = cash
         for product, pos in positions.items():
