@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import altair as alt
 import re
+from datamodel import Listing, OrderDepth, TradingState, Observation, Order
 
 CONFIG_FILE = "config.json"
 DATA_DIR = "data_capsule"
@@ -35,15 +36,109 @@ def emergency_stop():
     st.session_state.config["tomato_active"] = False
     save_config(st.session_state.config)
 
+from trader import Trader, logger as trader_logger
+
 def run_backtest_simulation(day):
-    # Dummy simulation
     st.toast(f"Running simulation against Day {day}...")
-    st.session_state.sim_result = {"pnl": 1205.50, "day": day}
+    
+    df_prices, df_trades = load_and_process_data(day)
+    if df_prices is None:
+        st.error("Missing data for simulation!")
+        return
+
+    trader = Trader()
+    # Mock symbols and listings
+    listings = {
+        "EMERALDS": Listing("EMERALDS", "EMERALDS", "SEASHELLS"),
+        "TOMATOES": Listing("TOMATOES", "TOMATOES", "SEASHELLS")
+    }
+    
+    total_pnl = 0.0
+    positions = {"EMERALDS": 0, "TOMATOES": 0}
+    cash = 0.0
+    
+    # Track metrics
+    pnl_history = []
+    
+    # Group by timestamp
+    grouped = df_prices.groupby("timestamp")
+    
+    progress_bar = st.progress(0)
+    total_steps = len(grouped)
+    
+    for i, (ts, group) in enumerate(grouped):
+        # Update progress
+        progress_bar.progress((i + 1) / total_steps)
+        
+        # Build order depths from CSV
+        order_depths = {}
+        for _, row in group.iterrows():
+            product = row["product"]
+            # Simplified book: 1 bid and 1 ask from the CSV columns
+            depth = OrderDepth()
+            depth.buy_orders = {int(row["bid_price_1"]): 10} # Simplified depth
+            depth.sell_orders = {int(row["ask_price_1"]): -10}
+            order_depths[product] = depth
+            
+        # Create state
+        state = TradingState(
+            traderData=trader.traderData,
+            timestamp=ts,
+            listings=listings,
+            order_depths=order_depths,
+            own_trades={},
+            market_trades={},
+            position=positions,
+            observations=Observation({}, {})
+        )
+        
+        # Run trader
+        orders, conversions, trader_data = trader.run(state)
+        trader.traderData = trader_data # Persist
+        
+        # Simple execution model: fill MM orders if they match the book
+        for product, order_list in orders.items():
+            if product not in group["product"].values: continue
+            row = group[group["product"] == product].iloc[0]
+            curr_ask = row["ask_price_1"]
+            curr_bid = row["bid_price_1"]
+            
+            for order in order_list:
+                qty = order.quantity
+                price = order.price
+                
+                # Logic: If I want to buy at price X, and market sells at Y
+                if qty > 0 and price >= curr_ask:
+                    # Filled!
+                    fill_qty = min(qty, 20 - positions[product]) # Respect limits
+                    if fill_qty > 0:
+                        positions[product] += fill_qty
+                        cash -= fill_qty * curr_ask
+                elif qty < 0 and price <= curr_bid:
+                    # Filled!
+                    fill_qty = min(-qty, positions[product] + 20)
+                    if fill_qty > 0:
+                        positions[product] -= fill_qty
+                        cash += fill_qty * curr_bid
+        
+        # Calculate current PnL (Mark-to-market)
+        mtm_pnl = cash
+        for product, pos in positions.items():
+            if product in group["product"].values:
+                mid = (group[group["product"] == product].iloc[0]["bid_price_1"] + group[group["product"] == product].iloc[0]["ask_price_1"]) / 2.0
+                mtm_pnl += pos * mid
+        
+        pnl_history.append(mtm_pnl)
+    
+    final_pnl = pnl_history[-1] if pnl_history else 0
+    st.session_state.sim_result = {"pnl": final_pnl, "day": day}
+    st.success(f"Simulation Complete! Final PnL: **{final_pnl:,.2f}**")
 
 @st.cache_data
 def load_and_process_data(day):
-    prices_file = os.path.join(DATA_DIR, f"prices_round_0_day_str.csv".replace("str", str(day)))
-    trades_file = os.path.join(DATA_DIR, f"trades_round_0_day_str.csv".replace("str", str(day)))
+    # Search for files with either .csv or .csv-like names
+    prices_file = os.path.join(DATA_DIR, f"prices_round_0_day_{day}.csv")
+    trades_file = os.path.join(DATA_DIR, f"trades_round_0_day_{day}.csv")
     
     if not os.path.exists(prices_file):
         return None, None

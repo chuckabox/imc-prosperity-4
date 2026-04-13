@@ -1,7 +1,13 @@
 import json
 from typing import Dict, List
 from json import JSONEncoder
-import jsonpickle
+try:
+    import jsonpickle
+except ImportError:
+    class jsonpickle:
+        @staticmethod
+        def encode(obj):
+            return json.dumps(obj)
 
 Time = int
 Symbol = str
