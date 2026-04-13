@@ -6,8 +6,8 @@ import altair as alt
 import re
 from datamodel import Listing, OrderDepth, TradingState, Observation, Order
 
-CONFIG_FILE = "config.json"
-DATA_DIR = "data_capsule"
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data_capsule")
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -57,84 +57,120 @@ def run_backtest_simulation(day):
     positions = {"EMERALDS": 0, "TOMATOES": 0}
     cash = 0.0
     
-    # Track metrics
+    if "trades_log" not in st.session_state:
+        st.session_state.trades_log = []
+    st.session_state.trades_log = [] 
+    
     pnl_history = []
-    
-    # Group by timestamp
-    grouped = df_prices.groupby("timestamp")
-    
-    progress_bar = st.progress(0)
-    total_steps = len(grouped)
-    
-    for i, (ts, group) in enumerate(grouped):
-        # Update progress
-        progress_bar.progress((i + 1) / total_steps)
+    try:
+        grouped = df_prices.groupby("timestamp")
+        total_steps = len(grouped)
+        progress_bar = st.progress(0)
         
-        # Build order depths from CSV
-        order_depths = {}
-        for _, row in group.iterrows():
-            product = row["product"]
-            # Simplified book: 1 bid and 1 ask from the CSV columns
-            depth = OrderDepth()
-            depth.buy_orders = {int(row["bid_price_1"]): 10} # Simplified depth
-            depth.sell_orders = {int(row["ask_price_1"]): -10}
-            order_depths[product] = depth
+        for i, (ts, group) in enumerate(grouped):
+            progress_bar.progress((i + 1) / total_steps)
             
-        # Create state
-        state = TradingState(
-            traderData=trader.traderData,
-            timestamp=ts,
-            listings=listings,
-            order_depths=order_depths,
-            own_trades={},
-            market_trades={},
-            position=positions,
-            observations=Observation({}, {})
-        )
-        
-        # Run trader
-        orders, conversions, trader_data = trader.run(state)
-        trader.traderData = trader_data # Persist
-        
-        # Simple execution model: fill MM orders if they match the book
-        for product, order_list in orders.items():
-            if product not in group["product"].values: continue
-            row = group[group["product"] == product].iloc[0]
-            curr_ask = row["ask_price_1"]
-            curr_bid = row["bid_price_1"]
-            
-            for order in order_list:
-                qty = order.quantity
-                price = order.price
+            # Prepare state
+            order_depths = {}
+            for _, row in group.iterrows():
+                product = row["product"]
+                depth = OrderDepth()
+                depth.buy_orders = {int(row["bid_price_1"]): 10}
+                depth.sell_orders = {int(row["ask_price_1"]): -10}
+                order_depths[product] = depth
                 
-                # Logic: If I want to buy at price X, and market sells at Y
-                if qty > 0 and price >= curr_ask:
-                    # Filled!
-                    fill_qty = min(qty, 20 - positions[product]) # Respect limits
-                    if fill_qty > 0:
-                        positions[product] += fill_qty
-                        cash -= fill_qty * curr_ask
-                elif qty < 0 and price <= curr_bid:
-                    # Filled!
-                    fill_qty = min(-qty, positions[product] + 20)
-                    if fill_qty > 0:
-                        positions[product] -= fill_qty
-                        cash += fill_qty * curr_bid
+            state = TradingState(
+                traderData=trader.traderData,
+                timestamp=ts,
+                listings=listings,
+                order_depths=order_depths,
+                own_trades={},
+                market_trades={},
+                position=positions,
+                observations=Observation({}, {})
+            )
+            
+            orders, conversions, trader_data = trader.run(state)
+            trader.traderData = trader_data
+            
+            # --- Fill Logic ---
+            for product, order_list in orders.items():
+                if product not in group["product"].values: continue
+                row = group[group["product"] == product].iloc[0]
+                curr_ask = int(row["ask_price_1"])
+                curr_bid = int(row["bid_price_1"])
+                
+                for order in order_list:
+                    qty = order.quantity
+                    price = order.price
+                    filled = False
+                    
+                    if qty > 0 and price >= curr_ask:
+                        fill_qty = min(qty, 20 - positions[product])
+                        if fill_qty > 0:
+                            positions[product] += fill_qty
+                            cash -= fill_qty * curr_ask
+                            filled = True
+                            st.session_state.trades_log.append(f"TS {ts}: AGG BUY {fill_qty} {product} @ {curr_ask}")
+                    elif qty < 0 and price <= curr_bid:
+                        fill_qty = min(-qty, positions[product] + 20)
+                        if fill_qty > 0:
+                            positions[product] -= fill_qty
+                            cash += fill_qty * curr_bid
+                            filled = True
+                            st.session_state.trades_log.append(f"TS {ts}: AGG SELL {fill_qty} {product} @ {curr_bid}")
+                    
+                    if not filled and df_trades is not None:
+                        mkt_trades = df_trades[(df_trades["timestamp"] == ts) & (df_trades["product"] == product)]
+                        for _, trade in mkt_trades.iterrows():
+                            trade_price = int(trade["price"])
+                            trade_qty = 1 
+                            
+                            if qty > 0 and price >= trade_price:
+                                fill_qty = min(qty, 20 - positions[product], trade_qty)
+                                if fill_qty > 0:
+                                    positions[product] += fill_qty
+                                    cash -= fill_qty * price
+                                    st.session_state.trades_log.append(f"TS {ts}: PASSIVE BUY {fill_qty} {product} @ {price}")
+                                    break
+                            elif qty < 0 and price <= trade_price:
+                                fill_qty = min(-qty, positions[product] + 20, trade_qty)
+                                if fill_qty > 0:
+                                    positions[product] -= fill_qty
+                                    cash += fill_qty * price
+                                    st.session_state.trades_log.append(f"TS {ts}: PASSIVE SELL {fill_qty} {product} @ {price}")
+                                    break
+            
+            # Mark-to-market
+            mtm_pnl = cash
+            for product, pos in positions.items():
+                if product in group["product"].values:
+                    row = group[group["product"] == product].iloc[0]
+                    mid = (row["bid_price_1"] + row["ask_price_1"]) / 2.0
+                    mtm_pnl += pos * mid
+            
+            pnl_history.append(mtm_pnl)
         
-        # Calculate current PnL (Mark-to-market)
-        mtm_pnl = cash
-        for product, pos in positions.items():
-            if product in group["product"].values:
-                mid = (group[group["product"] == product].iloc[0]["bid_price_1"] + group[group["product"] == product].iloc[0]["ask_price_1"]) / 2.0
-                mtm_pnl += pos * mid
-        
-        pnl_history.append(mtm_pnl)
-    
+    except Exception as e:
+        st.error(f"Error during simulation: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+        return
+
     final_pnl = pnl_history[-1] if pnl_history else 0
     st.session_state.sim_result = {"pnl": final_pnl, "day": day}
     st.success(f"Simulation Complete! Final PnL: **{final_pnl:,.2f}**")
+    
+    if st.session_state.trades_log:
+        with st.expander("📝 View Trade History (Latest 50)", expanded=False):
+            for t in reversed(st.session_state.trades_log[-50:]):
+                st.text(t)
+    
+    if pnl_history:
+        pnl_df = pd.DataFrame({"Timestamp": range(len(pnl_history)), "PnL": pnl_history})
+        st.line_chart(pnl_df.set_index("Timestamp"), width="stretch")
 
-@st.cache_data
+# Disable caching temporarily to ensure fresh data for every backtest
 def load_and_process_data(day):
     # Search for files with either .csv or .csv-like names
     prices_file = os.path.join(DATA_DIR, f"prices_round_0_day_{day}.csv")
@@ -147,12 +183,15 @@ def load_and_process_data(day):
     df_prices["mid_price"] = (df_prices["bid_price_1"] + df_prices["ask_price_1"]) / 2.0
     
     if "timestamp" in df_prices.columns:
-        df_prices["timestamp"] = (df_prices["timestamp"] // 100) * 100
+        # Avoid rounding timestamps as it breaks the drift logic.
+        # Just resolve duplicates for the same timestamp/product if they exist.
         df_prices = df_prices.groupby(["timestamp", "product"]).mean(numeric_only=True).reset_index()
     
     df_trades = None
     if os.path.exists(trades_file):
         df_trades = pd.read_csv(trades_file, sep=";")
+    
+    st.info(f"Loaded {len(df_prices)} price rows and {len(df_trades) if df_trades is not None else 0} market trades.")
         
     return df_prices, df_trades
 
@@ -199,7 +238,7 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
         title=f"{product} Price & Spread Overlay"
     ).interactive()
     
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
     return df_p
 
 def forge_trader():
@@ -283,7 +322,7 @@ def main():
         st.button("🚨 EMERGENCY STOP 🚨", 
                   on_click=emergency_stop, 
                   type="primary", 
-                  use_container_width=True,
+                  width="stretch",
                   help="Instantly sets all limits to 0 and stops all trading logic.")
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -415,7 +454,7 @@ def main():
                 render_chart(df_prices, df_trades, "TOMATOES", "#e74c3c", show_mean=False)
                 
             st.markdown("### Raw Prices Preview")
-            st.dataframe(df_prices.tail(10), use_container_width=True)
+            st.dataframe(df_prices.tail(10), width="stretch")
             
         else:
             st.warning(f"Could not locate data for Day {selected_day} in data_capsule/.")
