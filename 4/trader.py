@@ -175,68 +175,68 @@ class Trader:
 
     def get_fair_price_and_drift(self, history, current_time):
         if len(history) < 5:
-            return history[-1][1], 0.0
+            return history[-1][1], 0.0, 0.0
             
         times = np.array([pt[0] for pt in history]) - history[0][0]
         values = np.array([pt[1] for pt in history])
         
-        # 2nd order polynomial fit: p(t) = at^2 + bt + c
-        # Drift (velocity) is p'(t) = 2at + b
         try:
+            # Calculate volatility (std dev) for Z-score thresholding
+            volatility = np.std(values)
+            
+            # 2nd order polynomial fit
             poly = np.polyfit(times, values, 2)
             current_t = current_time - history[0][0]
             
             fair_val = np.polyval(poly, current_t)
             drift = 2 * poly[0] * current_t + poly[1]
             
-            return fair_val, drift
+            return fair_val, drift, volatility
         except:
-            return history[-1][1], 0.0
+            return history[-1][1], 0.0, 1.0 # Default volatility 1.0
 
-    def trade_emeralds(self, state, fair_value_estimate, drift):
+    def trade_emeralds(self, state, fair_value_estimate, drift, volatility):
         if not self.config.get("emerald_active", True): return
         limit = self.config.get("emerald_limit", 20)
         
         order_depth = state.order_depths.get('EMERALDS')
         if not order_depth or not order_depth.sell_orders or not order_depth.buy_orders: return
 
-        # 1. Anchor Fair Value
-        fair_value = (0.9 * 10000) + (0.1 * fair_value_estimate)
+        # 1. EMERALD ANCHOR (Extreme mean reversion around 10k)
+        fair_value = (0.95 * 10000) + (0.05 * fair_value_estimate)
         
         best_ask = min(order_depth.sell_orders.keys())
         best_bid = max(order_depth.buy_orders.keys())
         
+        # 2. Z-SCORE AGGRESSION (Only take if price is > 1.5 STD from mean)
+        take_threshold = max(0.5, 1.5 * volatility)
+        
         max_buy = limit - self.emeralds_position
         max_sell = limit + self.emeralds_position
 
-        # 2. Aggressive Takes (if market is giving us a gift)
-        # Buy if someone is selling cheap
         for ask, amount in sorted(order_depth.sell_orders.items()):
-            if ask < fair_value - 0.5 and max_buy > 0:
+            if ask < fair_value - take_threshold and max_buy > 0:
                 size = min(max_buy, -amount)
-                self.send_buy_order('EMERALDS', ask, size, f"EMERALD TAKE BUY: {size}@{ask}")
+                self.send_buy_order('EMERALDS', ask, size, f"EMERALD Z-BUY: {size}@{ask} (Vol:{volatility:.1f})")
                 self.emeralds_position += size
                 max_buy -= size
         
-        # Sell if someone is buying expensive
         for bid, amount in sorted(order_depth.buy_orders.items(), reverse=True):
-            if bid > fair_value + 0.5 and max_sell > 0:
+            if bid > fair_value + take_threshold and max_sell > 0:
                 size = min(max_sell, amount)
-                self.send_sell_order('EMERALDS', bid, -size, f"EMERALD TAKE SELL: {size}@{bid}")
+                self.send_sell_order('EMERALDS', bid, -size, f"EMERALD Z-SELL: {size}@{bid} (Vol:{volatility:.1f})")
                 self.emeralds_position -= size
                 max_sell -= size
 
-        # 3. Defensive Market Making (Pennying)
-        # We want to be at the top of the book but stay safe relative to fair value
-        mm_buy_price = min(best_bid + 1, math.floor(fair_value - 1))
-        mm_sell_price = max(best_ask - 1, math.ceil(fair_value + 1))
+        # 3. CONSTRAINED PENNYING
+        # Avoid pennying too far from the 10k peg
+        mm_buy_price = min(best_bid + 1, 9999)
+        mm_sell_price = max(best_ask - 1, 10001)
         
-        if max_buy > 0:
-            self.send_buy_order('EMERALDS', mm_buy_price, max_buy)
-        if max_sell > 0:
-            self.send_sell_order('EMERALDS', mm_sell_price, -max_sell)
+        if max_buy > 0: self.send_buy_order('EMERALDS', mm_buy_price, max_buy)
+        if max_sell > 0: self.send_sell_order('EMERALDS', mm_sell_price, -max_sell)
 
-    def trade_tomatoes(self, state, fair_value, drift):
+    def trade_tomatoes(self, state, fair_value, drift, volatility):
         if not self.config.get("tomato_active", True): return
         limit = self.config.get("tomato_limit", 20)
         
@@ -246,30 +246,29 @@ class Trader:
         best_ask = min(order_depth.sell_orders.keys())
         best_bid = max(order_depth.buy_orders.keys())
         
-        # Leading the trend with drift
-        signal_mid = fair_value + (drift * 0.5)
+        # 1. TREND LEADERSHIP (Lead the price based on drift)
+        # Shift the mid-point by 75% of one tick's predicted drift
+        signal_mid = fair_value + (drift * 0.75)
         
-        # Pennying logic for liquidity
-        mm_buy_price = best_bid + 1
-        mm_sell_price = best_ask - 1
+        # 2. DYNAMIC SPREAD (Widen if volatility is soaring)
+        dynamic_spread = max(1, math.ceil(1.0 * volatility))
         
-        # Safety: Don't mm_buy above our fair signal, don't mm_sell below it
-        mm_buy_price = min(mm_buy_price, math.floor(signal_mid - 0.5))
-        mm_sell_price = max(mm_sell_price, math.ceil(signal_mid + 0.5))
+        mm_buy_price = min(best_bid + 1, math.floor(signal_mid - dynamic_spread))
+        mm_sell_price = max(best_ask - 1, math.ceil(signal_mid + dynamic_spread))
         
-        # Position skewing to keep 0 position
-        if self.tomatoes_position > 5:
-            mm_buy_price -= 1
-        elif self.tomatoes_position < -5:
-            mm_sell_price += 1
+        # 3. INVENTORY SQUASHING (Harder push back to 0)
+        if self.tomatoes_position > 8:
+            mm_buy_price -= 2
+            mm_sell_price -= 1
+        elif self.tomatoes_position < -8:
+            mm_buy_price += 1
+            mm_sell_price += 2
 
         max_buy = limit - self.tomatoes_position
         max_sell = limit + self.tomatoes_position
         
-        if max_buy > 0:
-            self.send_buy_order('TOMATOES', mm_buy_price, max_buy)
-        if max_sell > 0:
-            self.send_sell_order('TOMATOES', mm_sell_price, -max_sell)
+        if max_buy > 0: self.send_buy_order('TOMATOES', mm_buy_price, max_buy)
+        if max_sell > 0: self.send_sell_order('TOMATOES', mm_sell_price, -max_sell)
 
     def run(self, state: TradingState):
         self.load_config()
@@ -279,7 +278,6 @@ class Trader:
         if state.traderData:
             try: data = json.loads(state.traderData)
             except: pass
-        
         if "history" not in data: data["history"] = {}
             
         for product in ['EMERALDS', 'TOMATOES']:
@@ -288,20 +286,23 @@ class Trader:
             if not depth.buy_orders or not depth.sell_orders: continue
             
             mid = (max(depth.buy_orders.keys()) + min(depth.sell_orders.keys())) / 2.0
-            
             if product not in data["history"]: data["history"][product] = []
+            
+            # --- PRODUCT SPECIFIC WINDOWS ---
+            # Stable products need more history (Smoothing)
+            # Volatile products need less (Reaction speed)
+            win_size = 35 if product == 'EMERALDS' else 12
+            
             data["history"][product].append([state.timestamp, mid])
+            if len(data["history"][product]) > win_size:
+                data["history"][product] = data["history"][product][-win_size:]
             
-            win = self.config.get("window_size", 20)
-            if len(data["history"][product]) > win:
-                data["history"][product] = data["history"][product][-win:]
-            
-            fair_val, drift = self.get_fair_price_and_drift(data["history"][product], state.timestamp)
+            fair_val, drift, volatility = self.get_fair_price_and_drift(data["history"][product], state.timestamp)
             
             if product == 'EMERALDS':
-                self.trade_emeralds(state, fair_val, drift)
+                self.trade_emeralds(state, fair_val, drift, volatility)
             elif product == 'TOMATOES':
-                self.trade_tomatoes(state, fair_val, drift)
+                self.trade_tomatoes(state, fair_val, drift, volatility)
 
         self.traderData = json.dumps(data)
         logger.flush(state, self.orders, self.conversions, self.traderData)
