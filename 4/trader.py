@@ -221,16 +221,16 @@ class Trader:
         max_sell = limit + self.tomatoes_position
         
         # 2. VOLATILITY Z-SCORE TAKING (1.5x)
-        # Only sweep the market if the price is significantly far from our signal
+        # Only sweep the market if the price is significantly far from our signal (1.5 sigma)
         for ask, amount in sorted(order_depth.sell_orders.items()):
-            if ask < signal_mid - (0.5 * volatility) and max_buy > 0:
+            if ask < signal_mid - (1.5 * volatility) and max_buy > 0:
                 size = min(max_buy, -amount)
                 self.send_buy_order('TOMATOES', int(ask), size)
                 self.tomatoes_position += size
                 max_buy -= size
         
         for bid, amount in sorted(order_depth.buy_orders.items(), reverse=True):
-            if bid > signal_mid + (0.5 * volatility) and max_sell > 0:
+            if bid > signal_mid + (1.5 * volatility) and max_sell > 0:
                 size = min(max_sell, amount)
                 self.send_sell_order('TOMATOES', int(bid), -size)
                 self.tomatoes_position -= size
@@ -269,7 +269,7 @@ class Trader:
             if product not in data["history"]: data["history"][product] = []
             
             # HYPER-REACT WINDOWS
-            win_size = 20 if product == 'EMERALDS' else 10
+            win_size = 20 if product == 'EMERALDS' else 30
             
             data["history"][product].append([state.timestamp, mid])
             if len(data["history"][product]) > win_size:
