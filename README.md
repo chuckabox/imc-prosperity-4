@@ -37,7 +37,40 @@ Run CLI with: `python 4/backtest_cli.py`
 
 ---
 
+## 🚦 How to Backtest Locally (Step-by-Step)
+
+Avoid the queue and test your strategies instantly. You have two primary ways to run backtests:
+
+### Option A: The Rapid CLI (Fastest)
+Use this for quick PnL checks after code changes.
+1.  **Open your terminal** in the project root.
+2.  **Run the command:**
+    ```powershell
+    python 4/backtest_cli.py
+    ```
+3.  **Review the output:** It will iterate through `Day -1` and `Day -2` data, calculating your fills and final PnL.
+
+### Option B: The Visual Dashboard (Best for Analysis)
+Use this to see trade charts, inventory levels, and price-versus-fair-value overlays.
+1.  **Start the Dashboard:**
+    ```powershell
+    streamlit run 4/dashboard.py
+    ```
+2.  **Open the URL:** Streamlit will provide a link (usually `http://localhost:8501`).
+3.  **Interact:**
+    - Choose the **Round/Day** from the sidebar.
+    - Click **"Run Backtest"** to see the PnL curve.
+    - **Tweak Parameters:** Adjust limits or thresholds in the sidebar and re-run to see the impact immediately.
+
+### Option C: The High-Speed Rust Engine (Advanced)
+If you are processing millions of ticks or optimizing parameters via grid search:
+1. Navigate to use WSL2 (Ubuntu): `cd backtester_rust`
+2. Run with optimized speed: `make backtest`
+
+---
+
 ## 📂 Project Structure
+...
 
 ```bash
 ├── 4/
