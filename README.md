@@ -25,17 +25,23 @@ Follow these steps to get your first bot ready for upload:
 ### 🧪 3. Local Backtesting (Test before you upload!)
 Avoid the queue and test your strategies instantly.
 
-#### **Option A: The Rapid CLI (Fastest)**
+#### **Option A: Official Community Web Backtester (Recommended)**
+This is the most feature-rich and user-friendly backtester available.
+1.  **Visit:** [IMC Prosperity 4 Backtester](https://imc-prosperity4-backtest.streamlit.app/)
+2.  **Upload:** Your `trader.py` and the relevant CSV files from `4/data_capsule/`.
+3.  **Analyze:** View detailed product-by-product PnL, own trades, and consolidated logs.
+
+#### **Option B: The Rapid CLI (Fastest Local)**
 Best for quick PnL checks after code changes.
 - **Run command:** `python 4/backtest_cli.py`
 - **Review:** Check the `Final PnL` at the bottom.
 
-#### **Option B: The Visual Dashboard (Best for Analysis)**
+#### **Option C: The Visual Dashboard (Best for Analysis)**
 Best for seeing charts, inventory, and fair value overlays.
 1. **Start:** `streamlit run 4/dashboard.py`.
 2. **Simulate:** Switch to the **Backtester** tab and click **"Run Full Simulation"**.
 
-#### **Option C: High-Speed Rust Engine (Advanced)**
+#### **Option D: High-Speed Rust Engine (Advanced Users)**
 For processing millions of ticks or large grid searches.
 1. Navigate to `backtester_rust/`.
 2. Use **WSL2** to run `make backtest`.

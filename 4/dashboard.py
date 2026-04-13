@@ -242,11 +242,12 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
     return df_p
 
 def forge_trader():
-    if not os.path.exists("trader.py"):
-        st.error("trader.py template is missing from workspace!")
+    TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "trader.py")
+    if not os.path.exists(TRADER_TEMPLATE):
+        st.error(f"Template not found at {TRADER_TEMPLATE}")
         return
         
-    with open("trader.py", "r") as f:
+    with open(TRADER_TEMPLATE, "r") as f:
         text = f.read()
 
     derived_spread = max(1, int(st.session_state.analysis["tom_std"] / 2.0))
@@ -330,44 +331,47 @@ def main():
         st.toggle("🟩 EMERALDS (Mean Reversion)", 
                   key="emerald_active", 
                   value=st.session_state.config["emerald_active"], 
-                  on_change=on_change_callback,
-                  help="The 'Rubber Band' strategy. It assumes prices always snap back to the middle (like 10,000 for Emeralds).")
+                  on_change=on_change_callback)
+        st.caption("The 'Rubber Band' strategy: Buy low, sell high around the 10,000 mark.")
+        
         st.toggle("🟥 TOMATOES (Market Making)", 
                   key="tomato_active", 
                   value=st.session_state.config["tomato_active"], 
-                  on_change=on_change_callback,
-                  help="Market Making strategy places both a Buy and a Sell order. You profit from the difference (the 'spread') between them.")
+                  on_change=on_change_callback)
+        st.caption("Profit from the 'Spread' between buy and sell orders.")
             
         st.divider()
         st.subheader("Inventory Limits")
         
         # Safe-Fail Warning
         if st.session_state.config["emerald_limit"] > 18 or st.session_state.config["tomato_limit"] > 18:
-            st.error("⚠️ DANGER: Trading at max capacity (20) means one bad move could get you liquidated. Keep this at 15-18 to be safe!")
+            st.error("⚠️ DANGER: Keeping limits at 20 is risky. Stay at 15-18 to avoid liquidation.")
 
         st.slider("💎 Emeralds", 0, 20, 
                   key="emerald_limit", 
                   value=st.session_state.config["emerald_limit"], 
-                  on_change=on_change_callback,
-                  help="Think of this as your backpack size. You can't carry more than this. If the limit is 20, you can't own more than 20. Going over this gets you disqualified!")
+                  on_change=on_change_callback)
+        st.caption("Max units you can carry. Going over 20 gets you disqualified.")
+        
         st.slider("🍅 Tomatoes", 0, 20, 
                   key="tomato_limit", 
                   value=st.session_state.config["tomato_limit"], 
-                  on_change=on_change_callback,
-                  help="Think of this as your backpack size. You can't carry more than this. If the limit is 20, you can't own more than 20. Going over this gets you disqualified!")
+                  on_change=on_change_callback)
+        st.caption("Max units you can carry. Going over 20 gets you disqualified.")
         
         st.divider()
         st.subheader("Pricing Multipliers")
         st.slider("🎯 Target Spread", 1.0, 10.0, 
                   key="target_spread", 
                   value=float(st.session_state.config["target_spread"]), 
-                  on_change=on_change_callback,
-                  help="This is like the 'aggressiveness' of your bot. High multiplier = higher prices, but fewer trades. Low multiplier = fast trades, but less profit per trade.")
+                  on_change=on_change_callback)
+        st.caption("Aggressiveness. Higher = bigger profit per trade, but fewer fills.")
+        
         st.slider("📏 MR Threshold", 1.0, 20.0, 
                   key="mr_threshold", 
                   value=float(st.session_state.config["mr_threshold"]), 
-                  on_change=on_change_callback,
-                  help="How far away from fair value the price must be before the Mean Reversion strategy triggers.")
+                  on_change=on_change_callback)
+        st.caption("How far the price must 'stretch' before the rubber band snaps back.")
         
         st.divider()
         st.info("Configuration is synchronized actively to JSON.")
@@ -378,41 +382,61 @@ def main():
     tab_backtest, tab_forge = st.tabs(["📉 Visual Backtester", "🛠️ One-Click Forge"])
     
     with tab_forge:
-        st.header("Upload Assembly Pipeline")
-        st.markdown("Compile your historical findings and current sidebar configurations into a single, sterile `trader.py` ready for IMC limits.")
+        st.header("🛠️ Upload Assembly Pipeline")
+        st.write("Compile your findings and configurations into a professional `trader.py` ready for the IMC portal.")
         
+        # --- STRATEGY SCHOOL ---
+        st.markdown("## 🏫 Strategy School: Mean Reversion")
+        col_text, col_viz = st.columns([2, 1])
+        with col_text:
+            st.markdown("""
+            **The 'Rubber Band' Concept:** 
+            Think of the price of an asset like a rubber band anchored to a fixed point. In Mean Reversion, we assume that whenever the price stretches too far away from its "Fair Value," it will eventually snap back to the middle.
+            
+            *   **When to Buy:** When the price is significantly *below* the fair value.
+            *   **When to Sell:** When the price is significantly *above* the fair value.
+            """)
+        with col_viz:
+            st.success("💎 **Emeralds** are perfect for this because they rarely move far from 10,000.")
+
+        st.divider()
+
         # 1. Scanning
-        st.markdown("### 1. Identify Assets")
+        st.markdown("### 1. Data Scan")
+        TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "trader.py")
         d1 = os.path.exists(os.path.join(DATA_DIR, "prices_round_0_day_-1.csv"))
         d2 = os.path.exists(os.path.join(DATA_DIR, "prices_round_0_day_-2.csv"))
-        if d1 and d2:
-            st.success("✅ Tutorial Day -1 and Day -2 files detected cleanly in `data_capsule/`.")
+        t_exists = os.path.exists(TRADER_TEMPLATE)
+
+        if d1 and d2 and t_exists:
+            st.success("✅ System check passed: Price data and Trader template are ready.")
         else:
-            st.error("❌ Missing required Tutorial Day data in `data_capsule/` for auto-analysis.")
-            
+            if not t_exists: st.error("❌ Template Error: `trader.py` not found in folder.")
+            if not (d1 and d2): st.error("❌ Data Error: Historical CSVs missing from `data_capsule/`.")
+
         # 2. Analysis
         st.markdown("### 2. Auto-Analysis Engine")
+        st.caption("This tool determines the 'Fair Value' for Emeralds and the 'Volatility' for Tomatoes based on your historical CSV data.")
         st.button("🔍 Run Auto-Analysis", 
                   on_click=perform_auto_analysis, 
-                  disabled=not (d1 and d2),
-                  help="Determines the 'Fair Value' for Emeralds and the 'Volatility' for Tomatoes based on available CSV data.")
+                  disabled=not (d1 and d2 and t_exists))
         
         if "analysis" in st.session_state:
-            st.info(f"**Teacher's Note:** I set Emerald Fair Value to {st.session_state.analysis['em_mean']:.0f} because that's the average mid-price found in your CSV data. Tomatoes require a dynamic spread because they are more 'noisy'.")
+            st.info(f"**Insight:** Based on your data, we recommend anchoring Emeralds to **{st.session_state.analysis['em_mean']:.0f}**. Tomatoes are currently showing a volatility factor of **{st.session_state.analysis['tom_std']:.2f}**, which we will use to scale your profit capture.")
             
-            st.success("**Analysis Suite Complete.**")
             st.metric("Derived Emerald Fair Value", f"{st.session_state.analysis['em_mean']:.1f}")
-            st.metric("Derived Tomato Volatility Factor", f"{st.session_state.analysis['tom_std']:.2f}")
+            st.metric("Derived Tomato Volatility", f"{st.session_state.analysis['tom_std']:.2f}")
             
-            st.markdown("### 3. Execution")
-            st.button("🛠️ Forge Final Trader.py", 
+            st.markdown("### 3. Final Execution")
+            st.caption("We will now inject your sidebar settings (Limits, Aggressiveness) and the analyzed fair values into your final script.")
+            st.button("⚙️ Forge Final Trader.py", 
                       on_click=forge_trader, 
-                      type="primary",
-                      help="Injects analyzed results and current settings into a standalone trader.py script.")
+                      type="primary")
             
             if "forged_code" in st.session_state:
+                st.balloons()
                 st.download_button(
-                    label="⬇️ Download trader.py for Round 0 Upload",
+                    label="⬇️ Download Your Optimized Trader.py",
                     data=st.session_state.forged_code,
                     file_name="trader.py",
                     mime="text/x-python",
