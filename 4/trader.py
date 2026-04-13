@@ -197,112 +197,105 @@ class Trader:
         if not self.config.get("emerald_active", True): return
         limit = self.config.get("emerald_limit", 20)
         
-        # Emeralds are theoretically pegged to 10k, 
-        # but our estimate might suggest a local deviation.
-        # We blend the anchor (10k) with our fitted curve.
-        fair_value = (0.8 * 10000) + (0.2 * fair_value_estimate)
-        
-        threshold = self.config.get("mr_threshold", 1.5)
-        spread = self.config.get("target_spread", 1)
-        
-        buy_price = fair_value - spread - (drift * 0.1)
-        sell_price = fair_value + spread - (drift * 0.1)
-        
-        # Apply strict integer rounding for exchange
-        buy_price = math.floor(buy_price)
-        sell_price = math.ceil(sell_price)
+        order_depth = state.order_depths.get('EMERALDS')
+        if not order_depth or not order_depth.sell_orders or not order_depth.buy_orders: return
 
+        # 1. Anchor Fair Value
+        fair_value = (0.9 * 10000) + (0.1 * fair_value_estimate)
+        
+        best_ask = min(order_depth.sell_orders.keys())
+        best_bid = max(order_depth.buy_orders.keys())
+        
         max_buy = limit - self.emeralds_position
         max_sell = limit + self.emeralds_position
-        
-        order_depth = state.order_depths.get('EMERALDS')
-        if not order_depth: return
-            
-        # 1. Take aggressive orders
-        sorted_asks = sorted(order_depth.sell_orders.items())
-        for ask, amount in sorted_asks:
-            if ask <= fair_value - threshold and max_buy > 0:
+
+        # 2. Aggressive Takes (if market is giving us a gift)
+        # Buy if someone is selling cheap
+        for ask, amount in sorted(order_depth.sell_orders.items()):
+            if ask < fair_value - 0.5 and max_buy > 0:
                 size = min(max_buy, -amount)
-                self.send_buy_order('EMERALDS', ask, size, f"EMERALD AGG BUY: {size}@{ask} (Fair:{fair_value:.1f})")
+                self.send_buy_order('EMERALDS', ask, size, f"EMERALD TAKE BUY: {size}@{ask}")
                 self.emeralds_position += size
                 max_buy -= size
         
-        sorted_bids = sorted(order_depth.buy_orders.items(), reverse=True)
-        for bid, amount in sorted_bids:
-            if bid >= fair_value + threshold and max_sell > 0:
+        # Sell if someone is buying expensive
+        for bid, amount in sorted(order_depth.buy_orders.items(), reverse=True):
+            if bid > fair_value + 0.5 and max_sell > 0:
                 size = min(max_sell, amount)
-                self.send_sell_order('EMERALDS', bid, -size, f"EMERALD AGG SELL: {size}@{bid} (Fair:{fair_value:.1f})")
+                self.send_sell_order('EMERALDS', bid, -size, f"EMERALD TAKE SELL: {size}@{bid}")
                 self.emeralds_position -= size
                 max_sell -= size
 
-        # 2. Market Make residual
+        # 3. Defensive Market Making (Pennying)
+        # We want to be at the top of the book but stay safe relative to fair value
+        mm_buy_price = min(best_bid + 1, math.floor(fair_value - 1))
+        mm_sell_price = max(best_ask - 1, math.ceil(fair_value + 1))
+        
         if max_buy > 0:
-            self.send_buy_order('EMERALDS', buy_price, max_buy)
+            self.send_buy_order('EMERALDS', mm_buy_price, max_buy)
         if max_sell > 0:
-            self.send_sell_order('EMERALDS', sell_price, -max_sell)
+            self.send_sell_order('EMERALDS', mm_sell_price, -max_sell)
 
     def trade_tomatoes(self, state, fair_value, drift):
         if not self.config.get("tomato_active", True): return
         limit = self.config.get("tomato_limit", 20)
         
-        spread = self.config.get("target_spread", 2)
+        order_depth = state.order_depths.get('TOMATOES')
+        if not order_depth or not order_depth.sell_orders or not order_depth.buy_orders: return
         
-        # Use drift to adjust prices: if drifting up, don't sell too cheap!
-        # Adjusting the mid-point based on predicted momentum
-        adjusted_mid = fair_value + (drift * 0.5)
+        best_ask = min(order_depth.sell_orders.keys())
+        best_bid = max(order_depth.buy_orders.keys())
         
-        buy_price = math.floor(adjusted_mid - spread)
-        sell_price = math.ceil(adjusted_mid + spread)
+        # Leading the trend with drift
+        signal_mid = fair_value + (drift * 0.5)
         
-        # Inventory Skewing: discourage building huge positions
-        if self.tomatoes_position > 10:
-            buy_price -= 1
-        elif self.tomatoes_position < -10:
-            sell_price += 1
+        # Pennying logic for liquidity
+        mm_buy_price = best_bid + 1
+        mm_sell_price = best_ask - 1
+        
+        # Safety: Don't mm_buy above our fair signal, don't mm_sell below it
+        mm_buy_price = min(mm_buy_price, math.floor(signal_mid - 0.5))
+        mm_sell_price = max(mm_sell_price, math.ceil(signal_mid + 0.5))
+        
+        # Position skewing to keep 0 position
+        if self.tomatoes_position > 5:
+            mm_buy_price -= 1
+        elif self.tomatoes_position < -5:
+            mm_sell_price += 1
 
         max_buy = limit - self.tomatoes_position
         max_sell = limit + self.tomatoes_position
         
         if max_buy > 0:
-            self.send_buy_order('TOMATOES', buy_price, max_buy)
+            self.send_buy_order('TOMATOES', mm_buy_price, max_buy)
         if max_sell > 0:
-            self.send_sell_order('TOMATOES', sell_price, -max_sell)
+            self.send_sell_order('TOMATOES', mm_sell_price, -max_sell)
 
     def run(self, state: TradingState):
         self.load_config()
         self.reset_orders(state)
         
-        # Parse persistence
         data = {}
         if state.traderData:
-            try:
-                data = json.loads(state.traderData)
-            except:
-                pass
+            try: data = json.loads(state.traderData)
+            except: pass
         
-        if "history" not in data:
-            data["history"] = {}
+        if "history" not in data: data["history"] = {}
             
-        # Process each product
         for product in ['EMERALDS', 'TOMATOES']:
             if product not in state.order_depths: continue
-            
             depth = state.order_depths[product]
             if not depth.buy_orders or not depth.sell_orders: continue
             
             mid = (max(depth.buy_orders.keys()) + min(depth.sell_orders.keys())) / 2.0
             
-            if product not in data["history"]:
-                data["history"][product] = []
-                
+            if product not in data["history"]: data["history"][product] = []
             data["history"][product].append([state.timestamp, mid])
             
-            # Keep window size
-            win = self.config.get("window_size", 30)
+            win = self.config.get("window_size", 20)
             if len(data["history"][product]) > win:
                 data["history"][product] = data["history"][product][-win:]
             
-            # Fit and Trade
             fair_val, drift = self.get_fair_price_and_drift(data["history"][product], state.timestamp)
             
             if product == 'EMERALDS':
