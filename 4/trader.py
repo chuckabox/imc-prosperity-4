@@ -172,43 +172,38 @@ class Trader:
         order_depth = state.order_depths.get('EMERALDS')
         if not order_depth or not order_depth.sell_orders or not order_depth.buy_orders: return
 
-        # 1. VOLUME-WEIGHTED ANCHOR
-        fair_value = 10000.0 # Emeralds are the peg
+        # 1. 95% ANCHORING (Stable peg with slight market sensitivity)
+        fair_value = (0.95 * 10000) + (0.05 * fair_value_estimate)
         best_ask = min(order_depth.sell_orders.keys())
         best_bid = max(order_depth.buy_orders.keys())
         
         max_buy = limit - self.emeralds_position
         max_sell = limit + self.emeralds_position
 
-        # MARKET TAKING (MAX AGGRESSION)
+        # MARKET TAKING (Only with edge > 0.5)
         for ask, amount in sorted(order_depth.sell_orders.items()):
-            if ask <= fair_value and max_buy > 0:
+            if ask < fair_value - 0.5 and max_buy > 0:
                 size = min(max_buy, -amount)
                 self.send_buy_order('EMERALDS', int(ask), size)
                 self.emeralds_position += size
                 max_buy -= size
         
         for bid, amount in sorted(order_depth.buy_orders.items(), reverse=True):
-            if bid >= fair_value and max_sell > 0:
+            if bid > fair_value + 0.5 and max_sell > 0:
                 size = min(max_sell, amount)
                 self.send_sell_order('EMERALDS', int(bid), -size)
                 self.emeralds_position -= size
                 max_sell -= size
 
-        # 2. TRADE-FOLLOWING QUOTES
-        # If market trades just happened, move our quotes to those levels
-        mkt_bid, mkt_ask = best_bid, best_ask
-        mkt_trades = state.market_trades.get('EMERALDS', [])
-        for trade in mkt_trades:
-            if trade.price > fair_value: mkt_ask = min(mkt_ask, trade.price)
-            if trade.price < fair_value: mkt_bid = max(mkt_bid, trade.price)
+        # 2. DEFENSIVE MARKET MAKING
+        # We want to buy at 9999 or lower and sell at 10001 or higher if fair is 10000
+        buy_p = min(best_bid + 1, math.floor(fair_value - 1))
+        sell_p = max(best_ask - 1, math.ceil(fair_value + 1))
 
         if max_buy > 0:
-            p = min(mkt_bid + 1, 10000 if self.emeralds_position < 10 else 9999)
-            self.send_buy_order('EMERALDS', int(p), max_buy)
+            self.send_buy_order('EMERALDS', int(buy_p), max_buy)
         if max_sell > 0:
-            p = max(mkt_ask - 1, 10000 if self.emeralds_position > -10 else 10001)
-            self.send_sell_order('EMERALDS', int(p), -max_sell)
+            self.send_sell_order('EMERALDS', int(sell_p), -max_sell)
 
     def trade_tomatoes(self, state, fair_value, drift, volatility):
         if not self.config.get("tomato_active", True): return
@@ -219,37 +214,41 @@ class Trader:
         best_ask = min(order_depth.sell_orders.keys())
         best_bid = max(order_depth.buy_orders.keys())
         
-        # 1. PREDATORY SIGNAL (Anticipate the next tick)
-        signal_mid = fair_value + (drift * 1.5) # Increased lead
+        # 1. STABILIZED DRIFT LEAD (0.8x instead of 1.5x to prevent overshooting)
+        signal_mid = fair_value + (drift * 0.8)
         
         max_buy = limit - self.tomatoes_position
         max_sell = limit + self.tomatoes_position
         
-        # 2. MARKET SWEEPING
+        # 2. VOLATILITY Z-SCORE TAKING (1.5x)
+        # Only sweep the market if the price is significantly far from our signal
         for ask, amount in sorted(order_depth.sell_orders.items()):
-            if ask < signal_mid and max_buy > 0:
+            if ask < signal_mid - (0.5 * volatility) and max_buy > 0:
                 size = min(max_buy, -amount)
                 self.send_buy_order('TOMATOES', int(ask), size)
                 self.tomatoes_position += size
                 max_buy -= size
         
         for bid, amount in sorted(order_depth.buy_orders.items(), reverse=True):
-            if bid > signal_mid and max_sell > 0:
+            if bid > signal_mid + (0.5 * volatility) and max_sell > 0:
                 size = min(max_sell, amount)
                 self.send_sell_order('TOMATOES', int(bid), -size)
                 self.tomatoes_position -= size
                 max_sell -= size
 
-        # 3. HIGH-SPEED PENNYING
-        buy_p = min(best_bid + 1, math.floor(signal_mid - 0.1))
-        sell_p = max(best_ask - 1, math.ceil(signal_mid + 0.1))
+        # 3. DYNAMIC SQUASHING (Inventory-aware pricing)
+        # Base pennying
+        buy_p = min(best_bid + 1, math.floor(signal_mid - 0.5))
+        sell_p = max(best_ask - 1, math.ceil(signal_mid + 0.5))
         
-        # Inventory Recovery Phase
-        if self.tomatoes_position > 5: buy_p -= 1; sell_p -= 1
-        if self.tomatoes_position < -5: buy_p += 1; sell_p += 1
+        # Shift quotes based on inventory to encourage mean reversion
+        inventory_shift = self.tomatoes_position // 5
+        buy_p -= inventory_shift
+        sell_p -= inventory_shift
             
         if max_buy > 0: self.send_buy_order('TOMATOES', int(buy_p), max_buy)
         if max_sell > 0: self.send_sell_order('TOMATOES', int(sell_p), -max_sell)
+
 
     def run(self, state: TradingState):
         self.load_config()
