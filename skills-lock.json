@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "backtesting-trading-strategies": {
+      "source": "jeremylongshore/claude-code-plugins-plus-skills",
+      "sourceType": "github",
+      "computedHash": "f064f9f133522bbde6193c888c1f0f32a1892621b459dd92e3840724de26b00c"
+    },
     "find-skills": {
       "source": "vercel-labs/skills",
       "sourceType": "github",
