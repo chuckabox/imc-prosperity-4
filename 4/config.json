@@ -1,0 +1,8 @@
+{
+    "emerald_active": false,
+    "tomato_active": false,
+    "emerald_limit": 0,
+    "tomato_limit": 0,
+    "target_spread": 2,
+    "mr_threshold": 2
+}
