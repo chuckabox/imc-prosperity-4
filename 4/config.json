@@ -1,8 +1,8 @@
 {
-    "emerald_active": false,
-    "tomato_active": false,
-    "emerald_limit": 0,
-    "tomato_limit": 0,
-    "target_spread": 2,
-    "mr_threshold": 2
+    "emerald_active": true,
+    "tomato_active": true,
+    "emerald_limit": 13,
+    "tomato_limit": 16,
+    "target_spread": 6,
+    "mr_threshold": 18
 }
