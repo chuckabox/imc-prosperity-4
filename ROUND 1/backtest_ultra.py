@@ -93,7 +93,7 @@ class BacktestEngine:
                         if qty > 0: # Buy
                             best_ask = min(d.sell_orders.keys()) if d.sell_orders else 999999
                             if price >= best_ask:
-                                fill = min(qty, -d.sell_orders[best_ask], 20 - pos[sym])
+                                fill = min(qty, -d.sell_orders[best_ask], trader.limits.get(sym, 20) - pos[sym])
                                 if fill > 0:
                                     pos[sym] += fill
                                     cash -= fill * best_ask
@@ -103,7 +103,7 @@ class BacktestEngine:
                         else: # Sell
                             best_bid = max(d.buy_orders.keys()) if d.buy_orders else -999999
                             if price <= best_bid:
-                                fill = min(-qty, d.buy_orders[best_bid], pos[sym] + 20)
+                                fill = min(-qty, d.buy_orders[best_bid], pos[sym] + trader.limits.get(sym, 20))
                                 if fill > 0:
                                     pos[sym] -= fill
                                     cash += fill * best_bid
@@ -118,7 +118,7 @@ class BacktestEngine:
                                 tp = trade["price"]
                                 tv = trade["quantity"]
                                 if qty > 0 and price >= tp: # Buy fill
-                                    f = min(qty, int(tv * 0.4) + 1, 20 - pos[sym])
+                                    f = min(qty, int(tv * 0.4) + 1, trader.limits.get(sym, 20) - pos[sym])
                                     if f > 0:
                                         pos[sym] += f
                                         cash -= f * price
@@ -126,7 +126,7 @@ class BacktestEngine:
                                         metrics["makes"] += f
                                         metrics["make_pnl"] += f * (mids[sym] - price)
                                 elif qty < 0 and price <= tp: # Sell fill
-                                    f = min(-qty, int(tv * 0.4) + 1, pos[sym] + 20)
+                                    f = min(-qty, int(tv * 0.4) + 1, pos[sym] + trader.limits.get(sym, 20))
                                     if f > 0:
                                         pos[sym] -= f
                                         cash += f * price
