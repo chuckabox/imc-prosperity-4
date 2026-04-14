@@ -6,35 +6,32 @@ from datamodel import Order, OrderDepth, TradingState, Symbol
 class Logger:
     def __init__(self) -> None:
         self.logs = ""
-
     def print(self, *objects: Any, sep: str = " ", end: str = "\n") -> None:
         self.logs += sep.join(map(str, objects)) + end
-
     def flush(self, state: TradingState, orders: Dict[Symbol, List[Order]], conversions: int, trader_data: str) -> None:
-        # Logs are optional for local, essential for portal
-        # We disable print to save log space in the competition
+        # Portal submission expects minimal logs or a specific format
         pass
 
 logger = Logger()
 
 class Trader:
     """
-    Antigravity Round 1 Leaderboard Strategy
-    -----------------------------------------
-    - ASH_COATED_OSMIUM: Fixed-point mean reversion based on historical 10,000 anchor.
-    - INTARIAN_PEPPER_ROOT: Dynamic EMA-based mean reversion with responsiveness.
-    - Execution: Multi-layered liquidity taking followed by inventory-skewed pennying.
+    Antigravity Round 1 Production Bot - v12 (200k Target)
+    -----------------------------------------------------
+    - ASH_COATED_OSMIUM: 3-Lag Regression (Hidden Pattern)
+    - INTARIAN_PEPPER_ROOT: Fixed Anchor (11500)
+    - Position Limits: Aggressive 80-unit utilization
+    - Execution: Sniper (Liquidity Take) + Layered Fragmented MM (Passive)
     """
     
     def __init__(self):
         self.limits = {
-            'ASH_COATED_OSMIUM': 20,
-            'INTARIAN_PEPPER_ROOT': 20
+            'ASH_COATED_OSMIUM': 80, 
+            'INTARIAN_PEPPER_ROOT': 80
         }
-        self.ema_alphas = {
-            'INTARIAN_PEPPER_ROOT': 0.15,
-            'ASH_COATED_OSMIUM': 0.05
-        }
+        # Fixed weights for the "Hidden Pattern" in Osmium
+        self.os_weights = [0.3616, 0.3148, 0.2925]
+        self.os_intercept = 309.9
         self.history = {}
         self.traderData = ""
 
@@ -45,96 +42,116 @@ class Trader:
             except:
                 self.history = {}
 
-    def get_fair_price(self, product: str, mid_price: float) -> float:
+    def get_fair_price(self, product: str, state: TradingState) -> float:
+        depth = state.order_depths[product]
+        best_bid = max(depth.buy_orders.keys()) if depth.buy_orders else 10000
+        best_ask = min(depth.sell_orders.keys()) if depth.sell_orders else 10000
+        mid = (best_bid + best_ask) / 2.0
+        
+        # Tape Reading: Shift fair price based on market trades
+        trade_pressure = 0.0
+        if product in state.market_trades:
+            for trade in state.market_trades[product]:
+                if trade.price >= mid: trade_pressure += trade.quantity
+                else: trade_pressure -= trade.quantity
+        tape_adj = math.copysign(min(abs(trade_pressure) * 0.1, 1.2), trade_pressure)
+        
+        if product == 'INTARIAN_PEPPER_ROOT':
+            # "Steady Root" - Observations show it reverts to 11.5k
+            return 11500.0 + tape_adj
+            
         if product == 'ASH_COATED_OSMIUM':
-            return 10000.0  # Proven stable anchor
+            # "Unpredictable Hidden Pattern" - Regression is required
+            p_hist = self.history.get(product, [])
+            if not isinstance(p_hist, list): p_hist = []
             
-        if product not in self.history:
-            self.history[product] = mid_price
-            return mid_price
+            # Use mid price for history tracking
+            p_hist.append(mid)
+            if len(p_hist) > 3: p_hist = p_hist[-3:]
+            self.history[product] = p_hist
             
-        alpha = self.ema_alphas.get(product, 0.1)
-        prev_ema = self.history[product]
-        new_ema = (alpha * mid_price) + (1 - alpha) * prev_ema
-        self.history[product] = new_ema
-        return new_ema
+            if len(p_hist) < 3:
+                return mid + tape_adj
+            
+            # Predict next mid using regression weights
+            pred = self.os_intercept
+            for i in range(3):
+                pred += self.os_weights[i] * p_hist[-(i+1)]
+            return pred + tape_adj
+            
+        return mid + tape_adj
 
     def run(self, state: TradingState):
         self.update_history(state.traderData)
         result = {}
         
-        for product in ['ASH_COATED_OSMIUM', 'INTARIAN_PEPPER_ROOT']:
+        for product in self.limits.keys():
             if product not in state.order_depths:
                 continue
-                
-            depth: OrderDepth = state.order_depths[product]
+            
+            depth = state.order_depths[product]
             orders: List[Order] = []
+            pos = state.position.get(product, 0)
+            lim = self.limits[product]
             
-            position = state.position.get(product, 0)
-            product_limit = self.limits[product]
+            fair = self.get_fair_price(product, state)
             
-            # Extract basic market stats
-            buy_orders = depth.buy_orders
-            sell_orders = depth.sell_orders
+            # 1. THE SNIPER (Aggressive Take)
+            # Take any liquidity better than our fair price (with a small edge margin)
+            # Edge margin: 1.5 for steady root, 0.8 for volatile osmium
+            edge = 0.8 if product == 'ASH_COATED_OSMIUM' else 1.5
             
-            if not buy_orders or not sell_orders:
-                continue
-                
-            best_bid = max(buy_orders.keys())
-            best_ask = min(sell_orders.keys())
-            mid_price = (best_bid + best_ask) / 2.0
+            rem_buy = lim - pos
+            for ask, vol in sorted(depth.sell_orders.items()):
+                if ask <= fair - edge and rem_buy > 0:
+                    q = min(rem_buy, -vol)
+                    orders.append(Order(product, int(ask), q))
+                    rem_buy -= q
+                    pos += q
             
-            # --- 1. Signal Generation ---
-            fair_price = self.get_fair_price(product, mid_price)
+            rem_sell = lim + pos
+            for bid, vol in sorted(depth.buy_orders.items(), reverse=True):
+                if bid >= fair + edge and rem_sell > 0:
+                    q = min(rem_sell, vol)
+                    orders.append(Order(product, int(bid), -q))
+                    rem_sell -= q
+                    pos -= q
+
+            # 2. LAYERED MARKET MAKING (Passive Passive)
+            # We layer orders to maximize fill probability and manage inventory
+            skew = 0.2 # 1 tick per 5 units of position
+            base_bid = math.floor(fair - 1.2 - pos * skew)
+            base_ask = math.ceil(fair + 1.2 - pos * skew)
             
-            # --- 2. Aggressive Liquidity Taking ---
-            # Buying (Sweeping asks below fair)
-            max_buy_qty = product_limit - position
-            for ask, vol in sorted(sell_orders.items()):
-                # Use a small buffer to ensure profit after spread/drift
-                buffer = 0.6 if product == 'ASH_COATED_OSMIUM' else 1.5
-                if ask <= fair_price - buffer and max_buy_qty > 0:
-                    qty = min(max_buy_qty, -vol)
-                    orders.append(Order(product, ask, qty))
-                    max_buy_qty -= qty
-                    position += qty
+            # Block sizing to fragmentation (20 units per layer)
+            block_size = 20
             
-            # Selling (Sweeping bids above fair)
-            max_sell_qty = product_limit + position
-            for bid, vol in sorted(buy_orders.items(), reverse=True):
-                buffer = 0.6 if product == 'ASH_COATED_OSMIUM' else 1.5
-                if bid >= fair_price + buffer and max_sell_qty > 0:
-                    qty = min(max_sell_qty, vol)
-                    orders.append(Order(product, bid, -qty))
-                    max_sell_qty -= qty
-                    position -= qty
+            # Buy Layers
+            buy_pending = lim - pos
+            if buy_pending > 0:
+                for i in range(4): # 4 layers deep
+                    if buy_pending <= 0: break
+                    price = int(base_bid - i)
+                    # Protect fair value
+                    if price > fair - 0.5: price = math.floor(fair - 1)
+                    q = min(buy_pending, block_size)
+                    orders.append(Order(product, price, q))
+                    buy_pending -= q
             
-            # --- 3. Passive Market Making (Pennying) ---
-            # Calculate position-shifted 'ideal' prices to manage inventory risk
-            inventory_skew = 0.2  # 1 tick shift for every 5 units of position
-            res_buy = math.floor(fair_price - 1 - (position * inventory_skew))
-            res_sell = math.ceil(fair_price + 1 - (position * inventory_skew))
-            
-            final_bid_price = min(best_bid + 1, res_buy)
-            final_ask_price = max(best_ask - 1, res_sell)
-            
-            # Safety check: Ensure we don't market make past our fair value estimate
-            final_bid_price = min(final_bid_price, math.floor(fair_price - 0.5))
-            final_ask_price = max(final_ask_price, math.ceil(fair_price + 0.5))
-            
-            # Place Limit Orders
-            pending_buy = product_limit - position
-            if pending_buy > 0:
-                orders.append(Order(product, int(final_bid_price), pending_buy))
-                
-            pending_sell = product_limit + position
-            if pending_sell > 0:
-                orders.append(Order(product, int(final_ask_price), -pending_sell))
+            # Sell Layers
+            sell_pending = lim + pos
+            if sell_pending > 0:
+                for i in range(4):
+                    if sell_pending <= 0: break
+                    price = int(base_ask + i)
+                    # Protect fair value
+                    if price < fair + 0.5: price = math.ceil(fair + 1)
+                    q = min(sell_pending, block_size)
+                    orders.append(Order(product, price, -q))
+                    sell_pending -= q
                 
             result[product] = orders
 
-        # Persist history for the next tick
         trader_data = json.dumps(self.history)
-        
         logger.flush(state, result, 0, trader_data)
         return result, 0, trader_data

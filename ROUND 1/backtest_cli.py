@@ -84,13 +84,13 @@ def run_cli_backtest(day):
                 
                 # 1. Aggressive Fill (Take)
                 if qty > 0 and price >= curr_ask:
-                    fill = min(qty, -depth.sell_orders[curr_ask], 20 - positions[product])
+                    fill = min(qty, -depth.sell_orders[curr_ask], trader.limits.get(product, 20) - positions[product])
                     if fill > 0:
                         positions[product] += fill
                         cash -= fill * curr_ask
                         qty -= fill
                 elif qty < 0 and price <= curr_bid:
-                    fill = min(-qty, depth.buy_orders[curr_bid], positions[product] + 20)
+                    fill = min(-qty, depth.buy_orders[curr_bid], positions[product] + trader.limits.get(product, 20))
                     if fill > 0:
                         positions[product] -= fill
                         cash += fill * curr_bid
@@ -105,13 +105,13 @@ def run_cli_backtest(day):
                         # We only fill if we are BETTER than the trade price or AT it
                         # For conservatism, we fill up to 50% of the market trade volume
                         if qty > 0 and price >= trade_p: # Buy limit hit
-                            fill = min(qty, int(trade_v * 0.5) + 1, 20 - positions[product])
+                            fill = min(qty, int(trade_v * 0.5) + 1, trader.limits.get(product, 20) - positions[product])
                             if fill > 0:
                                 positions[product] += fill
                                 cash -= fill * price
                                 qty -= fill
                         elif qty < 0 and price <= trade_p: # Sell limit hit
-                            fill = min(-qty, int(trade_v * 0.5) + 1, positions[product] + 20)
+                            fill = min(-qty, int(trade_v * 0.5) + 1, positions[product] + trader.limits.get(product, 20))
                             if fill > 0:
                                 positions[product] -= fill
                                 cash += fill * price
