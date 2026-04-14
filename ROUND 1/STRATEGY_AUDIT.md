@@ -4,6 +4,14 @@
 
 # trader_peter2.py ![3,340 PNL](image-1.png)
 
+# trader_peter3.py ![3,100 PNL](image-2.png)
+
+# trader_peter4.py ![3,248 PNL](image-3.png)
+
+# trader_peter5.py ![3,200 PNL](image-4.png)
+
+# trader_peter6.py ![300 PNL](image-5.png)
+
 ---
 
 ## 🏁 Summary Table (Original Audit)
@@ -20,22 +28,27 @@
 
 ### 🥈 1. `trader_peter.py` ($3,177 Baseline)
 
-- **Strategy**: **Layered Market Making**. Posts multiple layers of liquidity to capture deep volume.
-- **Logic**: Uses EMA tracking for Starfruit. It is the original "Layered MM" shown in the table above that achieved the ~$50k total backtest profit.
-- **Pros**: Fills more depth than single-level bots.
+- **Strategy**: **Layered Market Making**.
+- **Logic**: EMA tracking. Stable but slow.
 
-### 🥇 2. `trader_peter2.py` ($3,340 Optimized)
+### 🥇 2. `trader_peter2.py` ($3,340 Leader)
 
-- **Strategy**: **3-Lag Regression Scalping**. This is the upgraded version of the Layered MM.
-- **Logic**: Instead of a lagging EMA, it uses a **statistical linear model** ($0.34P_t + 0.32P_{t-1} + 0.33P_{t-2}$) to predict the very next price move.
-- **Performance**: In local backtests, this improved the Round 1 total from **$50.1k** to **$78.1k** by significantly reducing losses during Starfruit drift.
+- **Strategy**: **3-Lag Regression Scalping**.
+- **Logic**: Linear model ($Next\_Price \approx 0.34P_t + 0.32P_{t-1} + 0.33P_{t-2}$).
+- **Verdict**: Remains the current performance leader.
+
+### 🥈 5. `trader_peter5.py` ($3,200 Balanced Risk)
+
+- **Logic**: Zero-buffer snipes (0.1 threshold).
+- **Verdict**: Successful "Alpha Taker" version. Higher frequency matched the pnl of the leader but with higher exposure.
+
+### 💀 6. `trader_peter6.py` ($300 - The Crash)
+
+- **Strategy**: **Leader-Spec (High Size + Low Skew)**.
+- **Verdict**: **Worst performance**. Proved that "Risk without refined Defense" leads to catastrophic drawdowns.
 
 ---
 
-## 🧪 Backtesting Methodology
+## 🛠️ Next Target: Use "Defense" to hit 10k
 
-The **Ultra-Backtester** (`backtest_ultra.py`) uses:
-
-1. **Queue Modeling**: Passive fills capped at 40% of market trade volume.
-2. **Priority Execution**: Aggressive Market Takes are processed before Makers.
-3. **MTM Valuation**: Portfolio valued at the mid-price of the BBO.
+We are aiming to break the 3.4k ceiling by combining the high frequency of v5 with an **active stop-loss defender** in Version 7.
