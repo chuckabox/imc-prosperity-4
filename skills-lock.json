@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "f064f9f133522bbde6193c888c1f0f32a1892621b459dd92e3840724de26b00c"
     },
+    "caveman": {
+      "source": "juliusbrussee/caveman",
+      "sourceType": "github",
+      "computedHash": "ac5fb2168c653fa5d660b5f510a4688d210717c7e10eb8fd91ef0d9b59f4e96e"
+    },
     "find-skills": {
       "source": "vercel-labs/skills",
       "sourceType": "github",
@@ -15,6 +20,11 @@
       "source": "anthropics/skills",
       "sourceType": "github",
       "computedHash": "516bd2154eb843a8240e43d5b285229129853114ad7075a5e141e1c08e408c84"
+    },
+    "technical-analysis": {
+      "source": "omer-metin/skills-for-antigravity",
+      "sourceType": "github",
+      "computedHash": "648e00fcf4b1da1689fa1df1bad5249c5f04625e6264475369d51a3a50a7eb0d"
     }
   }
 }
