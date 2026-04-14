@@ -9,7 +9,7 @@ import numpy as np
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from datamodel import Listing, OrderDepth, TradingState, Observation, Order
-from trader import Trader
+from trader_peter import Trader
 
 def run_cli_backtest(day):
     # Adjust paths for ROUND 1
@@ -32,19 +32,24 @@ def run_cli_backtest(day):
         "INTARIAN_PEPPER_ROOT": Listing("INTARIAN_PEPPER_ROOT", "INTARIAN_PEPPER_ROOT", "SEASHELLS")
     }
     
-    positions = {"ASH_COATED_OSMIUM": 0, "INTARIAN_PEPPER_ROOT": 0}
     cash = 0.0
+    positions = {p: 0 for p in listings.keys()}
     pnl_history = []
     
+    # Pre-group prices by timestamp
     grouped = df_prices.groupby("timestamp")
     
     # Load trades for passive fill simulation
     df_trades = pd.read_csv(trades_file, sep=";") if os.path.exists(trades_file) else None
+    trades_dict = {}
+    if df_trades is not None:
+        # Pre-group trades by (timestamp, symbol)
+        for (t, s), g in df_trades.groupby(["timestamp", "symbol"]):
+            trades_dict[(t, s)] = g.to_dict("records")
     
-    for ts, group in grouped:
+    for i, (ts, group) in enumerate(grouped):
         order_depths = {}
         for _, row in group.iterrows():
-            # ... (same as before)
             product = row["product"]
             depth = OrderDepth()
             if not pd.isna(row["bid_price_1"]):
@@ -92,21 +97,43 @@ def run_cli_backtest(day):
                         qty += fill
                 
                 # 2. Passive Fill (Make) - If price was traded through or at
-                if qty != 0 and df_trades is not None:
-                    mkt_trades = df_trades[(df_trades["timestamp"] == ts) & (df_trades["symbol"] == product)]
-                    for _, trade in mkt_trades.iterrows():
+                if qty != 0:
+                    mkt_trades = trades_dict.get((ts, product), [])
+                    for trade in mkt_trades:
                         trade_p = trade["price"]
                         trade_v = trade["quantity"]
+                        # We only fill if we are BETTER than the trade price or AT it
+                        # For conservatism, we fill up to 50% of the market trade volume
                         if qty > 0 and price >= trade_p: # Buy limit hit
-                            fill = min(qty, trade_v, 20 - positions[product])
-                            positions[product] += fill
-                            cash -= fill * price
-                            qty -= fill
+                            fill = min(qty, int(trade_v * 0.5) + 1, 20 - positions[product])
+                            if fill > 0:
+                                positions[product] += fill
+                                cash -= fill * price
+                                qty -= fill
                         elif qty < 0 and price <= trade_p: # Sell limit hit
-                            fill = min(-qty, trade_v, positions[product] + 20)
-                            positions[product] -= fill
-                            cash += fill * price
-                            qty += fill
+                            fill = min(-qty, int(trade_v * 0.5) + 1, positions[product] + 20)
+                            if fill > 0:
+                                positions[product] -= fill
+                                cash += fill * price
+                                qty -= fill
+
+        # Mark-to-Market PnL
+        mtm_pnl = cash
+        for product, pos in positions.items():
+            if product in order_depths:
+                depth = order_depths[product]
+                best_bid = max(depth.buy_orders.keys()) if depth.buy_orders else 0
+                best_ask = min(depth.sell_orders.keys()) if depth.sell_orders else 0
+                mid = (best_bid + best_ask) / 2.0 if best_bid and best_ask else (best_bid or best_ask or 0)
+                mtm_pnl += pos * mid
+        
+        pnl_history.append(mtm_pnl)
+        if i < 3: 
+            order_list = []
+            for p in orders:
+                for o in orders[p]:
+                    order_list.append((p, o.price, o.quantity))
+            print(f"TS {ts}: PnL ${mtm_pnl:,.2f} | Pos {positions} | Orders: {order_list}")
 
     # Mark-to-Market PnL
     mtm_pnl = cash
