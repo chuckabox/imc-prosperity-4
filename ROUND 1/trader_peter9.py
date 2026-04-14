@@ -76,6 +76,8 @@ class Trader:
             fair = self.get_fair_price(product, state)
             
             # --- THE SQUEEZER (Deep Liquidity) ---
+            if not depth.buy_orders or not depth.sell_orders: continue
+
             # If spread is wide, we skip BBO pennying and quote inside
             skew = 0.3
             bid_p = math.floor(fair - 1 - pos * skew)
