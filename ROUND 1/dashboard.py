@@ -65,28 +65,45 @@ def run_backtest_simulation(day):
     
     pnl_history = []
     try:
-        grouped = df_prices.groupby("timestamp")
-        total_steps = len(grouped)
-        progress_bar = st.progress(0)
-        
-        for i, (ts, group) in enumerate(grouped):
-            progress_bar.progress((i + 1) / total_steps)
-            
-            # Prepare state
-            order_depths = {}
+        # --- OPTIMIZATION: Pre-process data into efficient lookups ---
+        # Prices: timestamp -> {product: depth_obj}
+        price_map = {}
+        for ts, group in df_prices.groupby("timestamp"):
+            ts_depths = {}
             for _, row in group.iterrows():
                 product = row["product"]
                 depth = OrderDepth()
                 depth.buy_orders = {int(row["bid_price_1"]): 10}
                 depth.sell_orders = {int(row["ask_price_1"]): -10}
-                order_depths[product] = depth
+                ts_depths[product] = (depth, row["ask_price_1"], row["bid_price_1"])
+            price_map[ts] = ts_depths
+        
+        # Trades: timestamp -> {product: [trade_rows]}
+        trade_lookup = {}
+        if df_trades is not None:
+            for ts, group in df_trades.groupby("timestamp"):
+                ts_trades = {}
+                for product, p_group in group.groupby("product"):
+                    ts_trades[product] = p_group.to_dict('records')
+                trade_lookup[ts] = ts_trades
+
+        timestamps = sorted(price_map.keys())
+        total_steps = len(timestamps)
+        progress_bar = st.progress(0)
+        
+        for i, ts in enumerate(timestamps):
+            if i % 500 == 0: 
+                progress_bar.progress((i + 1) / total_steps)
+                
+            ts_data = price_map[ts]
+            order_depths = {p: d[0] for p, d in ts_data.items()}
                 
             state = TradingState(
                 traderData=trader.traderData,
                 timestamp=ts,
                 listings=listings,
                 order_depths=order_depths,
-                own_trades={},
+                own_trades={}, 
                 market_trades={},
                 position=positions,
                 observations=Observation({}, {})
@@ -95,12 +112,10 @@ def run_backtest_simulation(day):
             orders, conversions, trader_data = trader.run(state)
             trader.traderData = trader_data
             
-            # --- Fill Logic ---
+            # --- Optimized Fill Logic ---
             for product, order_list in orders.items():
-                if product not in group["product"].values: continue
-                row = group[group["product"] == product].iloc[0]
-                curr_ask = int(row["ask_price_1"])
-                curr_bid = int(row["bid_price_1"])
+                if product not in ts_data: continue
+                _, curr_ask, curr_bid = ts_data[product]
                 
                 for order in order_list:
                     qty = order.quantity
@@ -122,9 +137,9 @@ def run_backtest_simulation(day):
                             filled = True
                             st.session_state.trades_log.append(f"TS {ts}: AGG SELL {fill_qty} {product} @ {curr_bid}")
                     
-                    if not filled and df_trades is not None:
-                        mkt_trades = df_trades[(df_trades["timestamp"] == ts) & (df_trades["product"] == product)]
-                        for _, trade in mkt_trades.iterrows():
+                    if not filled and ts in trade_lookup:
+                        mkt_trades = trade_lookup[ts].get(product, [])
+                        for trade in mkt_trades:
                             trade_price = int(trade["price"])
                             trade_qty = 1 
                             
@@ -146,9 +161,8 @@ def run_backtest_simulation(day):
             # Mark-to-market
             mtm_pnl = cash
             for product, pos in positions.items():
-                if product in group["product"].values:
-                    row = group[group["product"] == product].iloc[0]
-                    mid = (row["bid_price_1"] + row["ask_price_1"]) / 2.0
+                if product in ts_data:
+                    mid = (ts_data[product][1] + ts_data[product][2]) / 2.0
                     mtm_pnl += pos * mid
             
             pnl_history.append(mtm_pnl)
@@ -258,14 +272,14 @@ def forge_trader():
     with open(TRADER_TEMPLATE, "r") as f:
         text = f.read()
 
-    derived_spread = max(1, int(st.session_state.analysis["tom_std"] / 2.0))
-    derived_fv = int(st.session_state.analysis["em_mean"])
+    derived_spread = max(1, int(st.session_state.analysis["pep_std"] / 2.0))
+    derived_fv = int(st.session_state.analysis["os_mean"])
 
     config_rendered = {
-        "emerald_active": st.session_state.config["emerald_active"],
-        "tomato_active": st.session_state.config["tomato_active"],
-        "emerald_limit": st.session_state.config["emerald_limit"],
-        "tomato_limit": st.session_state.config["tomato_limit"],
+        "osmium_active": st.session_state.config["osmium_active"],
+        "pepper_active": st.session_state.config["pepper_active"],
+        "osmium_limit": st.session_state.config["osmium_limit"],
+        "pepper_limit": st.session_state.config["pepper_limit"],
         "target_spread": derived_spread,
         "mr_threshold": st.session_state.config["mr_threshold"]
     }
@@ -318,15 +332,8 @@ def main():
         st.session_state.config["mr_threshold"] = st.session_state.mr_threshold
         save_config(st.session_state.config)
 
-    # --- SIDEBAR & TRADING 101 ---
+    # --- SIDEBAR & TRADING SETUP ---
     with st.sidebar:
-        st.header("📚 Trading 101")
-        with st.expander("Show Cheat Sheet"):
-            st.info("**Bid**: The highest price someone is willing to pay to BUY.\n\n**Ask**: The lowest price someone is willing to accept to SELL.")
-            st.markdown("---")
-            st.write("_Remember: You want to buy low and sell high!_")
-
-        st.divider()
         st.divider()
         st.header("🎚️ Bot Setup")
         
@@ -419,16 +426,16 @@ def main():
 
         # 2. Analysis
         st.markdown("### 2. Auto-Analysis Engine")
-        st.caption("This tool determines the 'Fair Value' for Emeralds and the 'Volatility' for Tomatoes based on your historical CSV data.")
+        st.caption("This tool determines the 'Fair Value' for Osmium and the 'Volatility' for Pepper Root based on your historical CSV data.")
         st.button("🔍 Run Auto-Analysis", 
                   on_click=perform_auto_analysis, 
                   disabled=not (d1 and d2 and t_exists))
         
         if "analysis" in st.session_state:
-            st.info(f"**Insight:** Based on your data, we recommend anchoring Emeralds to **{st.session_state.analysis['em_mean']:.0f}**. Tomatoes are currently showing a volatility factor of **{st.session_state.analysis['tom_std']:.2f}**, which we will use to scale your profit capture.")
+            st.info(f"**Insight:** Based on your data, we recommend anchoring Osmium to **{st.session_state.analysis['os_mean']:.0f}**. Pepper Root is currently showing a volatility factor of **{st.session_state.analysis['pep_std']:.2f}**, which we will use to scale your profit capture.")
             
-            st.metric("Derived Emerald Fair Value", f"{st.session_state.analysis['em_mean']:.1f}")
-            st.metric("Derived Tomato Volatility", f"{st.session_state.analysis['tom_std']:.2f}")
+            st.metric("Derived Osmium Fair Value", f"{st.session_state.analysis['os_mean']:.1f}")
+            st.metric("Derived Pepper Root Volatility", f"{st.session_state.analysis['pep_std']:.2f}")
             
             st.markdown("### 3. Final Execution")
             st.caption("We will now inject your sidebar settings (Limits, Aggressiveness) and the analyzed fair values into your final script.")
