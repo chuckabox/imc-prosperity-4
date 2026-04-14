@@ -10,20 +10,27 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data_capsule")
 
 def load_config():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
-            try:
-                return json.load(f)
-            except:
-                pass
-    return {
+    defaults = {
         "osmium_active": True,
         "pepper_active": True,
         "osmium_limit": 20,
         "pepper_limit": 20,
+        "emerald_active": True, # For backward compatibility in forge
+        "tomato_active": True,
+        "emerald_limit": 20,
+        "tomato_limit": 20,
         "target_spread": 2,
         "mr_threshold": 2
     }
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            try:
+                config = json.load(f)
+                # Merge defaults with loaded config
+                return {**defaults, **config}
+            except:
+                pass
+    return defaults
 
 def save_config(config):
     with open(CONFIG_FILE, "w") as f:
@@ -190,6 +197,8 @@ def load_and_process_data(day):
     df_trades = None
     if os.path.exists(trades_file):
         df_trades = pd.read_csv(trades_file, sep=";")
+        if "symbol" in df_trades.columns:
+            df_trades = df_trades.rename(columns={"symbol": "product"})
     
     st.info(f"Loaded {len(df_prices)} price rows and {len(df_trades) if df_trades is not None else 0} market trades.")
         

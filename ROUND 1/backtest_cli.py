@@ -9,7 +9,14 @@ import numpy as np
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from datamodel import Listing, OrderDepth, TradingState, Observation, Order
-from trader_peter import Trader
+import importlib.util
+
+# Load the trader class from the provided file path
+trader_file = sys.argv[1] if len(sys.argv) > 1 else "ROUND 1/trader_peter.py"
+spec = importlib.util.spec_from_file_location("TraderModule", trader_file)
+trader_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(trader_module)
+Trader = trader_module.Trader
 
 def run_cli_backtest(day):
     # Adjust paths for ROUND 1

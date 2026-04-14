@@ -4,6 +4,10 @@
 
 # trader_peter2.py ![3,340 PNL](image-1.png)
 
+# trader_peter2_1.py ![3,400 PNL](image-2_1.png)
+
+# trader_peter2_2.py ![3,101 PNL](image-7.png)
+
 # trader_peter3.py ![3,100 PNL](image-2.png)
 
 # trader_peter4.py ![3,248 PNL](image-3.png)
@@ -18,7 +22,7 @@
 
 # trader_peter10.py ![1,600 PNL](image-10.png)
 
-# trader-peter11.py ![-40,000 PNL](image-6.png)
+# trader_peter11.py ![-40,000 PNL](image-6.png)
 
 ---
 
@@ -34,28 +38,58 @@
 
 ## 🔍 Strategy Deep-Dives
 
-### 🥈 1. `trader_peter.py` ($3,177 Baseline)
+#### 🥈 1. `trader_peter.py` ($3,177 Baseline)
 
 - **Concept**: EMA-based Mean Reversion.
+- **Verdict**: Too slow for the drifting Starfruit components.
 
-### 🥇 2. `trader_peter2.py` ($3,340 Leader)
+#### 🥇 2. `trader_peter2.py` ($3,340 Leader)
 
 - **Concept**: **3-Lag Regression**.
-- **Verdict**: Proven Signal, but hampered by incorrect 20-unit limits.
+- **Verdict**: The most robust signal discovered so far, but limited by the 20-unit position cap.
 
-### 🥉 10. `trader_peter10.py` ($1,600 - Signal Mismatch)
+#### ✨ 2_1. `trader_peter2_1.py` ($3,400 Optimized)
 
-- **Strategy**: **Tape-Aware Fragmented MM**.
-- **Verdict**: **Underperformed (1.6k)**. Post-mortem revealed a "Signal Swap" catastrophe. We applied regression to the "Steady" Pepper Root and anchored the "Volatile" Osmium. Also used incorrect 20-unit limits.
+- **Concept**: **Tape-Aware Regression**.
+- **Verdict**: Improved fill quality using Trade Pressure (OFI), but confirmed that the exchange is likely hard-capping positions at 20 units for this round.
+
+#### ⚡ 2_2. `trader_peter2_2.py` ($3,101 - Hyper-Pennying)
+
+- **Concept**: **High-Frequency Aggression**.
+- **Verdict**: Underperformed expectations. The tighter spread and aggressive skew caused too much "toxic volume" despite the higher theoretical fill rate.
+
+#### 🥉 3. `trader_peter3.py` ($3,100 - Multi-Layer)
+
+- **Concept**: 3-Layered Liquidity + OFI adjustment.
+- **Verdict**: Good volume, but deeper layers were rarely filled.
+
+#### 📈 4. `trader_peter4.py` ($3,248 - Micro-Price)
+
+- **Concept**: 5-Lag Micro-price Regression.
+- **Verdict**: Stable but slightly too conservative.
+
+#### 🏎️ 6. `trader_peter6.py` ($300 PnL)
+
+- **Concept**: 4-Lag Regression + Low Skew.
+- **Verdict**: Failed to capture mean reversion correctly due to loose inventory control.
+
+#### 🛡️ 7. `trader_peter7.py` (WIPE OUT)
+
+- **Concept**: Market Take Stop-Loss.
+- **Verdict**: Whipsawed to death.
+
+#### 📉 10. `trader_peter10.py` ($1,600 - Signal Mismatch)
+
+- **Concept**: Tape-Aware Fragmented MM.
+- **Verdict**: Signal swap error (Anchored volatile, regressed steady).
+
+#### 🌋 11. `trader_peter11.py` (-40,000 WIPE OUT)
+
+- **Concept**: Final "XIREC Target" Attempt.
+- **Verdict**: Full Signal Swap catastrophe. Anchored Starfruit during 500-tick drift.
 
 ---
 
-## 🚀 Final Round 1 Strategy: Version 11 (XIREC Target)
+## 🚀 Future Strategy
 
-Based on the official Intarian briefing, we are executing the **Signal Correction**:
-
-1. **Osmium**: 3-Lag Regression (Solving the "Hidden Pattern").
-2. **Pepper Root**: 10,000 fixed anchor (The "Steady" root).
-3. **Limit Scale**: 80 Units per product.
-
-This update should provide a **4x - 6x multiplier** to our existing leader-PnL.
+We are returning to the **v2_1** core logic but exploring **Fragmented Quoting** to dodge adverse selection while maintaining the 20-unit cap.
