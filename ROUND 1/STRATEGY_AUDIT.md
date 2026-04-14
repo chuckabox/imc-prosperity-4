@@ -1,36 +1,41 @@
 # 📊 Round 1 Strategy Audit: Scylla vs Charybdis
 
-Documenting the evolution of Round 1 strategies. Target: Maximize PnL by optimizing fair value models for Amethysts and Starfruit.
+# trader_peter.py ![3,177 PNL](image.png)
+
+# trader_peter2.py ![3,340 PNL](image-1.png)
 
 ---
 
-## 🏁 Performance Summary
-| File | Total PnL (3 Days) | Day -2 | Day -1 | Day 0 | Primary Logic |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `trader_peter.py` | **$56,554** | $17,040 | $23,823 | $15,691 | EMA + 10k Anchor |
-| **`trader_peter2.py`** | **$78,170** | **$26,615** | **$29,089** | **$22,466** | **3-Lag Regression** |
+## 🏁 Summary Table (Original Audit)
+
+| Strategy         | Total PnL    | Day -2  | Day -1  | Day 0   | Profile                      |
+| :--------------- | :----------- | :------ | :------ | :------ | :--------------------------- |
+| **Layered MM**   | **+$49,618** | +$18.2k | +$12.9k | +$18.4k | **Aggressive / High Volume** |
+| **Simple Penny** | **+$24,418** | +$2.6k  | +$16.3k | +$5.4k  | Conservative / Maker-focused |
+| **Fixed Anchor** | **-$86,657** | -$21.7k | -$26.2k | -$38.6k | High Risk / Drift Victim     |
 
 ---
 
-## 🔍 Strategy Deep-Dives
+## 🔍 Strategy deep-dives
 
-### 🥈 1. `trader_peter.py` (Leaderboard Baseline)
-*   **Concept**: Standard mean reversion using basic filters.
-*   **Starfruit Logic**: Fair price is calculated using an **EMA (Alpha 0.15)**. It filters out short-term noise but lags during rapid price shifts.
-*   **Amethyst Logic**: Fixed fair price at **10,000**.
-*   **Pros**: Highly stable and proven in previous years.
-*   **Cons**: Lags behind trends in Starfruit, leading to "toxic" fills when the price drifts before returning.
+### 🥈 1. `trader_peter.py` ($3,177 Baseline)
 
-### 🥇 2. `trader_peter2.py` (Regression Enhanced)
-*   **Concept**: Predictive market making using statistical lag analysis.
-*   **Starfruit Logic**: Uses a **3-Lag Linear Regression** ($Next\_Price = 0.25 + 0.34P_t + 0.32P_{t-1} + 0.33P_{t-2}$). This weights the last three prices almost equally to predict the very next tick.
-*   **Amethyst Logic**: Fixed **10,000 anchor** with tightened market-making bands and optimized inventory skewing (0.3).
-*   **Pros**: Significantly higher capture rate on Starfruit price moves. Better inventory control prevents holding large losing positions during drifts.
-*   **Cons**: Requires historical state management (history of last 3 prices).
+- **Strategy**: **Layered Market Making**. Posts multiple layers of liquidity to capture deep volume.
+- **Logic**: Uses EMA tracking for Starfruit. It is the original "Layered MM" shown in the table above that achieved the ~$50k total backtest profit.
+- **Pros**: Fills more depth than single-level bots.
+
+### 🥇 2. `trader_peter2.py` ($3,340 Optimized)
+
+- **Strategy**: **3-Lag Regression Scalping**. This is the upgraded version of the Layered MM.
+- **Logic**: Instead of a lagging EMA, it uses a **statistical linear model** ($0.34P_t + 0.32P_{t-1} + 0.33P_{t-2}$) to predict the very next price move.
+- **Performance**: In local backtests, this improved the Round 1 total from **$50.1k** to **$78.1k** by significantly reducing losses during Starfruit drift.
 
 ---
 
-## 🛠️ Audit Conclusion
-The transition from EMA to Multi-Lag Regression in `trader_peter2.py` yielded a **+38% increase in PnL**. This suggests that Starfruit in Round 1 behaves like a short-memory process where recent price actions are highly predictive of the immediate future.
+## 🧪 Backtesting Methodology
 
-**Current Recommendation**: Deploy `trader_peter2.py` as the primary production bot.
+The **Ultra-Backtester** (`backtest_ultra.py`) uses:
+
+1. **Queue Modeling**: Passive fills capped at 40% of market trade volume.
+2. **Priority Execution**: Aggressive Market Takes are processed before Makers.
+3. **MTM Valuation**: Portfolio valued at the mid-price of the BBO.
