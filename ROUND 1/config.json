@@ -1,0 +1,8 @@
+{
+    "emerald_active": true,
+    "tomato_active": true,
+    "emerald_limit": 18,
+    "tomato_limit": 18,
+    "target_spread": 10.0,
+    "mr_threshold": 7.28
+}
