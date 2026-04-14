@@ -15,18 +15,18 @@ def load_config():
         "pepper_active": True,
         "osmium_limit": 20,
         "pepper_limit": 20,
-        "emerald_active": True, # For backward compatibility in forge
+        "emerald_active": True, # For legacy compat
         "tomato_active": True,
         "emerald_limit": 20,
         "tomato_limit": 20,
         "target_spread": 2,
-        "mr_threshold": 2
+        "mr_threshold": 2,
+        "selected_day": -1
     }
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
             try:
                 config = json.load(f)
-                # Merge defaults with loaded config
                 return {**defaults, **config}
             except:
                 pass
@@ -36,12 +36,7 @@ def save_config(config):
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=4)
 
-def emergency_stop():
-    st.session_state.config["osmium_limit"] = 0
-    st.session_state.config["pepper_limit"] = 0
-    st.session_state.config["osmium_active"] = False
-    st.session_state.config["pepper_active"] = False
-    save_config(st.session_state.config)
+# Emergency stop removed per user request
 
 from trader import Trader, logger as trader_logger
 
@@ -187,6 +182,10 @@ def load_and_process_data(day):
         return None, None
         
     df_prices = pd.read_csv(prices_file, sep=";")
+    
+    # Fix: Drop NaNs to prevent ValueError: cannot convert float NaN to integer
+    df_prices = df_prices.dropna(subset=["bid_price_1", "ask_price_1", "timestamp"])
+    
     df_prices["mid_price"] = (df_prices["bid_price_1"] + df_prices["ask_price_1"]) / 2.0
     
     if "timestamp" in df_prices.columns:
@@ -328,14 +327,8 @@ def main():
             st.write("_Remember: You want to buy low and sell high!_")
 
         st.divider()
-        st.header("🎚️ Bot Setup (Config.json)")
-        
-        st.button("🚨 EMERGENCY STOP 🚨", 
-                  on_click=emergency_stop, 
-                  type="primary", 
-                  width="stretch",
-                  help="Instantly sets all limits to 0 and stops all trading logic.")
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.divider()
+        st.header("🎚️ Bot Setup")
         
         st.subheader("Strategy Activation")
         st.toggle("🟩 OSMIUM (Mean Reversion)", 
@@ -414,8 +407,8 @@ def main():
         # 1. Scanning
         st.markdown("### 1. Data Scan")
         TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "trader.py")
-        d1 = os.path.exists(os.path.join(DATA_DIR, "prices_round_0_day_-1.csv"))
-        d2 = os.path.exists(os.path.join(DATA_DIR, "prices_round_0_day_-2.csv"))
+        d1 = os.path.exists(os.path.join(DATA_DIR, "prices_round_1_day_-1.csv"))
+        d2 = os.path.exists(os.path.join(DATA_DIR, "prices_round_1_day_-2.csv"))
         t_exists = os.path.exists(TRADER_TEMPLATE)
 
         if d1 and d2 and t_exists:
@@ -458,12 +451,19 @@ def main():
         
         col_day, col_btn = st.columns([1, 1])
         with col_day:
-            selected_day = st.radio("Select Historical Data Day:", [-1, -2], horizontal=True)
+            def on_day_change():
+                st.session_state.config["selected_day"] = st.session_state.day_radio
+                save_config(st.session_state.config)
+                run_backtest_simulation(st.session_state.day_radio)
+
+            selected_day = st.radio("Select Historical Data Day:", [-1, -2, 0], 
+                                     key="day_radio",
+                                     index=([-1, -2, 0].index(st.session_state.config.get("selected_day", -1))),
+                                     horizontal=True, 
+                                     on_change=on_day_change)
         with col_btn:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button(f"▶️ Backtest Against Selected Day ( {selected_day} )", 
-                         type="primary",
-                         help="Runs a simulated version of your trading logic against the historical market state."):
+            if st.button("🔄 Manual Rerun"):
                 run_backtest_simulation(selected_day)
                 
         if "sim_result" in st.session_state and st.session_state.sim_result["day"] == selected_day:
