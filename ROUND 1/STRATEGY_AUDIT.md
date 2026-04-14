@@ -12,6 +12,10 @@
 
 # trader_peter6.py ![300 PNL](image-5.png)
 
+# trader_peter7.py ![WIPE OUT](image-6.png)
+
+# trader_peter8.py ![3,200 PNL](image-5.png)
+
 ---
 
 ## 🏁 Summary Table (Original Audit)
@@ -35,20 +39,18 @@
 
 - **Strategy**: **3-Lag Regression Scalping**.
 - **Logic**: Linear model ($Next\_Price \approx 0.34P_t + 0.32P_{t-1} + 0.33P_{t-2}$).
-- **Verdict**: Remains the current performance leader.
+- **Verdict**: Still the most robust setup.
 
 ### 🥈 5. `trader_peter5.py` ($3,200 Balanced Risk)
 
-- **Logic**: Zero-buffer snipes (0.1 threshold).
-- **Verdict**: Successful "Alpha Taker" version. Higher frequency matched the pnl of the leader but with higher exposure.
+### 🥈 8. `trader_peter8.py` ($3,200 Micro-Price)
 
-### 💀 6. `trader_peter6.py` ($300 - The Crash)
-
-- **Strategy**: **Leader-Spec (High Size + Low Skew)**.
-- **Verdict**: **Worst performance**. Proved that "Risk without refined Defense" leads to catastrophic drawdowns.
+- **Strategy**: **Passive Micro-Price**.
+- **Logic**: 3-Lag Micro-price regression weights.
+- **Verdict**: Proven stable, but in Round 1, the **Mid-price** actually provides a cleaner signal for mean reversion than the noisier Micro-price.
 
 ---
 
 ## 🛠️ Next Target: Use "Defense" to hit 10k
 
-We are aiming to break the 3.4k ceiling by combining the high frequency of v5 with an **active stop-loss defender** in Version 7.
+The leaderboard gap between 3.3k and 10k is likely about **Volume Capture**. If our regression is correct, we should be quoting **Full Size** at the predicted fair price. Version 9 will focus on **Size Escalation**.

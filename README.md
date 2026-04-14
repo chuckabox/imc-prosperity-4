@@ -23,17 +23,25 @@ Follow these steps to get your Round 1 bot ready for upload:
 4. **Forge**: Click the **Forge Final Trader.py** button to generate a tuned version of your script.
 
 ### 🧪 3. Local Backtesting
-Validate your strategy locally before using up your portal upload slots.
+Validate your strategy locally before using up your portal upload slots. High-fidelity results are essential for reaching the 10k PnL rank.
 
-#### **Option A: The Rapid CLI (Fastest)**
-Best for quick PnL checks after code changes.
-- **Run command:** `python "ROUND 1/backtest_cli.py"`
-- **Review:** Optimized strategy targets ~$25k per test day.
+#### **Option A: The Strategy Audit (Highest Accuracy)**
+Use this tool to compare multiple versions of your trader or benchmark against standard models.
+- **Run command:** `python "ROUND 1/backtest_ultra.py"`
+- **Interpret Results:**
+    - **Total PnL:** Your target for Round 1 should be **7k-10k+** total.
+    - **Takers vs Makers:** Top strategies usually have a balanced profile. If your **Taker** count is 0, you're missing out on fast price moves. If it's too high, you might be losing to "Adverse Selection" (Toxic fills).
+    - **Max Drawdown:** Compare this in the `STRATEGY_AUDIT.md`. A healthy strategy for Round 1 should handle a drawdown of ~500 shells.
 
-#### **Option B: The Visual Dashboard**
+#### **Option B: The Rapid CLI**
+Best for quick PnL checks after small code changes to a specific file.
+- **Run command:** `python "ROUND 1/backtest_cli.py" "ROUND 1/trader_peter2.py"`
+- **Review:** Quick-fire output of Day -2, -1, and 0 performance.
+
+#### **Option C: The Visual Dashboard**
 Best for seeing charts, inventory, and fair value overlays.
 1. **Start:** `streamlit run "ROUND 1/dashboard.py"`.
-2. **Simulate:** Switch to the **Visual Backtester** tab.
+2. **Simulate:** Switch to the **Visual Backtester** tab to see exactly *where* you were filled.
 
 ### 📤 4. Upload to IMC
 Take the final `ROUND 1/trader.py` file and upload it to the **A.R.I.A. Uplink** on the IMC portal.
