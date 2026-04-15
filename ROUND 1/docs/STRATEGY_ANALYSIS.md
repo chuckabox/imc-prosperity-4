@@ -73,6 +73,41 @@ The Round 1 hint indicates that `ASH_COATED_OSMIUM` may have a hidden pattern. I
 
 ---
 
+## Pepper Root Analysis (Dedicated)
+
+Pepper behaves differently from Osmium in this dataset. The strongest performers are trend-friendly and can hold inventory for extended periods. Over-defensive rewrites reduced PnL materially in local backtests.
+
+### Pepper Variant Comparison (same Osmium baseline, `backtest_cli.py`)
+
+| Variant | Day -2 | Day -1 | Day 0 | Total | Notes |
+|---|---:|---:|---:|---:|---|
+| `ken_pepper_original.py` | 99,436 | 101,852 | 98,018 | **299,306** | Original aggressive Pepper (best so far) |
+| `ken_pepper_v3.py` | 99,271 | 101,620 | 97,637 | 298,528 | Tiny near-limit safety, very small tradeoff |
+| `ken_pepper_v1.py` | 34,683 | 41,185 | 31,485 | 107,353 | Too defensive |
+| `ken_pepper_v2.py` | 31,872 | 39,119 | 30,628 | 101,619 | Still too defensive |
+
+### What We Learned About Pepper
+
+1. **Aggression is currently rewarded**  
+   The original Pepper logic (fast accumulation + spike exits) dominates in this harness.
+
+2. **Large safety rewrites hurt too much**  
+   Tight caps, wide passive quotes, and small clips reduce inventory risk but destroy trend capture.
+
+3. **Small safety layers are viable**  
+   `v3` keeps nearly all PnL while adding near-limit protection; this is the right direction.
+
+4. **Best current Pepper posture**  
+   Keep original logic as base, add only minimal emergency de-risk behavior when inventory is near hard limits.
+
+### Recommended Pepper Baseline
+
+- Use `ken_pepper_original.py` when optimizing for pure local backtest total.
+- Use `ken_pepper_v3.py` when you want almost identical performance with modest limit-safety improvement.
+- Avoid `v1`/`v2` style defensive versions unless market regime changes substantially.
+
+---
+
 ## Individual Trader Analysis
 
 ### `trader.py` — v12 Production Bot (Current Upload) ⚠️
