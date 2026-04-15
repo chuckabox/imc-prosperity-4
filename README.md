@@ -1,68 +1,49 @@
 # 🏛️ IMC Prosperity 4: High-Performance Round 1 Suite
 
 ![Status](https://img.shields.io/badge/Status-Leaderboard_Ready-success)
-![PnL](https://img.shields.io/badge/Backtest_PnL-%24246k_total-blue)
-![Architecture](https://img.shields.io/badge/Algo-Anchor_MM_|_Clean_Regression-orange)
+![PnL](https://img.shields.io/badge/Backtest_PnL-%24272k_total-blue)
+![Architecture](https://img.shields.io/badge/Algo-Categorical_Traders_|_Monte_Carlo_Validated-orange)
 
-Welcome to the **Round 1 Production Suite**. This repository contains a production-grade algorithmic trading bot and high-fidelity backtesting tools optimized for **Ash-coated Osmium** and **Intarian Pepper Root**.
+Welcome to the **Round 1 Production Suite**. This repository contains a production-grade algorithmic trading suite and high-fidelity backtesting tools optimized for **Ash-coated Osmium** and **Intarian Pepper Root**.
 
 ---
 
 ## 🚦 Quick Start Guide
 
-Follow these steps to get your Round 1 bot ready for upload:
+### 📂 1. Select Your Strategy
+We have categorized our top performers into three distinct trading archetypes located in `ROUND 1/traders/peter/`:
+- **`trader_aggressive.py`** ($272k): The PnL King. Greedily takes liquidity for maximum volume capture.
+- **`trader_safe.py`** ($246k): The Robust MM. Uses hard anchors and wide margins for risk-averse growth.
+- **`trader_trend.py`** ($209k): The Adaptive Core. Uses 20-period EMA to dynamically track fair price drifts.
 
-### 📥 1. Setup Data
-- **Drop your CSV files**: Ensure your historical data is in the `ROUND 1/data_capsule/` folder.
-- The system expects filenames like `prices_round_1_day_0.csv`.
+### 🧪 2. Validate Locally
+Before uploading to the portal, run a full verification cycle across historical and synthetic markets.
 
-### 🔍 2. Analysis & Log Visualization
-1. **Analyze with Equirag**: Go to [prosperity.equirag.com](https://prosperity.equirag.com/) to upload your IMC submission logs. 
-2. **Deep Dive**: Use the visualizer to inspect fills, inventory skew, and pricing errors in a web-based interactive interface.
-3. **Configure**: Use the local config in `ROUND 1/config/` to adjust your position limits (80 max for R1) and aggressiveness.
+#### **A. Historical Backtest (The Truth)**
+Check performance against the exact Round 1 tape.
+- **Run command:** `python "ROUND 1/tools/backtest_cli.py" "ROUND 1/traders/peter/trader_aggressive.py"`
 
-### 🧪 3. Local Backtesting
-Validate your strategy locally before using up your portal upload slots. High-fidelity results are essential for reaching the 10k PnL rank.
+#### **B. Monte Carlo Simulation (The Robustness)**
+Test against 100+ synthetic market paths to ensure your strategy doesn't "blow up" in edge cases.
+- **Run command:** `python "ROUND 1/tools/monte_carlo_cli.py" "ROUND 1/traders/peter/trader_aggressive.py" --quick`
 
-#### **Option A: The Strategy Audit (Highest Accuracy)**
-Use this tool to compare multiple versions of your trader or benchmark against standard models.
-- **Run command:** `python "ROUND 1/backtest_ultra.py"`
-- **Interpret Results:**
-    - **Total PnL:** Your target for Round 1 should be **7k-10k+** total.
-    - **Takers vs Makers:** Top strategies usually have a balanced profile. If your **Taker** count is 0, you're missing out on fast price moves. If it's too high, you might be losing to "Adverse Selection" (Toxic fills).
-    - **Max Drawdown:** Compare this in the `STRATEGY_AUDIT.md`. A healthy strategy for Round 1 should handle a drawdown of ~500 shells.
-
-#### **Option B: The Rapid CLI**
-Best for quick PnL checks after small code changes to a specific file.
-- **Run command:** `python "ROUND 1/backtest_cli.py" "ROUND 1/trader_peter2.py"`
-- **Review:** Quick-fire output of Day -2, -1, and 0 performance.
-
-#### **Option C: External Visualizer**
-1. **Visit:** [prosperity.equirag.com](https://prosperity.equirag.com/).
-2. **Upload:** Drop your `submission.log` from the IMC leaderboard to see exactly where you were filled and how the bot handled market volatility.
-
-#### **Option D: The Rust Backtester (Highest Performance)**
-For ultra-fast backtesting with minimal setup. Requires WSL2 on Windows.
-- **Setup (one-time):**
-  - Install Rust in WSL2: `curl https://sh.rustup.rs -sSf | sh`
-  - Install Python dev libraries: `sudo apt update && sudo apt install -y python3-dev`
-- **Run command:** From PowerShell: `wsl bash -c "cd /mnt/c/Users/peter/Desktop/IMC/prosperity_rust_backtester && source ~/.cargo/env && cargo run -- --trader /mnt/c/Users/peter/Desktop/IMC/imc-prosperity-4/ROUND\ 1/trader_peter2_2.py --products summary"`
-- **Features:**
-  - Lightning-fast execution (seconds vs minutes)
-  - Accurate simulation of all round data
-  - Supports custom traders with full path
-  - Outputs detailed PnL breakdown by product and day
-
-### 📤 4. Upload to IMC
-Take the final `ROUND 1/trader.py` file and upload it to the **A.R.I.A. Uplink** on the IMC portal.
+#### **C. Visual Debugging (The Microstructure)**
+Watch your fills happen in real-time on the order book.
+- **Run command:** `streamlit run "ROUND 1/tools/dashboard.py"`
 
 ---
 
-## 🛠️ Suite Components
+## 📂 Documentation Index
 
-*   **Leaderboard Trader (`ROUND 1/traders/trader_10k_clean.py`)**: HFT bot utilizing anchored mean-reversion for Osmium and robust regression for Pepper Root. Includes persistent state via `traderData`.
-*   **External Visualizer**: [Equirag Prosperity Visualizer](https://prosperity.equirag.com/) for log-based analysis.
-*   **Backtesting Engine**: High-fidelity simulation that models both Aggressive Takes and Passive Maker fills using historical trade tapes.
+Detailed audits and technical guides are located in the `ROUND 1/docs/` directory:
+
+| Document | Purpose |
+| :--- | :--- |
+| [**peter_comparisons.md**](ROUND%201/docs/peter_comparisons.md) | Technical deep-dive and pairwise comparison of the categorical traders. |
+| [**XIREC_ESTIMATION.md**](ROUND%201/docs/XIREC_ESTIMATION.md) | Consolidated profit estimation combining Manual Auction and Algo results. |
+| [**TESTING_TOOLKIT.md**](ROUND%201/docs/TESTING_TOOLKIT.md) | One-page cheat sheet for all backtesting commands. |
+| [**BACKTESTING_GUIDE.md**](ROUND%201/docs/BACKTESTING_GUIDE.md) | Comprehensive walkthrough of the 4 different backtesting engines. |
+| [**STRATEGY_ANALYSIS.md**](ROUND%201/docs/STRATEGY_ANALYSIS.md) | Repository-wide audit explaining successes and failures of legacy models. |
 
 ---
 
@@ -70,17 +51,22 @@ Take the final `ROUND 1/trader.py` file and upload it to the **A.R.I.A. Uplink**
 
 ```bash
 ├── ROUND 1/
-│   ├── traders/               # Production-ready strategies
-│   │   ├── trader_10k_clean.py # Master benchmark ($246k)
-│   ├── config/                # Datamodel and logic config
-│   ├── backtest_cli.py        # High-fidelity CLI simulator
-│   ├── data_capsule/          # CSV prices and trades
-│   └── docs/                  # In-depth strategy analysis
-├── tutorial/                  # Archived previous rounds (0/4/3)
-├── prosperity_rust_backtester/ # High-performance Rust engine
-└── README.md                  # Main documentation
+│   ├── traders/peter/         # Categorical Production Traders (Best 3)
+│   ├── tools/                 # Backtesting, MC, and Dashboard engines
+│   ├── config/                # Datamodel and environment config
+│   ├── data_capsule/          # Raw Round 1 Price/Trade CSVs
+│   ├── docs/                  # Strategy Audits and Technical Guides
+│   └── archive/old_peter/     # Legacy and failed experiments
+├── tutorial/                  # Historical data from previous rounds
+└── README.md                  # Main documentation (You are here)
 ```
 
 ---
+
+## ⚖️ Portfolio Estimation
+Our current project target is **200,000 XIRECs**. Following our latest audit:
+- **Manual Auction (Arbitrage)**: 376,700 XIRECs (Risk-Free)
+- **Algorithmic (10k Series)**: 272,842 shells (Local High-Fidelity)
+- **Total Combined**: **~649,542 Estimated XIRECs**.
 
 *“In Prosperity, edge is found at the intersection of speed and safety.”*
