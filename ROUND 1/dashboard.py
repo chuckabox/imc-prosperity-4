@@ -42,7 +42,7 @@ from trader import Trader, logger as trader_logger
 
 def run_backtest_simulation(day):
     st.toast(f"Running simulation against Day {day}...")
-    
+
     df_prices, df_trades = load_and_process_data(day)
     if df_prices is None:
         st.error("Missing data for simulation!")
@@ -54,15 +54,15 @@ def run_backtest_simulation(day):
         "ASH_COATED_OSMIUM": Listing("ASH_COATED_OSMIUM", "ASH_COATED_OSMIUM", "XIRECS"),
         "INTARIAN_PEPPER_ROOT": Listing("INTARIAN_PEPPER_ROOT", "INTARIAN_PEPPER_ROOT", "XIRECS")
     }
-    
+
     total_pnl = 0.0
     positions = {"ASH_COATED_OSMIUM": 0, "INTARIAN_PEPPER_ROOT": 0}
     cash = 0.0
-    
+
     if "trades_log" not in st.session_state:
         st.session_state.trades_log = []
-    st.session_state.trades_log = [] 
-    
+    st.session_state.trades_log = []
+
     pnl_history = []
     try:
         # --- OPTIMIZATION: Pre-process data into efficient lookups ---
@@ -77,7 +77,7 @@ def run_backtest_simulation(day):
                 depth.sell_orders = {int(row["ask_price_1"]): -10}
                 ts_depths[product] = (depth, row["ask_price_1"], row["bid_price_1"])
             price_map[ts] = ts_depths
-        
+
         # Trades: timestamp -> {product: [trade_rows]}
         trade_lookup = {}
         if df_trades is not None:
@@ -90,38 +90,38 @@ def run_backtest_simulation(day):
         timestamps = sorted(price_map.keys())
         total_steps = len(timestamps)
         progress_bar = st.progress(0)
-        
+
         for i, ts in enumerate(timestamps):
-            if i % 500 == 0: 
+            if i % 500 == 0:
                 progress_bar.progress((i + 1) / total_steps)
-                
+
             ts_data = price_map[ts]
             order_depths = {p: d[0] for p, d in ts_data.items()}
-                
+
             state = TradingState(
                 traderData=trader.traderData,
                 timestamp=ts,
                 listings=listings,
                 order_depths=order_depths,
-                own_trades={}, 
+                own_trades={},
                 market_trades={},
                 position=positions,
                 observations=Observation({}, {})
             )
-            
+
             orders, conversions, trader_data = trader.run(state)
             trader.traderData = trader_data
-            
+
             # --- Optimized Fill Logic ---
             for product, order_list in orders.items():
                 if product not in ts_data: continue
                 _, curr_ask, curr_bid = ts_data[product]
-                
+
                 for order in order_list:
                     qty = order.quantity
                     price = order.price
                     filled = False
-                    
+
                     if qty > 0 and price >= curr_ask:
                         fill_qty = min(qty, 20 - positions[product])
                         if fill_qty > 0:
@@ -136,13 +136,13 @@ def run_backtest_simulation(day):
                             cash += fill_qty * curr_bid
                             filled = True
                             st.session_state.trades_log.append(f"TS {ts}: AGG SELL {fill_qty} {product} @ {curr_bid}")
-                    
+
                     if not filled and ts in trade_lookup:
                         mkt_trades = trade_lookup[ts].get(product, [])
                         for trade in mkt_trades:
                             trade_price = int(trade["price"])
-                            trade_qty = 1 
-                            
+                            trade_qty = 1
+
                             if qty > 0 and price >= trade_price:
                                 fill_qty = min(qty, 20 - positions[product], trade_qty)
                                 if fill_qty > 0:
@@ -157,16 +157,16 @@ def run_backtest_simulation(day):
                                     cash += fill_qty * price
                                     st.session_state.trades_log.append(f"TS {ts}: PASSIVE SELL {fill_qty} {product} @ {price}")
                                     break
-            
+
             # Mark-to-market
             mtm_pnl = cash
             for product, pos in positions.items():
                 if product in ts_data:
                     mid = (ts_data[product][1] + ts_data[product][2]) / 2.0
                     mtm_pnl += pos * mid
-            
+
             pnl_history.append(mtm_pnl)
-        
+
     except Exception as e:
         st.error(f"Error during simulation: {str(e)}")
         import traceback
@@ -176,45 +176,46 @@ def run_backtest_simulation(day):
     final_pnl = pnl_history[-1] if pnl_history else 0
     st.session_state.sim_result = {"pnl": final_pnl, "day": day}
     st.success(f"Simulation Complete! Final PnL: **{final_pnl:,.2f}**")
-    
+
     if st.session_state.trades_log:
         with st.expander("📝 View Trade History (Latest 50)", expanded=False):
             for t in reversed(st.session_state.trades_log[-50:]):
                 st.text(t)
-    
+
     if pnl_history:
         pnl_df = pd.DataFrame({"Timestamp": range(len(pnl_history)), "PnL": pnl_history})
         st.line_chart(pnl_df.set_index("Timestamp"), width="stretch")
 
 # Disable caching temporarily to ensure fresh data for every backtest
+@st.cache_data
 def load_and_process_data(day):
     # Search for files for Round 1
     prices_file = os.path.join(DATA_DIR, f"prices_round_1_day_{day}.csv")
     trades_file = os.path.join(DATA_DIR, f"trades_round_1_day_{day}.csv")
-    
+
     if not os.path.exists(prices_file):
         return None, None
-        
+
     df_prices = pd.read_csv(prices_file, sep=";")
-    
+
     # Fix: Drop NaNs to prevent ValueError: cannot convert float NaN to integer
     df_prices = df_prices.dropna(subset=["bid_price_1", "ask_price_1", "timestamp"])
-    
+
     df_prices["mid_price"] = (df_prices["bid_price_1"] + df_prices["ask_price_1"]) / 2.0
-    
+
     if "timestamp" in df_prices.columns:
         # Avoid rounding timestamps as it breaks the drift logic.
         # Just resolve duplicates for the same timestamp/product if they exist.
         df_prices = df_prices.groupby(["timestamp", "product"]).mean(numeric_only=True).reset_index()
-    
+
     df_trades = None
     if os.path.exists(trades_file):
         df_trades = pd.read_csv(trades_file, sep=";")
         if "symbol" in df_trades.columns:
             df_trades = df_trades.rename(columns={"symbol": "product"})
-    
+
     st.info(f"Loaded {len(df_prices)} price rows and {len(df_trades) if df_trades is not None else 0} market trades.")
-        
+
     return df_prices, df_trades
 
 def render_chart(df_prices, df_trades, product, color, show_mean=False):
@@ -222,28 +223,28 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
     if df_p.empty:
         st.warning(f"No data for {product}")
         return
-        
+
     line = alt.Chart(df_p).mark_line(color=color).encode(
         x='timestamp:Q',
         y=alt.Y('mid_price:Q', scale=alt.Scale(zero=False), title="Price"),
         tooltip=['timestamp', 'mid_price']
     )
-    
+
     band = alt.Chart(df_p).mark_area(opacity=0.3, color=color).encode(
         x='timestamp:Q',
         y='bid_price_1:Q',
         y2='ask_price_1:Q'
     )
-    
+
     layers = [band, line]
-    
+
     if show_mean:
         mean_val = df_p["mid_price"].mean()
         mean_line = alt.Chart(pd.DataFrame({'y': [mean_val]})).mark_rule(color='#e67e22', strokeDash=[5, 5], strokeWidth=2).encode(
             y='y:Q'
         )
         layers.append(mean_line)
-        
+
     if df_trades is not None:
         df_t = df_trades[df_trades["product"] == product].copy()
         if not df_t.empty:
@@ -253,13 +254,13 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
                 tooltip=['timestamp', 'price']
             )
             layers.append(scatter)
-            
+
     chart = alt.layer(*layers).properties(
         width=800,
         height=300,
         title=f"{product} Price & Spread Overlay"
     ).interactive()
-    
+
     st.altair_chart(chart, width="stretch")
     return df_p
 
@@ -268,7 +269,7 @@ def forge_trader():
     if not os.path.exists(TRADER_TEMPLATE):
         st.error(f"Template not found at {TRADER_TEMPLATE}")
         return
-        
+
     with open(TRADER_TEMPLATE, "r") as f:
         text = f.read()
 
@@ -286,7 +287,7 @@ def forge_trader():
 
     # Use json.dumps but fix the capitalization for Python
     replacement_config = "self.config = " + json.dumps(config_rendered, indent=8).replace("true", "True").replace("false", "False")
-    
+
     text = re.sub(r"self\.config\s*=\s*\{.*?\}", replacement_config, text, flags=re.DOTALL)
 
     text = re.sub(r"def load_config\(self\):.*?def send_sell_order", "def load_config(self):\n        pass\n\n    def send_sell_order", text, flags=re.DOTALL)
@@ -305,24 +306,24 @@ def perform_auto_analysis():
     df1, _ = load_and_process_data(-1)
     df2, _ = load_and_process_data(-2)
     df0, _ = load_and_process_data(0)
-    
+
     if df1 is None or df2 is None:
         st.error("Cannot run analysis! Ensure day_-1 and day_-2 CSVs are in data_capsule.")
         return
-        
+
     df = pd.concat([d for d in [df1, df2, df0] if d is not None])
     os_mean = df[df["product"] == "ASH_COATED_OSMIUM"]["mid_price"].mean()
     pep_std = df[df["product"] == "INTARIAN_PEPPER_ROOT"]["mid_price"].std()
-    
+
     st.session_state.analysis = {"os_mean": os_mean, "pep_std": pep_std}
     st.toast("Analysis Successful!")
 
 def main():
     st.set_page_config(page_title="P4 Control Center", layout="wide")
-    
+
     if "config" not in st.session_state:
         st.session_state.config = load_config()
-        
+
     def on_change_callback():
         st.session_state.config["osmium_active"] = st.session_state.osmium_active
         st.session_state.config["pepper_active"] = st.session_state.pepper_active
@@ -336,73 +337,73 @@ def main():
     with st.sidebar:
         st.divider()
         st.header("🎚️ Bot Setup")
-        
+
         st.subheader("Strategy Activation")
-        st.toggle("🟩 OSMIUM (Mean Reversion)", 
-                  key="osmium_active", 
-                  value=st.session_state.config["osmium_active"], 
+        st.toggle("🟩 OSMIUM (Mean Reversion)",
+                  key="osmium_active",
+                  value=st.session_state.config["osmium_active"],
                   on_change=on_change_callback)
         st.caption("The 'Rubber Band' strategy: Buy low, sell high around the 10,000 mark.")
-        
-        st.toggle("🟥 PEPPER ROOT (Trend MM)", 
-                  key="pepper_active", 
-                  value=st.session_state.config["pepper_active"], 
+
+        st.toggle("🟥 PEPPER ROOT (Trend MM)",
+                  key="pepper_active",
+                  value=st.session_state.config["pepper_active"],
                   on_change=on_change_callback)
         st.caption("Profit from trends and volatility using dynamic EMA.")
-            
+
         st.divider()
         st.subheader("Inventory Limits")
-        
+
         # Safe-Fail Warning
         if st.session_state.config["emerald_limit"] > 18 or st.session_state.config["tomato_limit"] > 18:
             st.error("⚠️ DANGER: Keeping limits at 20 is risky. Stay at 15-18 to avoid liquidation.")
 
-        st.slider("💎 Osmium", 0, 20, 
-                  key="osmium_limit", 
-                  value=st.session_state.config["osmium_limit"], 
+        st.slider("💎 Osmium", 0, 20,
+                  key="osmium_limit",
+                  value=st.session_state.config["osmium_limit"],
                   on_change=on_change_callback)
         st.caption("Max units you can carry.")
-        
-        st.slider("🌶️ Pepper Root", 0, 20, 
-                  key="pepper_limit", 
-                  value=st.session_state.config["pepper_limit"], 
+
+        st.slider("🌶️ Pepper Root", 0, 20,
+                  key="pepper_limit",
+                  value=st.session_state.config["pepper_limit"],
                   on_change=on_change_callback)
         st.caption("Max units you can carry.")
-        
+
         st.divider()
         st.subheader("Pricing Multipliers")
-        st.slider("🎯 Target Spread", 1.0, 10.0, 
-                  key="target_spread", 
-                  value=float(st.session_state.config["target_spread"]), 
+        st.slider("🎯 Target Spread", 1.0, 10.0,
+                  key="target_spread",
+                  value=float(st.session_state.config["target_spread"]),
                   on_change=on_change_callback)
         st.caption("Aggressiveness. Higher = bigger profit per trade, but fewer fills.")
-        
-        st.slider("📏 MR Threshold", 1.0, 20.0, 
-                  key="mr_threshold", 
-                  value=float(st.session_state.config["mr_threshold"]), 
+
+        st.slider("📏 MR Threshold", 1.0, 20.0,
+                  key="mr_threshold",
+                  value=float(st.session_state.config["mr_threshold"]),
                   on_change=on_change_callback)
         st.caption("How far the price must 'stretch' before the rubber band snaps back.")
-        
+
         st.divider()
         st.info("Configuration is synchronized actively to JSON.")
-    
+
     # --- MAIN CONTENT ---
     st.title("📈 Prosperity 4: Operations Console")
-    
+
     tab_backtest, tab_forge = st.tabs(["📉 Visual Backtester", "🛠️ One-Click Forge"])
-    
+
     with tab_forge:
         st.header("🛠️ Upload Assembly Pipeline")
         st.write("Compile your findings and configurations into a professional `trader.py` ready for the IMC portal.")
-        
+
         # --- STRATEGY SCHOOL ---
         st.markdown("## 🏫 Strategy School: Mean Reversion")
         col_text, col_viz = st.columns([2, 1])
         with col_text:
             st.markdown("""
-            **The 'Rubber Band' Concept:** 
+            **The 'Rubber Band' Concept:**
             Think of the price of an asset like a rubber band anchored to a fixed point. In Mean Reversion, we assume that whenever the price stretches too far away from its "Fair Value," it will eventually snap back to the middle.
-            
+
             *   **When to Buy:** When the price is significantly *below* the fair value.
             *   **When to Sell:** When the price is significantly *above* the fair value.
             """)
@@ -427,22 +428,22 @@ def main():
         # 2. Analysis
         st.markdown("### 2. Auto-Analysis Engine")
         st.caption("This tool determines the 'Fair Value' for Osmium and the 'Volatility' for Pepper Root based on your historical CSV data.")
-        st.button("🔍 Run Auto-Analysis", 
-                  on_click=perform_auto_analysis, 
+        st.button("🔍 Run Auto-Analysis",
+                  on_click=perform_auto_analysis,
                   disabled=not (d1 and d2 and t_exists))
-        
+
         if "analysis" in st.session_state:
             st.info(f"**Insight:** Based on your data, we recommend anchoring Osmium to **{st.session_state.analysis['os_mean']:.0f}**. Pepper Root is currently showing a volatility factor of **{st.session_state.analysis['pep_std']:.2f}**, which we will use to scale your profit capture.")
-            
+
             st.metric("Derived Osmium Fair Value", f"{st.session_state.analysis['os_mean']:.1f}")
             st.metric("Derived Pepper Root Volatility", f"{st.session_state.analysis['pep_std']:.2f}")
-            
+
             st.markdown("### 3. Final Execution")
             st.caption("We will now inject your sidebar settings (Limits, Aggressiveness) and the analyzed fair values into your final script.")
-            st.button("⚙️ Forge Final Trader.py", 
-                      on_click=forge_trader, 
+            st.button("⚙️ Forge Final Trader.py",
+                      on_click=forge_trader,
                       type="primary")
-            
+
             if "forged_code" in st.session_state:
                 st.balloons()
                 st.download_button(
@@ -452,10 +453,10 @@ def main():
                     mime="text/x-python",
                     type="primary"
                 )
-    
+
     with tab_backtest:
         st.success("**Mission Status:** Currently analyzing Tutorial Data. Goal: Maintain Emeralds at ~10,000 and manage Tomato volatility.")
-        
+
         col_day, col_btn = st.columns([1, 1])
         with col_day:
             def on_day_change():
@@ -463,26 +464,26 @@ def main():
                 save_config(st.session_state.config)
                 run_backtest_simulation(st.session_state.day_radio)
 
-            selected_day = st.radio("Select Historical Data Day:", [-1, -2, 0], 
+            selected_day = st.radio("Select Historical Data Day:", [-1, -2, 0],
                                      key="day_radio",
                                      index=([-1, -2, 0].index(st.session_state.config.get("selected_day", -1))),
-                                     horizontal=True, 
+                                     horizontal=True,
                                      on_change=on_day_change)
         with col_btn:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🔄 Manual Rerun"):
+            if st.button("🔄 Run Simulation"):
                 run_backtest_simulation(selected_day)
-                
+
         if "sim_result" in st.session_state and st.session_state.sim_result["day"] == selected_day:
             st.metric("Simulated PnL", f"${st.session_state.sim_result['pnl']:,.2f}", "+12%")
 
         st.markdown("---")
-        
+
         df_prices, df_trades = load_and_process_data(selected_day)
-        
+
         if df_prices is not None:
             st.subheader(f"📊 Market Reconstruction (Day {selected_day})")
-            
+
             col_c1, col_c2 = st.columns(2)
             with col_c1:
                 df_os = render_chart(df_prices, df_trades, "ASH_COATED_OSMIUM", "#2ecc71", show_mean=True)
@@ -490,13 +491,13 @@ def main():
                     os_mean = df_os["mid_price"].mean()
                     if abs(os_mean - 10000) < 100:
                         st.info(f"**Fair Value Found:** Osmium average is stable around {os_mean:.2f}. Anchoring to 10,000 is optimal.")
-                        
+
             with col_c2:
                 render_chart(df_prices, df_trades, "INTARIAN_PEPPER_ROOT", "#e74c3c", show_mean=False)
-                
+
             st.markdown("### Raw Prices Preview")
             st.dataframe(df_prices.tail(10), width="stretch")
-            
+
         else:
             st.warning(f"Could not locate data for Day {selected_day} in data_capsule/.")
 
