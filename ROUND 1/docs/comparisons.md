@@ -2,7 +2,7 @@
 
 This document is organized with **Osmium analysis first** (primary edge source), then summary comparisons.
 
-## Reference Results (local eval_trader)
+## Reference Results (local backtest_cli)
 
 | Trader | Day -2 | Day -1 | Day 0 | Total |
 |---|---:|---:|---:|---:|
