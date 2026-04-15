@@ -102,7 +102,7 @@ class Trader:
             
             # 1. Sniper Mode
             # Reverted to safer thresholds to avoid adverse selection
-            take_margin = 0.6 if product == 'ASH_COATED_OSMIUM' else 1.2
+            take_margin = 5.0 if product == 'ASH_COATED_OSMIUM' else 3.0
             
             rem_buy = limit - position
             for ask, vol in sorted(depth.sell_orders.items()):
@@ -122,7 +122,7 @@ class Trader:
             
             # 2. Aggressive Maker (Pennying)
             # Skew factor adjusted for 20-unit limit
-            skew_factor = 0.25 
+            skew_factor = 0.4 
             
             bid_price = math.floor(fair_price - 1.0 - (position * skew_factor))
             ask_price = math.ceil(fair_price + 1.0 - (position * skew_factor))
