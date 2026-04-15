@@ -72,7 +72,10 @@ Pepper behaves differently from Osmium in this dataset. The strongest performers
 |---|---:|---:|---:|---:|---|
 | `ken_pepper_original.py` | 99,436 | 101,852 | 98,018 | **299,306** | Original aggressive Pepper (best so far) |
 | `ken_pepper_v3.py` | 99,271 | 101,620 | 97,637 | 298,528 | Tiny near-limit safety, very small tradeoff |
-| `ken_pepper_v4.py` | 98,279 | 100,474 | 96,481 | 295,234 | Capital-preservation mode (stronger rails + emergency unwind) |
+| `ken_pepper_v6.py` | 99,127 | 101,484 | 97,413 | 298,024 | High-threshold safety rails; close to `v3` with slightly more protection |
+| `ken_pepper_v4.py` | 98,279 | 100,474 | 96,481 | 295,234 | Capital-preservation mode (stronger rails + emergency unwind) ✅|
+| `ken_pepper_v5.py` | 86,174.5 | 89,639 | 86,959 | 262,772.5 | Two-mode design; protection triggers too often in this harness |
+| `ken_pepper_v5_1.py` | 91,691.5 | 94,516 | 90,672 | 276,879.5 | Retuned two-mode trigger; better than `v5` but still below `v4/v3` |
 | `ken_pepper_v1.py` | 34,683 | 41,185 | 31,485 | 107,353 | Too defensive |
 | `ken_pepper_v2.py` | 31,872 | 39,119 | 30,628 | 101,619 | Still too defensive |
 
@@ -85,16 +88,45 @@ Pepper behaves differently from Osmium in this dataset. The strongest performers
    Tight caps, wide passive quotes, and small clips reduce inventory risk but destroy trend capture.
 
 3. **Small safety layers are viable**  
-   `v3` keeps nearly all PnL while adding near-limit protection; this is the best balance so far.
+   `v3` keeps nearly all PnL while adding near-limit protection; `v6` is a close alternative with stricter high-threshold rails.
 
 4. **Capital-preservation mode is workable but costs edge**  
    `v4` improves crash posture with earlier rails and emergency unwind, but gives up additional PnL versus `v3`/original.
+
+5. **Mode-switch designs need tighter triggers**  
+   `v5` confirms the architecture idea is valid, but current stress trigger activates too frequently and materially reduces trend capture.
+
+6. **Retuned mode-switch is improving but not competitive yet**  
+   `v5_1` recovers a meaningful part of the lost edge versus `v5`, but still trails simpler `v3`/`v4` safety overlays.
+
+### Pepper Pattern Summary (from current backtests)
+
+1. **Trend-first regime on available days**  
+   Pepper shows persistent upward drift in the tested set, which rewards long inventory carry.
+
+2. **Carry beats frequent de-risking**  
+   Variants that keep size on (`original`, `v3`, `v6`) outperform versions that reduce risk too often.
+
+3. **Spread is structurally wide**  
+   Pepper commonly trades with large spread, so queue priority and passive inventory carry matter more than frequent micro-scalping.
+
+4. **Main tail risk is reversal at high inventory**  
+   Drawdown risk concentrates when position nears the hard limit and price mean-reverts or trends down abruptly.
+
+5. **Best control lever is protection trigger threshold**  
+   Early protection triggers destroy edge (`v5` family); high-threshold emergency rails preserve most returns (`v3`/`v6`).
+
+6. **Working practical pattern**  
+   Use aggressive trend-following baseline in normal conditions, then switch to emergency de-risk only when inventory is truly stretched.
 
 ### Recommended Pepper Baseline
 
 - Use `ken_pepper_original.py` when optimizing for pure local backtest total.
 - Use `ken_pepper_v3.py` when you want almost identical performance with modest limit-safety improvement.
+- Use `ken_pepper_v6.py` when you want high-threshold emergency rails with minimal PnL drag.
 - Use `ken_pepper_v4.py` when drawdown protection is prioritized over max total.
+- Treat `ken_pepper_v5.py` as experimental; keep only after retuning protection trigger thresholds.
+- Treat `ken_pepper_v5_1.py` as intermediate experimental progress, not a final baseline.
 - Avoid `v1`/`v2` style defensive versions unless market regime changes substantially.
 
 ---
