@@ -223,97 +223,128 @@ foreach ($trader in @("peter2", "peter3", "peter4", "peter2_2_1")) {
 
 ---
 
-## How to Do Monte Carlo Simulations
+## 5. **monte_carlo_cli.py** - Synthetic Market Monte Carlo 🎲
 
-### Option A: Manual Python Script (Recommended for Round 1)
+**Best for:** Robustness testing - run your strategy on 100s of synthetic market paths.
 
-Create `monte_carlo.py`:
+### What It Does
+Generates synthetic order books and trade flows calibrated to Round 1 market structure, then runs your trader multiple times to estimate P&L distribution across different possible market scenarios.
 
-```python
-import json
-import random
-import numpy as np
-import pandas as pd
-from datamodel import Order, OrderDepth, TradingState
+Unlike historical replay (1 fixed path), Monte Carlo asks: **"What if the market unfolded differently?"**
 
-def run_monte_carlo(trader_module, price_data, trade_data, num_sims=1000):
-    """
-    Monte Carlo simulation:
-    - Run strategy multiple times
-    - Shuffle order of trades each time
-    - Calculate P&L distribution
-    """
+### Commands
 
-    results = []
-
-    for sim in range(num_sims):
-        # Shuffle trades (same trades, different order)
-        shuffled_trades = trade_data.copy()
-        random.shuffle(shuffled_trades)
-
-        # Run trader with shuffled data
-        pnl = run_backtest(trader_module, price_data, shuffled_trades)
-        results.append(pnl)
-
-    # Calculate statistics
-    results = np.array(results)
-
-    return {
-        'mean_pnl': np.mean(results),
-        'std_pnl': np.std(results),
-        'min_pnl': np.min(results),           # Worst case
-        'max_pnl': np.max(results),           # Best case
-        'percentile_5': np.percentile(results, 5),    # 95% won't be worse
-        'percentile_95': np.percentile(results, 95),  # 95% won't be better
-        'median_pnl': np.median(results),
-        'var_95': np.percentile(-results, 95),  # Value at Risk (worst 5%)
-    }
-
-def run_backtest(trader_module, price_data, trade_data):
-    # [Your backtest code here]
-    return total_pnl
-
-if __name__ == "__main__":
-    # Load your trader
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("trader", "ROUND 1/trader_peter4.py")
-    trader_mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(trader_mod)
-
-    # Load historical data
-    prices = load_price_data("ROUND 1/data_capsule/")
-    trades = load_trade_data("ROUND 1/data_capsule/")
-
-    # Run Monte Carlo
-    stats = run_monte_carlo(trader_mod, prices, trades, num_sims=1000)
-
-    print(f"Monte Carlo Results (1000 simulations):")
-    print(f"  Mean P&L:        ${stats['mean_pnl']:,.0f}")
-    print(f"  Std Dev:         ${stats['std_pnl']:,.0f}")
-    print(f"  95% Confidence:  ${stats['percentile_5']:,.0f} to ${stats['percentile_95']:,.0f}")
-    print(f"  Worst Case:      ${stats['min_pnl']:,.0f}")
-    print(f"  Best Case:       ${stats['max_pnl']:,.0f}")
-    print(f"  Value at Risk:   ${stats['var_95']:,.0f}")
+#### Quick test (1 minute):
+```powershell
+cd "ROUND 1"
+python monte_carlo_cli.py trader_peter4.py --quick
 ```
 
-### Option B: Using backtest_ultra.py Output
-
-If `backtest_ultra.py` generates trade history, you can:
-
-```python
-# Extract trades from backtest output
-trades = [...]  # List of (entry_price, exit_price, quantity)
-
-# Shuffle and re-run
-for simulation in range(1000):
-    # Randomize trade timing
-    np.random.shuffle(trades)
-
-    # Recalculate P&L with new order
-    pnl = sum([t['amount'] for t in trades])
-    drawdown = calculate_max_drawdown(trades)
-    results.append({'pnl': pnl, 'drawdown': drawdown})
+#### Standard analysis (3 minutes, recommended):
+```powershell
+python monte_carlo_cli.py trader_peter4.py
 ```
+(Default = 100 sessions × 1000 steps each)
+
+#### Deep analysis (several minutes):
+```powershell
+python monte_carlo_cli.py trader_peter3.py --heavy
+```
+(Heavy = 1000 sessions × 1000 steps)
+
+#### Custom parameters:
+```powershell
+python monte_carlo_cli.py trader_peter4.py --sessions 250 --steps 2000
+```
+
+### Output Example
+```
+Monte Carlo Backtester for trader_peter4.py
+============================================================
+Preset:    DEFAULT
+Sessions:  100
+Steps:     1000 per session
+Total:     100,000 simulation steps
+============================================================
+
+PnL Distribution:
+  Mean:          $1,234.56
+  Median:        $1,210.00
+  Std Dev:       $285.43
+
+Percentiles:
+  5th:           $512.00
+  25th:          $980.00
+  75th:          $1,510.00
+  95th:          $1,892.00
+
+Range:
+  Min:           $-450.00
+  Max:           $2,890.00
+
+Drawdown Statistics:
+  Mean DD:       $-150.25
+  Worst DD:      $-725.00
+
+Win Rate:        67.3%
+```
+
+### What It Simulates
+
+**Fair Values (Calibrated from Round 1 data)**
+- **Osmium**: Anchored at 10,000 with tape-driven adjustments
+- **Pepper Root**: Random walk with mean reversion to 5000
+
+**Order Book Dynamics**
+- Symmetric bot walls at varying distances from fair
+- Optional one-sided inside quotes
+- Realistic spread patterns per product
+
+**Trade Flow**
+- Market-taker activity (~30% chance per step)
+- Trade sizes from logged distributions
+- Both buy and sell flow
+
+### Presets
+
+| Preset | Sessions | Steps | Use Case |
+|--------|----------|-------|----------|
+| `--quick` | 50 | 500 | ~30s smoke test |
+| (default) | 100 | 1000 | ~2-3min analysis |
+| `--heavy` | 1000 | 1000 | ~15min deep dive |
+| `--ultra` | 5000 | 1000 | ~1min per full test |
+
+### Interpreting Monte Carlo Results
+
+**Good Profile** (Upload candidate):
+```
+Mean P&L:     $1,200-3000 per session
+Std Dev:      < 30% of mean
+5th/95th:     Wide confidence interval, still positive
+Win Rate:     > 60%
+```
+
+**Red Flag - High Risk**:
+```
+Mean P&L:     < $500
+Std Dev:      > 50% of mean (inconsistent)
+Worst DD:     > Mean P&L (single bad path wipes gains)
+95% confident range includes large losses
+```
+
+### Comparing Strategies
+
+```powershell
+# Quick comparison across all traders
+foreach ($t in @("peter2", "peter3", "peter4")) {
+    python monte_carlo_cli.py "trader_$t.py" --quick
+}
+```
+
+See which has best mean P&L, lowest std dev, and widest right tail (95th percentile).
+
+### For detailed guidance
+→ See [MONTE_CARLO_GUIDE.md](MONTE_CARLO_GUIDE.md) for comprehensive documentation
 
 ---
 
@@ -371,15 +402,27 @@ for simulation in range(1000):
    ├─ Check for edge cases (market opens/closes)
    ├─ Verify fair price is reasonable
    ↓
-5. Monte Carlo: python monte_carlo.py
+5. Monte Carlo Robustness: cd "ROUND 1" && python monte_carlo_cli.py trader_peter4.py
    ├─ Estimate confidence interval
    ├─ Check worst-case scenario
-   ├─ Verify strategy is robust
+   ├─ Verify strategy is robust across different market paths
    ↓
 6. Decision:
    ├─ If all metrics good → Upload
    └─ If weak spot found → Back to step 1
 ```
+
+### **Recommended Testing Sequence**
+
+1. **Make code change**
+2. **5 seconds**: `backtest_cli.py` quick check
+3. **3 minutes**: `monte_carlo_cli.py --quick` (fast robustness check)
+4. **5 minutes**: `backtest_ultra.py` (compare all versions)
+5. **10 minutes**: `dashboard.py` (visual validation)
+6. **5-15 minutes**: `monte_carlo_cli.py --heavy` (if looking promising)
+7. **Decision**: Upload if metrics are solid?
+
+**Total time**: 30 minutes to go from code change to deployment-ready
 
 ---
 
