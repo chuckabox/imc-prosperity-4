@@ -16,7 +16,7 @@ These values are calculated using the "Buy-and-Hold to Exit" formula:
 Since the exit price is guaranteed by the Intarians post-auction, this represents a **risk-free arbitrage** assuming the limit orders are filled at the prices specified.
 
 ### B. Algorithmic Market Making
-Based on the `trader_aggressive.py` performance across 3 days of historical data (verified via `backtest_cli.py`).
+Based on the `trader_peter_aggressive.py` performance across 3 days of historical data (verified via `backtest_cli.py`).
 - **ASH_COATED_OSMIUM**: Mean-reversion edge around 10k → **~91,000 XIRECs**
 - **INTARIAN_PEPPER_ROOT**: Regression Trend-following edge → **~181,842 XIRECs**
 - **Algorithmic Subtotal (Local)**: **272,842 XIRECs**
