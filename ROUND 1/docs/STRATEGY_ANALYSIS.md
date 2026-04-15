@@ -26,17 +26,6 @@ Products: `ASH_COATED_OSMIUM` | `INTARIAN_PEPPER_ROOT` | Position limit: 80 each
 > README reports actual competition score of ~8k — backtest numbers are inflated due to generous passive fill simulation (50% of market volume).
 > `trader_ken_v2.py` matches `trader_10k`/`trader_peter4` style and reproduced the same local total.
 
-### Ken Backtest CLI Check (requested)
-
-Backtester run: `backtest_cli.py`
-
-| Trader | Day -2 | Day -1 | Day 0 | Total |
-|---|---:|---:|---:|---:|
-| `traders/trader_ken_v2.py` | 90,885.00 | 92,362.00 | 89,595.00 | 272,842.00 |
-| `archive/old_ken/trader_ken_v6_1.py` | 100,480.00 | 101,713.00 | 99,288.00 | **301,481.00** |
-
-Interpretation: in this CLI harness, `ken v6.1` outperforms `ken v2` by **28,639** total.
-
 ---
 
 ## Osmium-First Analysis (Priority)
@@ -83,6 +72,7 @@ Pepper behaves differently from Osmium in this dataset. The strongest performers
 |---|---:|---:|---:|---:|---|
 | `ken_pepper_original.py` | 99,436 | 101,852 | 98,018 | **299,306** | Original aggressive Pepper (best so far) |
 | `ken_pepper_v3.py` | 99,271 | 101,620 | 97,637 | 298,528 | Tiny near-limit safety, very small tradeoff |
+| `ken_pepper_v4.py` | 98,279 | 100,474 | 96,481 | 295,234 | Capital-preservation mode (stronger rails + emergency unwind) |
 | `ken_pepper_v1.py` | 34,683 | 41,185 | 31,485 | 107,353 | Too defensive |
 | `ken_pepper_v2.py` | 31,872 | 39,119 | 30,628 | 101,619 | Still too defensive |
 
@@ -95,15 +85,16 @@ Pepper behaves differently from Osmium in this dataset. The strongest performers
    Tight caps, wide passive quotes, and small clips reduce inventory risk but destroy trend capture.
 
 3. **Small safety layers are viable**  
-   `v3` keeps nearly all PnL while adding near-limit protection; this is the right direction.
+   `v3` keeps nearly all PnL while adding near-limit protection; this is the best balance so far.
 
-4. **Best current Pepper posture**  
-   Keep original logic as base, add only minimal emergency de-risk behavior when inventory is near hard limits.
+4. **Capital-preservation mode is workable but costs edge**  
+   `v4` improves crash posture with earlier rails and emergency unwind, but gives up additional PnL versus `v3`/original.
 
 ### Recommended Pepper Baseline
 
 - Use `ken_pepper_original.py` when optimizing for pure local backtest total.
 - Use `ken_pepper_v3.py` when you want almost identical performance with modest limit-safety improvement.
+- Use `ken_pepper_v4.py` when drawdown protection is prioritized over max total.
 - Avoid `v1`/`v2` style defensive versions unless market regime changes substantially.
 
 ---
