@@ -1,67 +1,202 @@
-from datamodel import Order, TradingState, Symbol
+import json
 import math
+from typing import Dict, List, Any
+from datamodel import Order, OrderDepth, TradingState, Symbol
+
+class Logger:
+    def __init__(self) -> None:
+        self.logs = ""
+
+    def print(self, *objects: Any, sep: str = " ", end: str = "\n") -> None:
+        self.logs += sep.join(map(str, objects)) + end
+
+    def flush(self, state: TradingState, orders: Dict[Symbol, List[Order]], conversions: int, trader_data: str) -> None:
+        pass
+
+logger = Logger()
 
 class Trader:
     def __init__(self):
-        # Configuration and Limits
-        self.limits = {"EMERALDS": 20, "TOMATOES": 20}
-        self.fair_values = {"EMERALDS": 10000}
-        self.target_spread = 2 # How far from fair value we place our orders
+        self.limits = {
+            'ASH_COATED_OSMIUM': 80,
+            'INTARIAN_PEPPER_ROOT': 80
+        }
+
+        # 3-lag regression weights for Pepper Root
+        self.sf_weights = [0.34296, 0.32058, 0.33645]
+        self.sf_intercept = 0.2535
+
+        self.history = {}
+
+    def update_history(self, trader_data: str):
+        if trader_data:
+            try:
+                self.history = json.loads(trader_data)
+            except:
+                self.history = {}
+
+    def get_osmium_fair(self, state: TradingState) -> float:
+        """
+        Tape-aware fair price for Osmium.
+        Uses mid-price as baseline (not hardcoded 10000) and adjusts
+        by recent trade flow to detect short-term momentum.
+        """
+        product = 'ASH_COATED_OSMIUM'
+        depth = state.order_depths[product]
+        best_bid = max(depth.buy_orders.keys()) if depth.buy_orders else 10000
+        best_ask = min(depth.sell_orders.keys()) if depth.sell_orders else 10000
+        mid = (best_bid + best_ask) / 2.0
+
+        tape_volume = 0.0
+        if product in state.market_trades:
+            for trade in state.market_trades[product]:
+                if trade.price >= mid:
+                    tape_volume += trade.quantity
+                else:
+                    tape_volume -= trade.quantity
+
+        tape_adj = math.copysign(min(abs(tape_volume) * 0.15, 2.5), tape_volume)
+        return mid + tape_adj
+
+    def get_pepper_fair(self, state: TradingState) -> float:
+        """
+        Regression + momentum fair price for Pepper Root.
+        Predicts next price from 3-lag autoregression, boosted
+        when volume momentum confirms the direction.
+        """
+        product = 'INTARIAN_PEPPER_ROOT'
+        depth = state.order_depths[product]
+        best_bid = max(depth.buy_orders.keys()) if depth.buy_orders else None
+        best_ask = min(depth.sell_orders.keys()) if depth.sell_orders else None
+
+        if best_bid is None and best_ask is None:
+            return self.history.get('_pepper_last', 0.0)
+
+        mid = ((best_bid or best_ask) + (best_ask or best_bid)) / 2.0
+        self.history['_pepper_last'] = mid
+
+        hist = self.history.get(product, [])
+        if not isinstance(hist, list):
+            hist = []
+
+        hist.append(mid)
+        if len(hist) > 3:
+            hist = hist[-3:]
+        self.history[product] = hist
+
+        if len(hist) < 3:
+            return mid
+
+        prediction = self.sf_intercept
+        for i in range(3):
+            prediction += self.sf_weights[i] * hist[-(i + 1)]
+
+        momentum = 0
+        if product in state.market_trades and state.market_trades[product]:
+            for trade in state.market_trades[product]:
+                if trade.price >= mid:
+                    momentum += trade.quantity
+                else:
+                    momentum -= trade.quantity
+
+        if momentum != 0:
+            direction = 1 if momentum > 0 else -1
+            pred_direction = 1 if prediction > mid else -1
+            if direction == pred_direction:  # confluent signal
+                prediction += direction * 1.0
+
+        return prediction
 
     def run(self, state: TradingState):
-        """
-        Processes the spreadsheet data and returns orders, conversions, and traderData.
-        """
+        self.update_history(state.traderData)
         result = {}
-        conversions = 0
-        trader_data = "Logic: Skewed Market Making"
 
-        for product in state.order_depths:
-            order_depth = state.order_depths[product]
-            orders = []
-            
-            # 1. Get current inventory position
-            current_pos = state.position.get(product, 0)
-            limit = self.limits.get(product, 20)
+        # ── ASH_COATED_OSMIUM: market making ──────────────────────────────
+        product = 'ASH_COATED_OSMIUM'
+        if product in state.order_depths:
+            depth = state.order_depths[product]
+            position = state.position.get(product, 0)
+            limit = self.limits[product]
+            buy_cap = limit - position    # max additional units we can buy
+            sell_cap = limit + position   # max units we can sell
 
-            # 2. Determine "Fair Value"
-            # For Emeralds, use fixed 10k. For others, use the current Mid-Price.
-            if product == "EMERALDS":
-                acceptable_price = self.fair_values[product]
-            else:
-                # Calculate mid-price safely
-                best_ask = min(order_depth.sell_orders.keys()) if order_depth.sell_orders else None
-                best_bid = max(order_depth.buy_orders.keys()) if order_depth.buy_orders else None
-                if best_ask and best_bid:
-                    acceptable_price = (best_ask + best_bid) / 2
+            fair = self.get_osmium_fair(state)
+            orders: List[Order] = []
+
+            # 1. Snipe underpriced asks
+            for ask in sorted(depth.sell_orders.keys()):
+                if ask < fair - 0.5 and buy_cap > 0:
+                    qty = min(abs(depth.sell_orders[ask]), buy_cap)
+                    orders.append(Order(product, ask, qty))
+                    buy_cap -= qty
                 else:
-                    continue # Skip if the book is empty
+                    break
 
-            # 3. Inventory Skewing Logic
-            # If we own too much, we lower our prices to encourage selling.
-            # If we owe too much (short), we raise our prices to encourage buying.
-            buy_price = math.floor(acceptable_price - self.target_spread)
-            sell_price = math.ceil(acceptable_price + self.target_spread)
-            
-            if current_pos > 10: # We are "Long"
-                buy_price -= 1
-                sell_price -= 1
-            elif current_pos < -10: # We are "Short"
-                buy_price += 1
-                sell_price += 1
+            # 2. Snipe overpriced bids
+            for bid in sorted(depth.buy_orders.keys(), reverse=True):
+                if bid > fair + 0.5 and sell_cap > 0:
+                    qty = min(abs(depth.buy_orders[bid]), sell_cap)
+                    orders.append(Order(product, bid, -qty))
+                    sell_cap -= qty
+                else:
+                    break
 
-            # 4. Calculate Room to Trade (Position Management)
-            max_buy = limit - current_pos
-            max_sell = limit + current_pos # This is the room to go "short"
+            # 3. Passive market making with inventory skew
+            #    pos_skew in [-1, +1]: positive = long, negative = short
+            pos_skew = position / limit
 
-            # 5. Place Market Maker Orders
-            if max_buy > 0:
-                orders.append(Order(product, buy_price, max_buy))
-            if max_sell > 0:
-                # Selling is always a negative quantity
-                orders.append(Order(product, sell_price, -max_sell))
+            if buy_cap > 0:
+                # If long, buy cheaper to discourage accumulation
+                passive_buy = int(fair - 1 - pos_skew)
+                orders.append(Order(product, passive_buy, buy_cap))
+
+            if sell_cap > 0:
+                # If short, sell cheaper (more aggressive) to reduce exposure
+                passive_sell = int(fair + 1 - pos_skew)
+                orders.append(Order(product, passive_sell, -sell_cap))
 
             result[product] = orders
 
-        # IMPORTANT: Return all three required values
-        return result, conversions, trader_data
+        # ── INTARIAN_PEPPER_ROOT: aggressive accumulation + spike sales ───
+        product = 'INTARIAN_PEPPER_ROOT'
+        if product in state.order_depths:
+            depth = state.order_depths[product]
+            position = state.position.get(product, 0)
+            limit = self.limits[product]
+            buy_cap = limit - position
+            sell_cap = limit + position
+
+            fair = self.get_pepper_fair(state)
+            orders = []
+
+            # Take ALL available asks greedily — no price filter.
+            # The regression edge (~+0.25/tick) is too small to use as a buy
+            # threshold; any ask below future price is a good buy in an uptrend.
+            for ask in sorted(depth.sell_orders.keys()):
+                if buy_cap <= 0:
+                    break
+                qty = min(abs(depth.sell_orders[ask]), buy_cap)
+                orders.append(Order(product, ask, qty))
+                buy_cap -= qty
+
+            # If order book was thin, leave a resting bid just above best bid
+            # so we get filled as new sellers arrive.
+            if buy_cap > 0 and depth.buy_orders:
+                best_bid = max(depth.buy_orders.keys())
+                orders.append(Order(product, best_bid + 1, buy_cap))
+
+            # Sell only on sharp spikes well above fair (profit-take without
+            # fighting the trend). fair + 3 gives a generous buffer.
+            for bid in sorted(depth.buy_orders.keys(), reverse=True):
+                if bid > fair + 3.0 and sell_cap > 0:
+                    qty = min(abs(depth.buy_orders[bid]), sell_cap)
+                    orders.append(Order(product, bid, -qty))
+                    sell_cap -= qty
+                else:
+                    break
+
+            result[product] = orders
+
+        trader_data = json.dumps(self.history)
+        logger.flush(state, result, 0, trader_data)
+        return result, 0, trader_data
