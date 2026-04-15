@@ -39,7 +39,6 @@ class Trader:
                 self.history = {}
 
     def get_osmium_fair(self, state: TradingState) -> float:
-        # Standard 10k anchor. No tape adjustments to avoid overfitting.
         return self.OSMIUM_ANCHOR
 
     def get_pepper_fair(self, state: TradingState) -> float:
@@ -73,7 +72,6 @@ class Trader:
         self.update_history(state.traderData)
         result = {}
 
-        # ── ASH_COATED_OSMIUM: Stable Mean Reversion ──
         product = 'ASH_COATED_OSMIUM'
         if product in state.order_depths:
             depth = state.order_depths[product]
@@ -85,7 +83,6 @@ class Trader:
             rem_buy = limit - position
             rem_sell = limit + position
             
-            # Taker buffer: 5.0 (High edge requirement)
             take_margin = 5.0 
             for ask, vol in sorted(depth.sell_orders.items()):
                 if ask <= fair - take_margin and rem_buy > 0:
@@ -100,10 +97,8 @@ class Trader:
                     rem_sell -= qty
                     position -= qty
 
-            # Passive Market Making with Inventory Skew
-            # This is the "Pattern 2" capture: harvesting the 16-22 point spread.
             skew = -0.1 * position 
-            bid_price = math.floor(fair - 2.0 + skew) # 2.0 margin for safety
+            bid_price = math.floor(fair - 2.0 + skew)
             ask_price = math.ceil(fair + 2.0 + skew)
             
             if rem_buy > 0:
@@ -112,7 +107,6 @@ class Trader:
                 orders.append(Order(product, int(ask_price), -rem_sell))
             result[product] = orders
 
-        # ── INTARIAN_PEPPER_ROOT: Robust Trend ──
         product = 'INTARIAN_PEPPER_ROOT'
         if product in state.order_depths:
             depth = state.order_depths[product]
@@ -124,7 +118,6 @@ class Trader:
             rem_buy = limit - position
             rem_sell = limit + position
             
-            # Taker edge: 1.5
             for ask, vol in sorted(depth.sell_orders.items()):
                 if ask <= fair - 1.5 and rem_buy > 0:
                     qty = min(rem_buy, -vol)
@@ -138,7 +131,6 @@ class Trader:
                     rem_sell -= qty
                     position -= qty
 
-            # Passive placement
             if rem_buy > 0:
                 bid_price = math.floor(fair - 1.5)
                 orders.append(Order(product, int(bid_price), rem_buy))

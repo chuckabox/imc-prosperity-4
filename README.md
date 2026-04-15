@@ -1,10 +1,10 @@
 # 🏛️ IMC Prosperity 4: High-Performance Round 1 Suite
 
 ![Status](https://img.shields.io/badge/Status-Leaderboard_Ready-success)
-![PnL](https://img.shields.io/badge/Backtest_PnL-%2473k_total-blue)
-![Architecture](https://img.shields.io/badge/Algo-Anchor_MM_|_Dynamic_EMA-orange)
+![PnL](https://img.shields.io/badge/Backtest_PnL-%24246k_total-blue)
+![Architecture](https://img.shields.io/badge/Algo-Anchor_MM_|_Clean_Regression-orange)
 
-Welcome to the **Round 1 Production Suite**. This repository contains a production-grade algorithmic trading bot, a high-fidelity local backtester, and an interactive Streamlit dashboard optimized for **Ash-coated Osmium** and **Intarian Pepper Root**.
+Welcome to the **Round 1 Production Suite**. This repository contains a production-grade algorithmic trading bot and high-fidelity backtesting tools optimized for **Ash-coated Osmium** and **Intarian Pepper Root**.
 
 ---
 
@@ -16,11 +16,10 @@ Follow these steps to get your Round 1 bot ready for upload:
 - **Drop your CSV files**: Ensure your historical data is in the `ROUND 1/data_capsule/` folder.
 - The system expects filenames like `prices_round_1_day_0.csv`.
 
-### 🔍 2. Analysis & Forging
-1. **Open the Dashboard**: Run `streamlit run "ROUND 1/dashboard.py"`.
-2. **Auto-Analyze**: Navigate to the **One-Click Forge** tab and click **Run Auto-Analysis**. This calculates the optimal anchor for Osmium (~10,000) based on provided data.
-3. **Configure**: Use the sidebar sliders to set your position limits (20 max) and aggressiveness.
-4. **Forge**: Click the **Forge Final Trader.py** button to generate a tuned version of your script.
+### 🔍 2. Analysis & Log Visualization
+1. **Analyze with Equirag**: Go to [prosperity.equirag.com](https://prosperity.equirag.com/) to upload your IMC submission logs. 
+2. **Deep Dive**: Use the visualizer to inspect fills, inventory skew, and pricing errors in a web-based interactive interface.
+3. **Configure**: Use the local config in `ROUND 1/config/` to adjust your position limits (80 max for R1) and aggressiveness.
 
 ### 🧪 3. Local Backtesting
 Validate your strategy locally before using up your portal upload slots. High-fidelity results are essential for reaching the 10k PnL rank.
@@ -38,10 +37,9 @@ Best for quick PnL checks after small code changes to a specific file.
 - **Run command:** `python "ROUND 1/backtest_cli.py" "ROUND 1/trader_peter2.py"`
 - **Review:** Quick-fire output of Day -2, -1, and 0 performance.
 
-#### **Option C: The Visual Dashboard**
-Best for seeing charts, inventory, and fair value overlays.
-1. **Start:** `streamlit run "ROUND 1/dashboard.py"`.
-2. **Simulate:** Switch to the **Visual Backtester** tab to see exactly *where* you were filled.
+#### **Option C: External Visualizer**
+1. **Visit:** [prosperity.equirag.com](https://prosperity.equirag.com/).
+2. **Upload:** Drop your `submission.log` from the IMC leaderboard to see exactly where you were filled and how the bot handled market volatility.
 
 #### **Option D: The Rust Backtester (Highest Performance)**
 For ultra-fast backtesting with minimal setup. Requires WSL2 on Windows.
@@ -62,8 +60,8 @@ Take the final `ROUND 1/trader.py` file and upload it to the **A.R.I.A. Uplink**
 
 ## 🛠️ Suite Components
 
-*   **Leaderboard Trader (`ROUND 1/trader.py`)**: HFT bot utilizing anchored mean-reversion for Osmium and dynamic EMA tracking for Pepper Root. Includes persistent state via `traderData`.
-*   **Operations Console (`ROUND 1/dashboard.py`)**: Interactive Streamlit app for real-time visualization and parameter forging.
+*   **Leaderboard Trader (`ROUND 1/traders/trader_10k_clean.py`)**: HFT bot utilizing anchored mean-reversion for Osmium and robust regression for Pepper Root. Includes persistent state via `traderData`.
+*   **External Visualizer**: [Equirag Prosperity Visualizer](https://prosperity.equirag.com/) for log-based analysis.
 *   **Backtesting Engine**: High-fidelity simulation that models both Aggressive Takes and Passive Maker fills using historical trade tapes.
 
 ---
@@ -72,11 +70,12 @@ Take the final `ROUND 1/trader.py` file and upload it to the **A.R.I.A. Uplink**
 
 ```bash
 ├── ROUND 1/
-│   ├── trader.py              # Active production strategy
-│   ├── dashboard.py           # Streamlit control center
+│   ├── traders/               # Production-ready strategies
+│   │   ├── trader_10k_clean.py # Master benchmark ($246k)
+│   ├── config/                # Datamodel and logic config
 │   ├── backtest_cli.py        # High-fidelity CLI simulator
 │   ├── data_capsule/          # CSV prices and trades
-│   └── config.json            # Dashboard settings
+│   └── docs/                  # In-depth strategy analysis
 ├── tutorial/                  # Archived previous rounds (0/4/3)
 ├── prosperity_rust_backtester/ # High-performance Rust engine
 └── README.md                  # Main documentation
