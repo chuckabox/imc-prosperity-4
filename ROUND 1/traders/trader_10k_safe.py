@@ -69,15 +69,14 @@ class Trader:
             hist = []
 
         hist.append(mid)
-        if len(hist) > 10:  # Increased history for trend detection
-            hist = hist[-10:]
+        if len(hist) > 20: 
+            hist = hist[-20:]
         self.history[product] = hist
 
         if len(hist) < 3:
             return mid
 
         prediction = self.sf_intercept
-        # Use last 3 for regression as before
         regression_hist = hist[-3:]
         for i in range(3):
             prediction += self.sf_weights[i] * regression_hist[-(i + 1)]
@@ -97,23 +96,6 @@ class Trader:
                 prediction += direction * 1.0
 
         return prediction
-
-    def get_pepper_trend_safe(self, state: TradingState, mid: float) -> float:
-        product = 'INTARIAN_PEPPER_ROOT'
-        hist = self.history.get(product, [])
-        if len(hist) < 10:
-            return 1.0  # Full aggression during warm-up
-        
-        # Simple Moving Average for trend detection
-        sma = sum(hist) / len(hist)
-        
-        # If price starts dipping below SMA, reduce aggression
-        # 0.5 = neutral, 1.0 = aggressive, 0.0 = emergency exit
-        if mid < sma - 2.0:
-            return 0.0  # Emergency: exit long position
-        elif mid < sma:
-            return 0.4  # Defensive: reduce buying
-        return 1.0      # Bullish: full buy
 
     def run(self, state: TradingState):
         self.update_history(state.traderData)
@@ -159,7 +141,7 @@ class Trader:
                 orders.append(Order(product, int(final_ask), -rem_sell))
             result[product] = orders
 
-        # ── INTARIAN_PEPPER_ROOT: Safe Mode ────────────────
+        # ── INTARIAN_PEPPER_ROOT: Safe & Time-Aware ────────────────
         product = 'INTARIAN_PEPPER_ROOT'
         if product in state.order_depths:
             depth = state.order_depths[product]
@@ -168,48 +150,61 @@ class Trader:
             
             fair = self.get_pepper_fair(state)
             mid = self.history.get('_pepper_last', fair)
-            aggression = self.get_pepper_trend_safe(state, mid)
             
+            # Phase Detection: 100k timestamp dip expected
+            # 100k = active trend region, >100k = caution region
+            is_growth_phase = (state.timestamp < 100000)
+            
+            # Trend Detection (SMA 20)
+            hist = self.history.get(product, [])
+            sma = sum(hist) / len(hist) if hist else mid
+            is_bullish = (mid >= sma - 0.5)
+
             orders = []
             
-            # SAFE BUYING: Scale cap by trend aggression
-            target_buy_limit = int(limit * aggression)
-            buy_cap = max(0, target_buy_limit - position)
-            sell_cap = limit + position
-
-            # Only buy if aggression > 0
-            if aggression > 0:
+            # SCALED AGGRESSION
+            if is_growth_phase and is_bullish:
+                # Max growth: take all asks up to fair + 1
+                buy_cap = limit - position
                 for ask in sorted(depth.sell_orders.keys()):
-                    if buy_cap <= 0:
-                        break
-                    # Simulation has wide spreads (fair + 6.5). 
-                    # Set filter to 7.0 to allow fills while still blocking extreme spikes.
-                    if ask > fair + 7.0:
-                        break
+                    if buy_cap <= 0: break
+                    if ask > fair + 1.0: break # Tighter than before to avoid taker loss
                     qty = min(abs(depth.sell_orders[ask]), buy_cap)
                     orders.append(Order(product, ask, qty))
                     buy_cap -= qty
+                    position += qty
+            
+            # Passive Bidding (Always present, but price varies)
+            rem_buy = limit - position
+            if rem_buy > 0:
+                # Before 100k: Pay up for liquidity. After 100k: Only deep value.
+                bid_margin = 1.0 if is_growth_phase else 3.0
+                best_bid = max(depth.buy_orders.keys()) if depth.buy_orders else mid
+                bid_price = min(best_bid + 1, math.floor(fair - bid_margin))
+                orders.append(Order(product, int(bid_price), rem_buy))
 
-                if buy_cap > 0 and depth.buy_orders:
-                    best_bid = max(depth.buy_orders.keys())
-                    orders.append(Order(product, best_bid + 1, buy_cap))
-
-            # SAFE SELLING: If emergency (aggression == 0), dump everything at best bid
-            if aggression == 0 and position > 0:
+            # SELLING: Profit take + Emergency Stop
+            sell_cap = limit + position
+            
+            # Emergency Stop: If broke SMA during growth, or just cautious after 100k
+            needs_exit = (not is_bullish and position > 0) or (state.timestamp >= 100000 and position > limit * 0.5)
+            
+            if needs_exit:
+                # Exit at best bid immediately (taker)
                 for bid in sorted(depth.buy_orders.keys(), reverse=True):
                     if position <= 0: break
+                    if bid < fair - 2.0 and is_growth_phase: break # Don't dump if too cheap unless panic
                     qty = min(position, abs(depth.buy_orders[bid]))
                     orders.append(Order(product, bid, -qty))
                     position -= qty
-            else:
-                # Normal profit taking: more aggressive than v1
-                for bid in sorted(depth.buy_orders.keys(), reverse=True):
-                    if bid > fair + 1.0 and sell_cap > 0: 
-                        qty = min(abs(depth.buy_orders[bid]), sell_cap)
-                        orders.append(Order(product, bid, -qty))
-                        sell_cap -= qty
-                    else:
-                        break
+                    sell_cap -= qty
+
+            # Normal passive sells (resting orders)
+            if sell_cap > 0:
+                best_ask = min(depth.sell_orders.keys()) if depth.sell_orders else mid
+                ask_margin = 2.0 if is_growth_phase else 0.5 # Sell faster after 100k
+                ask_price = max(best_ask - 1, math.ceil(fair + ask_margin))
+                orders.append(Order(product, int(ask_price), -sell_cap))
 
             result[product] = orders
 
