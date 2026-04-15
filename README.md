@@ -43,6 +43,18 @@ Best for seeing charts, inventory, and fair value overlays.
 1. **Start:** `streamlit run "ROUND 1/dashboard.py"`.
 2. **Simulate:** Switch to the **Visual Backtester** tab to see exactly *where* you were filled.
 
+#### **Option D: The Rust Backtester (Highest Performance)**
+For ultra-fast backtesting with minimal setup. Requires WSL2 on Windows.
+- **Setup (one-time):**
+  - Install Rust in WSL2: `curl https://sh.rustup.rs -sSf | sh`
+  - Install Python dev libraries: `sudo apt update && sudo apt install -y python3-dev`
+- **Run command:** From PowerShell: `wsl bash -c "cd /mnt/c/Users/peter/Desktop/IMC/prosperity_rust_backtester && source ~/.cargo/env && cargo run -- --trader /mnt/c/Users/peter/Desktop/IMC/imc-prosperity-4/ROUND\ 1/trader_peter2_2.py --products summary"`
+- **Features:**
+  - Lightning-fast execution (seconds vs minutes)
+  - Accurate simulation of all round data
+  - Supports custom traders with full path
+  - Outputs detailed PnL breakdown by product and day
+
 ### 📤 4. Upload to IMC
 Take the final `ROUND 1/trader.py` file and upload it to the **A.R.I.A. Uplink** on the IMC portal.
 
@@ -66,7 +78,7 @@ Take the final `ROUND 1/trader.py` file and upload it to the **A.R.I.A. Uplink**
 │   ├── data_capsule/          # CSV prices and trades
 │   └── config.json            # Dashboard settings
 ├── tutorial/                  # Archived previous rounds (0/4/3)
-├── backtester_rust/           # High-performance engine
+├── prosperity_rust_backtester/ # High-performance Rust engine
 └── README.md                  # Main documentation
 ```
 
