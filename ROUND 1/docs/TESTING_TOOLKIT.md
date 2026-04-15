@@ -7,8 +7,9 @@ Quick reference for all available testing and simulation tools.
 ## One-Command Quick Start
 
 ```powershell
-cd "ROUND 1"
-python backtest_cli.py trader_peter4.py
+# Run from the repository root
+$env:PYTHONPATH = "ROUND 1\config;ROUND 1\traders;ROUND 1\traders\peter;ROUND 1\tools"
+python "ROUND 1/tools/backtest_cli.py" "ROUND 1/traders/peter/trader_peter_aggressive.py"
 ```
 
 → Get instant P&L estimate in 1-2 seconds
@@ -21,18 +22,17 @@ python backtest_cli.py trader_peter4.py
 
 | Tool | Command | Time | Purpose |
 |------|---------|------|---------|
-| **CLI** | `python backtest_cli.py trader_peter4.py` | 1-2s | Quick PnL check |
-| **Ultra** | `python backtest_ultra.py` | 1-2m | Deep audit, compare all traders |
-| **Visual** | `streamlit run dashboard.py` | 5m | Interactive chart debugging |
-| **Rust** | `wsl bash -c "..."` | 30s | Ultra-fast performance testing |
+| **CLI** | `python tools/backtest_cli.py trader_path.py` | 1-2s | Quick PnL check |
+| **Ultra** | `python tools/backtest_ultra.py` | 1-2m | Deep audit, compare all traders |
+| **Visual** | `streamlit run tools/dashboard.py` | 5m | Interactive chart debugging |
 
-### 🎲 Monte Carlo Simulation (NEW!)
+### 🎲 Monte Carlo Simulation
 
 | Preset | Command | Time | Use Case |
 |--------|---------|------|----------|
-| **Quick** | `python monte_carlo_cli.py trader_peter4.py --quick` | 30s | Smoke test |
-| **Default** | `python monte_carlo_cli.py trader_peter4.py` | 2-3m | Standard validation |
-| **Heavy** | `python monte_carlo_cli.py trader_peter4.py --heavy` | 15-20m | Deep robustness |
+| **Quick** | `python tools/monte_carlo_cli.py trader_path.py --quick` | 30s | Smoke test |
+| **Default** | `python tools/monte_carlo_cli.py trader_path.py` | 2-3m | Standard validation |
+| **Heavy** | `python tools/monte_carlo_cli.py trader_path.py --heavy` | 15-20m | Deep robustness |
 
 ---
 
@@ -40,103 +40,47 @@ python backtest_cli.py trader_peter4.py
 
 ### 🔴 Just Made a Code Change?
 ```powershell
-python backtest_cli.py trader_peter4.py
+python "ROUND 1/tools/backtest_cli.py" "ROUND 1/traders/peter/trader_peter_aggressive.py"
 ```
 - Instant feedback
-- Catches obvious bugs
-- **Tip**: If PnL went down, you know which change broke it
+- **Tip**: If PnL went down, you know which change broke it.
 
-### 🟡 Deciding Between Versions?
+### 🟡 Deciding Between categorical champions?
 ```powershell
-python backtest_ultra.py
+python "ROUND 1/tools/backtest_cli.py" "ROUND 1/traders/ken/trader_ken_v6_1.py"
 ```
-- Compares ALL traders side-by-side
-- Reads `STRATEGY_AUDIT.md` after
-- **Tip**: Look for best mean, lowest drawdown, highest win rate
+- Check `overall_comparisons.md` for current benchmarks.
 
 ### 🟢 Ready to Upload?
 ```powershell
-cd ROUND 1
-
 # 1. Sanity check
-python backtest_cli.py trader_peter4.py
+python tools/backtest_cli.py traders/peter/trader_peter_aggressive.py
 
 # 2. Quick Monte Carlo (robustness)
-python monte_carlo_cli.py trader_peter4.py --quick
+python tools/monte_carlo_cli.py traders/peter/trader_peter_aggressive.py --quick
 
 # 3. Visual validation
-streamlit run dashboard.py
-
-# 4. Final confidence check
-python monte_carlo_cli.py trader_peter4.py --heavy
+streamlit run tools/dashboard.py
 ```
 
 ---
 
-## Monte Carlo Output Files
+## Organization Guide
 
-After running Monte Carlo, you'll get:
-- **Terminal output**: Summary statistics and interpretation
-- **`trader_peter4_mc_results.csv`**: Detailed per-session results
-
-Outputs are automatically saved in the `ROUND 1/` folder.
-
----
-
-## Understanding Results
-
-### ✅ Good Signals
-```
-Mean P&L:      $1,200+  (aim for 1-3k per session)
-Std Dev:       < 30% of mean
-Win Rate:      > 60%
-95% CI:        Mostly positive
-```
-
-### 🚩 Red Flags
-```
-Mean P&L:      < $500
-Std Dev:       > 50% of mean
-Win Rate:      < 40%
-Worst DD:      > Total PnL
-```
-
----
-
-## File Guide
-
-| File | Purpose |
-|------|---------|
-| `backtest_cli.py` | Fast P&L check |
-| `backtest_ultra.py` | Deep audit |
-| `dashboard.py` | Visual debugging |
-| `monte_carlo_backtester.py` | MC simulation engine |
-| `monte_carlo_cli.py` | MC command-line interface |
-| `STRATEGY_AUDIT.md` | Generated comparison report |
-
----
-
-## Documentation
-
-- **Full backtesting guide**: See `../BACKTESTING_GUIDE.md`
-- **Monte Carlo details**: See `MONTE_CARLO_GUIDE.md`
-- **Patterns reference**: See `.agents/skills/technical-analysis/references/patterns.md`
+Active traders are organized by series:
+- `ROUND 1/traders/peter/` (Aggressive, Safe, Trend categories)
+- `ROUND 1/traders/ken/` (Market Making excellence)
+- `ROUND 1/traders/adin/` (Trend-biased accumulation)
 
 ---
 
 ## Troubleshooting
 
 ### "ImportError: No module named 'datamodel'"
-→ Make sure you're in the `ROUND 1/` directorywhen running
+→ Make sure you set `$env:PYTHONPATH = "ROUND 1\config;ROUND 1\traders;ROUND 1\traders\peter;ROUND 1\tools"`
 
 ### Monte Carlo results look wrong
-→ Check your trader for bugs (run `backtest_cli.py` first)
-
-### Too slow on my machine
-→ Start with `--quick` preset instead of `--heavy`
-
-### Want reproducible results?
-→ Use `--seed 12345` flag with `monte_carlo_cli.py`
+→ Ensure the simulated spread in `monte_carlo_backtester.py` matches your trader's tolerance. MM strategies with tight guards may report 0.00 PnL in synthetic markets.
 
 ---
 

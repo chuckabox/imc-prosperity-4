@@ -12,20 +12,20 @@ Welcome to the **Round 1 Production Suite**. This repository contains a producti
 
 ### 📂 1. Select Your Strategy
 We have categorized our top performers into three distinct trading archetypes located in `ROUND 1/traders/peter/`:
-- **`trader_aggressive.py`** ($272k): The PnL King. Greedily takes liquidity for maximum volume capture.
-- **`trader_safe.py`** ($246k): The Robust MM. Uses hard anchors and wide margins for risk-averse growth.
-- **`trader_trend.py`** ($209k): The Adaptive Core. Uses 20-period EMA to dynamically track fair price drifts.
+- **`trader_peter_aggressive.py`** ($272k): The PnL King. Greedily takes liquidity for maximum volume capture.
+- **`trader_peter_safe.py`** ($246k): The Robust MM. Uses hard anchors and wide margins for risk-averse growth.
+- **`trader_peter_trend.py`** ($209k): The Adaptive Core. Uses 20-period EMA to dynamically track fair price drifts.
 
 ### 🧪 2. Validate Locally
 Before uploading to the portal, run a full verification cycle across historical and synthetic markets.
 
 #### **A. Historical Backtest (The Truth)**
 Check performance against the exact Round 1 tape.
-- **Run command:** `python "ROUND 1/tools/backtest_cli.py" "ROUND 1/traders/peter/trader_aggressive.py"`
+- **Run command:** `python "ROUND 1/tools/backtest_cli.py" "ROUND 1/traders/peter/trader_peter_aggressive.py"`
 
 #### **B. Monte Carlo Simulation (The Robustness)**
 Test against 100+ synthetic market paths to ensure your strategy doesn't "blow up" in edge cases.
-- **Run command:** `python "ROUND 1/tools/monte_carlo_cli.py" "ROUND 1/traders/peter/trader_aggressive.py" --quick`
+- **Run command:** `python "ROUND 1/tools/monte_carlo_cli.py" "ROUND 1/traders/peter/trader_peter_aggressive.py" --quick`
 
 #### **C. Visual Debugging (The Microstructure)**
 Watch your fills happen in real-time on the order book.
