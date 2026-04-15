@@ -10,6 +10,8 @@ Products: `ASH_COATED_OSMIUM` | `INTARIAN_PEPPER_ROOT` | Position limit: 80 each
 
 | Trader | Day -2 | Day -1 | Day 0 | **Total** |
 |---|---|---|---|---|
+| `archive/old_ken/trader_ken_v6_1.py` | 100,480 | 101,713 | 99,288 | **301,481** ✅ |
+| `traders/trader_ken_v2.py` | 90,885 | 92,362 | 89,595 | **272,842** |
 | `trader_peter4.py` | 90,885 | 92,362 | 89,595 | **272,842** ✅ |
 | `trader_peter2_2.py` | 81,309 | 89,103 | 84,907 | **255,319** |
 | `trader_peter2_2_1.py` | 81,309 | 89,103 | 84,907 | **255,319** |
@@ -22,6 +24,52 @@ Products: `ASH_COATED_OSMIUM` | `INTARIAN_PEPPER_ROOT` | Position limit: 80 each
 
 > Note: `trader_adin.py` required a `traderData` attribute fix to run on `backtest_cli.py`.  
 > README reports actual competition score of ~8k — backtest numbers are inflated due to generous passive fill simulation (50% of market volume).
+> `trader_ken_v2.py` matches `trader_10k`/`trader_peter4` style and reproduced the same local total.
+
+### Ken Backtest CLI Check (requested)
+
+Backtester run: `backtest_cli.py`
+
+| Trader | Day -2 | Day -1 | Day 0 | Total |
+|---|---:|---:|---:|---:|
+| `traders/trader_ken_v2.py` | 90,885.00 | 92,362.00 | 89,595.00 | 272,842.00 |
+| `archive/old_ken/trader_ken_v6_1.py` | 100,480.00 | 101,713.00 | 99,288.00 | **301,481.00** |
+
+Interpretation: in this CLI harness, `ken v6.1` outperforms `ken v2` by **28,639** total.
+
+---
+
+## Osmium-First Analysis (Priority)
+
+The Round 1 hint indicates that `ASH_COATED_OSMIUM` may have a hidden pattern. In practice, the strongest variants still rely on a stable anchor around `10000`, then improve execution adaptively.
+
+### Osmium Strategy Progression
+
+| Family | Osmium Fair | Execution | Outcome |
+|---|---|---|---|
+| Baseline market makers (`peter4`, `ken v2`, `10k`) | `10000 + tape_adj` (capped) | sniper + pennying + basic skew | Stable and strong |
+| Tuned variant (`ken v6.1`) | `10000 + tape_adj + mid_pull` | spread-aware take edge + dynamic skew + split passive size | Better local consistency and higher totals |
+| Failed regression attempts (`trader.py`, `peter11`) | 3-lag regression with old intercept/weights | sniper + layering | Fair-value drift, poor firing quality, unstable PnL |
+
+### What Matters Most for Osmium
+
+1. **Correct fair-value center**  
+   Keep fair anchored near `10000` unless regression is re-fitted on Osmium-specific data. Old STARFRUIT-style coefficients are miscalibrated for current Osmium scale.
+
+2. **Capped tape adjustment**  
+   Tape should be capped (e.g., ±2.5 to ±3.0) to avoid overreacting to one timestamp.
+
+3. **Adaptive execution beats static execution**  
+   Spread-aware take thresholds and stronger skew at large inventory improve reliability over fixed `2.5`/fixed skew setups.
+
+4. **Inventory safety is non-negotiable**  
+   Dynamic skew and multi-level quoting reduce chance of getting pinned near limit.
+
+### Practical Recommendation for Osmium
+
+- Use the `ken v6.1` Osmium structure as baseline behavior.
+- If testing hidden-pattern models, keep the `v6.1` execution layer unchanged and only swap the fair estimator.
+- Reject any regression fair that drifts away from observed book center for long periods.
 
 ---
 
@@ -165,27 +213,31 @@ Both files are **byte-for-byte identical** in logic. This is dead code — `trad
 
 ## Critical Findings
 
-### Finding 1: The Current Production Bot (`trader.py`) Is Broken for Day 0
+### Finding 1: Osmium Anchor + Capped Tape Is the Most Reliable Base
 
-The production bot loses **-63,903** on Day 0 — the most recent historical data. This is a red flag for future performance. The root cause is the fixed 11,500 Pepper anchor combined with 80-unit limits. The bot got pinned -80 short Pepper on a day when the price was ~12,000+.
+Across tested families, strategies anchored around `10000` with capped tape adjustment are consistently robust. Execution tuning (adaptive thresholds, skew, passive split) gives incremental edge on top of this baseline.
 
-### Finding 2: Regression for Osmium Doesn't Work
+### Finding 2: The Current Production Bot (`trader.py`) Is Broken for Day 0
 
-The weights `[0.3616, 0.3148, 0.2925]` with intercept `309.9` are borrowed from the old `STARFRUIT` product in a previous IMC round. They produce:
+The production bot loses **-63,903** on Day 0 — the most recent historical data. The dominant root cause is Pepper-side anchoring, but Osmium-side fair estimation is also miscalibrated.
+
+### Finding 3: Regression for Osmium Doesn't Work (Current Coefficients)
+
+The weights `[0.3616, 0.3148, 0.2925]` with intercept `309.9` are borrowed from the old `STARFRUIT` product in a previous IMC round:
 ```
 prediction = 309.9 + 0.3616*p[-1] + 0.3148*p[-2] + 0.2925*p[-3]
 ```
 For Osmium prices ~10,000, this gives ~**9,927** — consistently underestimating the true price by ~73. This means the sniper will rarely fire (thinks fair is 9,927, market is at 10,000, so no "mispriced asks" exist) and the passive market maker will quote too far below market.
 
-### Finding 3: Pepper Root 3-Lag Regression Weights ARE Correct
+### Finding 4: Pepper Root 3-Lag Regression Weights ARE Correct
 
 The weights `[0.34296, 0.32058, 0.33645]` + intercept `0.2535` sum to ~1.0 on the lag weights. This is effectively a momentum-adjusted moving average of recent prices. Unlike the Osmium regression, these weights track the **current price level** rather than regressing toward a hardcoded mean. This is why Pepper predictions are reliable across all days.
 
-### Finding 4: `trader_peter2_2.py` and `trader_peter2_2_1.py` Are Identical
+### Finding 5: `trader_peter2_2.py` and `trader_peter2_2_1.py` Are Identical
 
 Both files produce the exact same backtest output. One should be deleted to reduce confusion.
 
-### Finding 5: Regime Detection Underperforms Simple Market Making
+### Finding 6: Regime Detection Underperforms Simple Market Making
 
 The 2-regime system in `trader_peter_2_2_2.py` (UPTREND/DOWNTREND/NEUTRAL) scores ~70k less than `trader_peter4.py`. The added complexity does not pay off on these 3 test days. Market making with inventory skew is simpler and more robust.
 
@@ -204,15 +256,15 @@ The 2-regime system in `trader_peter_2_2_2.py` (UPTREND/DOWNTREND/NEUTRAL) score
 
 ## What to Try Next
 
-1. **Fix the production bot** (`trader.py`): Replace the Osmium regression with `10000 + tape_adj` and the Pepper anchor with the 3-lag autoregression. This alone should bring Day 0 from -63k to ~89k.
+1. **Lock Osmium baseline first**: Keep `10000 + capped tape` (or `v6.1` variant with `mid_pull`) and preserve adaptive execution. Do not deploy old regression coefficients on Osmium.
 
-2. **Improve Pepper exits**: `trader_peter4.py` currently sells Pepper only on spike basis (passive maker). Consider adding a sniper sell when Pepper goes `fair + 2.0` similar to Osmium, to capture short-term mean reversion on the upside.
+2. **Fix the production bot** (`trader.py`): Replace the Osmium regression with anchor+tape and the Pepper anchor with the 3-lag autoregression.
 
-3. **Test tighter sniper thresholds**: Peter4 uses 2.5 for Osmium. Try 2.0 or 1.5 — more fills, less edge per fill. May increase total PnL.
+3. **Improve Pepper exits**: Add a controlled sniper sell when Pepper trades above fair by a sufficient edge, with inventory-aware caps.
 
-4. **Inventory management**: All current strategies can get stuck at ±80. Consider a soft unwind at ±60 units to avoid max limit constraints.
+4. **Test Osmium threshold sweeps**: Evaluate take edge around 2.0-2.7 and skew regime switch levels around 40-60 inventory.
 
-5. **Validate `trader_peter4.py` is the upload candidate**: Based on backtest data, `trader_peter4.py` at **272,842** total is the best strategy and should replace `trader.py` as the uploaded production bot.
+5. **Inventory safety rails**: Add soft unwind behavior from ±55 to ±65 before hard limit saturation.
 
 ---
 
