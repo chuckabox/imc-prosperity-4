@@ -27,8 +27,8 @@ class Trader:
 
     def __init__(self):
         self.limits = {
-            'ASH_COATED_OSMIUM': 20,
-            'INTARIAN_PEPPER_ROOT': 20
+            'ASH_COATED_OSMIUM': 80,
+            'INTARIAN_PEPPER_ROOT': 80
         }
 
         # Proven Starfruit Signal (3-Lag Regression)
@@ -138,7 +138,7 @@ class Trader:
 
             # 2. Aggressive Maker (Pennying)
             # Softer skew factor for tighter spreads and more fills
-            skew_factor = 0.2
+            skew_factor = 0.05
 
             bid_price = math.floor(fair_price - 0.5 - (position * skew_factor))
             ask_price = math.ceil(fair_price + 0.5 - (position * skew_factor))
