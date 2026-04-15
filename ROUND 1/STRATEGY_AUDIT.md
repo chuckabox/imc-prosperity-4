@@ -1,5 +1,5 @@
 # 📊 Round 1 Strategy Audit: Scylla vs Charybdis
-
+## OLD
 # trader_peter.py ![3,177 PNL](image.png)
 
 # trader_peter2.py ![3,340 PNL](image-1.png)
@@ -23,6 +23,8 @@
 # trader_peter10.py ![1,600 PNL](image-10.png)
 
 # trader_peter11.py ![-40,000 PNL](image-6.png)
+## NEW
+# trader_peter3.py got ~8k
 
 ---
 
