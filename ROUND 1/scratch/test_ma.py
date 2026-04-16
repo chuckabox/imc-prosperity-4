@@ -1,21 +1,23 @@
+import sys
+import os
+import pandas as pd
 import json
 import math
+
+# Use the backtest logic to test locally inside the script
+from tools.backtest_cli import run_cli_backtest
+
+code = """
+import json
+import math
+import collections
 from typing import Dict, List, Any
 from datamodel import Order, OrderDepth, TradingState, Symbol
-
-class Logger:
-    def __init__(self) -> None:
-        pass
-    def print(self, *objects: Any, sep: str = " ", end: str = "\n") -> None:
-        pass
-    def flush(self, state: TradingState, orders: Dict[Symbol, List[Order]], conversions: int, trader_data: str) -> None:
-        pass
 
 class Trader:
     def __init__(self):
         self.limits = {'ASH_COATED_OSMIUM': 80, 'INTARIAN_PEPPER_ROOT': 80}
         self.emas = {}
-        self.history = {}
 
     def run(self, state: TradingState):
         if state.traderData:
@@ -46,11 +48,10 @@ class Trader:
             self.emas[product]['fast'] = fast_ema
             self.emas[product]['slow'] = slow_ema
             
-            # Target position based on TA trend. Use Basis Point relative metrics for cross-asset robustness.
-            threshold_bps = mid * 0.00005  # Equivalent to 0.5 on 10,000
-            if fast_ema > slow_ema + threshold_bps:
+            # Target position based on TA trend
+            if fast_ema > slow_ema + 0.5:
                 target = lim
-            elif fast_ema < slow_ema - threshold_bps:
+            elif fast_ema < slow_ema - 0.5:
                 target = -lim
             else:
                 target = 0
@@ -59,12 +60,12 @@ class Trader:
             v_a = abs(depth.sell_orders[best_ask])
             imb = (v_b - v_a) / (v_b + v_a)
             
-            spread_bps = max(1.5, mid * 0.00015) 
-            fair = fast_ema + imb * spread_bps
-            skew = (pos - target) * (spread_bps / lim) * 2.0 # Adaptive skew
+            fair = fast_ema + imb * 1.5
+            skew = (pos - target) * 0.05
             
-            buy_price = math.floor(fair - spread_bps - skew)
-            sell_price = math.ceil(fair + spread_bps - skew)
+            spread = 1.5
+            buy_price = math.floor(fair - spread - skew)
+            sell_price = math.ceil(fair + spread - skew)
             
             orders = []
             block = 20
@@ -90,3 +91,18 @@ class Trader:
             result[product] = orders
             
         return result, 0, json.dumps(self.emas)
+"""
+
+with open("ROUND 1/traders/trader_robust.py", "w") as f:
+    f.write(code.strip())
+
+# Test on Train Validation split (day -2 and -1)
+print("TRAINING VALIDATION SET (-2, -1):")
+os.environ["PYTHONPATH"] = "ROUND 1/config"
+import subprocess
+try:
+    cmd = f"{sys.executable} \"ROUND 1/tools/backtest_cli.py\" \"ROUND 1/traders/trader_robust.py\""
+    out = subprocess.check_output(cmd, shell=True, env=os.environ).decode()
+    print([line for line in out.split('\\n') if 'Final PnL' in line or 'Total PnL' in line])
+except Exception as e:
+    print("Error:", e)
