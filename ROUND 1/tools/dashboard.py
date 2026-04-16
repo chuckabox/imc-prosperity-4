@@ -796,12 +796,14 @@ def main():
                 df = pd.read_csv(os.path.join(robust_results_dir, f))
                 name = f.replace("_robust_results.csv", "")
                 
-                # Dynamic column selection with fallback
-                if target_col not in df.columns:
-                    # If filter is specific but column missing, check if we can derive from final_pnl (not ideal but safe)
+                # Dynamic column selection with strict fallback for products
+                if target_col in df.columns:
+                    pnls = df[target_col]
+                elif p_filter == "All":
                     pnls = df["final_pnl"] if "final_pnl" in df.columns else pd.Series([0]*len(df))
                 else:
-                    pnls = df[target_col]
+                    # Filter is Osmium or Root but column missing - show 0 for consistency
+                    pnls = pd.Series([0.0]*len(df))
                 
                 all_leaderboard_data.append({
                     "Trader": name,
@@ -849,7 +851,7 @@ def main():
                     cat_comp = full_df.groupby(["trader", "category"])["target_pnl"].mean().reset_index()
                     cat_chart = alt.Chart(cat_comp).mark_bar().encode(
                         x=alt.X("category:N", title="Category"),
-                        y=alt.Y("target_pnl:Q", title="Mean PnL ($)"),
+                        y=alt.Y("target_pnl:Q", title=f"Mean PnL ({p_filter}) ($)"),
                         color=alt.Color("trader:N", title="Trader"),
                         xOffset="trader:N"
                     ).properties(height=350)
@@ -862,7 +864,7 @@ def main():
                     y=alt.Y("max_drawdown:Q", title="Max Drawdown ($)"),
                     color=alt.Color("trader:N", title="Trader"),
                     tooltip=["trader", "name", "target_pnl", "max_drawdown", "category"]
-                ).properties(height=450, title="Risk vs Reward across all simulation paths").interactive()
+                ).properties(height=450, title=f"Risk vs Reward (PnL: {p_filter}) - All Scenarios").interactive()
                 st.altair_chart(risk_scatter, use_container_width=True)
 
                 st.divider()
@@ -879,10 +881,13 @@ def main():
                 selected_result = st.selectbox("Select Results File for Deep Dive", robust_csvs, format_func=lambda x: x.replace("_robust_results.csv", ""))
                 df_robust = pd.read_csv(os.path.join(robust_results_dir, selected_result))
                 
-                if target_col not in df_robust.columns:
+                # Dynamic column selection with strict fallback for products
+                if target_col in df_robust.columns:
+                    pnls = df_robust[target_col]
+                elif p_filter == "All":
                     pnls = df_robust["final_pnl"] if "final_pnl" in df_robust.columns else pd.Series([0]*len(df_robust))
                 else:
-                    pnls = df_robust[target_col]
+                    pnls = pd.Series([0.0]*len(df_robust))
                 
                 df_robust["target_pnl"] = pnls
 
