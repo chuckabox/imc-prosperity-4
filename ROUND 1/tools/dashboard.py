@@ -863,7 +863,7 @@ def main():
                 st.altair_chart(heatmap, use_container_width=True)
 
             with tab_inspect:
-                selected_result = st.selectbox("Select Results File for Deep Dive", robust_csvs)
+                selected_result = st.selectbox("Select Results File for Deep Dive", robust_csvs, format_func=lambda x: x.replace("_robust_results.csv", ""))
                 df_robust = pd.read_csv(os.path.join(robust_results_dir, selected_result))
 
                 col_m1, col_m2, col_m3, col_m4 = st.columns(4)
