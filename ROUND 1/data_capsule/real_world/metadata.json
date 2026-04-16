@@ -1,6 +1,126 @@
 {
-  "fetched_at": "2026-04-16T21:16:31.961962",
+  "fetched_at": "2026-04-16T23:48:49.137204",
   "datasets": {
+    "yf_ZC_F_d0": {
+      "file": "normalized\\prices_yf_ZC_F_d0.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d1": {
+      "file": "normalized\\prices_yf_ZC_F_d1.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d2": {
+      "file": "normalized\\prices_yf_ZC_F_d2.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d3": {
+      "file": "normalized\\prices_yf_ZC_F_d3.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d4": {
+      "file": "normalized\\prices_yf_ZC_F_d4.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d5": {
+      "file": "normalized\\prices_yf_ZC_F_d5.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d6": {
+      "file": "normalized\\prices_yf_ZC_F_d6.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d7": {
+      "file": "normalized\\prices_yf_ZC_F_d7.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d8": {
+      "file": "normalized\\prices_yf_ZC_F_d8.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d9": {
+      "file": "normalized\\prices_yf_ZC_F_d9.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d10": {
+      "file": "normalized\\prices_yf_ZC_F_d10.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d11": {
+      "file": "normalized\\prices_yf_ZC_F_d11.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d12": {
+      "file": "normalized\\prices_yf_ZC_F_d12.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d13": {
+      "file": "normalized\\prices_yf_ZC_F_d13.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "yf_ZC_F_d14": {
+      "file": "normalized\\prices_yf_ZC_F_d14.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
     "yf_ZW_F_d0": {
       "file": "normalized\\prices_yf_ZW_F_d0.csv",
       "ticks": 20000,
@@ -595,6 +715,486 @@
     },
     "yf_ADM_d14": {
       "file": "normalized\\prices_yf_ADM_d14.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_CORN_d0": {
+      "file": "normalized\\prices_av_CORN_d0.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_CORN_d1": {
+      "file": "normalized\\prices_av_CORN_d1.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_CORN_d2": {
+      "file": "normalized\\prices_av_CORN_d2.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_CORN_d3": {
+      "file": "normalized\\prices_av_CORN_d3.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_CORN_d4": {
+      "file": "normalized\\prices_av_CORN_d4.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_CORN_d5": {
+      "file": "normalized\\prices_av_CORN_d5.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_CORN_d6": {
+      "file": "normalized\\prices_av_CORN_d6.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_CORN_d7": {
+      "file": "normalized\\prices_av_CORN_d7.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_CORN_d8": {
+      "file": "normalized\\prices_av_CORN_d8.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_CORN_d9": {
+      "file": "normalized\\prices_av_CORN_d9.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_CORN_d10": {
+      "file": "normalized\\prices_av_CORN_d10.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_CORN_d11": {
+      "file": "normalized\\prices_av_CORN_d11.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_WHEAT_d0": {
+      "file": "normalized\\prices_av_WHEAT_d0.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_WHEAT_d1": {
+      "file": "normalized\\prices_av_WHEAT_d1.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_WHEAT_d2": {
+      "file": "normalized\\prices_av_WHEAT_d2.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_WHEAT_d3": {
+      "file": "normalized\\prices_av_WHEAT_d3.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_WHEAT_d4": {
+      "file": "normalized\\prices_av_WHEAT_d4.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_WHEAT_d5": {
+      "file": "normalized\\prices_av_WHEAT_d5.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_WHEAT_d6": {
+      "file": "normalized\\prices_av_WHEAT_d6.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_WHEAT_d7": {
+      "file": "normalized\\prices_av_WHEAT_d7.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_WHEAT_d8": {
+      "file": "normalized\\prices_av_WHEAT_d8.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_WHEAT_d9": {
+      "file": "normalized\\prices_av_WHEAT_d9.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_WHEAT_d10": {
+      "file": "normalized\\prices_av_WHEAT_d10.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_WHEAT_d11": {
+      "file": "normalized\\prices_av_WHEAT_d11.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COFFEE_d0": {
+      "file": "normalized\\prices_av_COFFEE_d0.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COFFEE_d1": {
+      "file": "normalized\\prices_av_COFFEE_d1.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COFFEE_d2": {
+      "file": "normalized\\prices_av_COFFEE_d2.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COFFEE_d3": {
+      "file": "normalized\\prices_av_COFFEE_d3.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COFFEE_d4": {
+      "file": "normalized\\prices_av_COFFEE_d4.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COFFEE_d5": {
+      "file": "normalized\\prices_av_COFFEE_d5.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COFFEE_d6": {
+      "file": "normalized\\prices_av_COFFEE_d6.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COFFEE_d7": {
+      "file": "normalized\\prices_av_COFFEE_d7.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COFFEE_d8": {
+      "file": "normalized\\prices_av_COFFEE_d8.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COFFEE_d9": {
+      "file": "normalized\\prices_av_COFFEE_d9.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COFFEE_d10": {
+      "file": "normalized\\prices_av_COFFEE_d10.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COFFEE_d11": {
+      "file": "normalized\\prices_av_COFFEE_d11.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_SUGAR_d0": {
+      "file": "normalized\\prices_av_SUGAR_d0.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_SUGAR_d1": {
+      "file": "normalized\\prices_av_SUGAR_d1.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_SUGAR_d2": {
+      "file": "normalized\\prices_av_SUGAR_d2.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_SUGAR_d3": {
+      "file": "normalized\\prices_av_SUGAR_d3.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_SUGAR_d4": {
+      "file": "normalized\\prices_av_SUGAR_d4.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_SUGAR_d5": {
+      "file": "normalized\\prices_av_SUGAR_d5.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_SUGAR_d6": {
+      "file": "normalized\\prices_av_SUGAR_d6.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_SUGAR_d7": {
+      "file": "normalized\\prices_av_SUGAR_d7.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_SUGAR_d8": {
+      "file": "normalized\\prices_av_SUGAR_d8.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_SUGAR_d9": {
+      "file": "normalized\\prices_av_SUGAR_d9.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_SUGAR_d10": {
+      "file": "normalized\\prices_av_SUGAR_d10.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_SUGAR_d11": {
+      "file": "normalized\\prices_av_SUGAR_d11.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COTTON_d0": {
+      "file": "normalized\\prices_av_COTTON_d0.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COTTON_d1": {
+      "file": "normalized\\prices_av_COTTON_d1.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COTTON_d2": {
+      "file": "normalized\\prices_av_COTTON_d2.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COTTON_d3": {
+      "file": "normalized\\prices_av_COTTON_d3.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COTTON_d4": {
+      "file": "normalized\\prices_av_COTTON_d4.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COTTON_d5": {
+      "file": "normalized\\prices_av_COTTON_d5.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COTTON_d6": {
+      "file": "normalized\\prices_av_COTTON_d6.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COTTON_d7": {
+      "file": "normalized\\prices_av_COTTON_d7.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COTTON_d8": {
+      "file": "normalized\\prices_av_COTTON_d8.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COTTON_d9": {
+      "file": "normalized\\prices_av_COTTON_d9.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COTTON_d10": {
+      "file": "normalized\\prices_av_COTTON_d10.csv",
+      "ticks": 20000,
+      "products": [
+        "ASH_COATED_OSMIUM",
+        "INTARIAN_PEPPER_ROOT"
+      ]
+    },
+    "av_COTTON_d11": {
+      "file": "normalized\\prices_av_COTTON_d11.csv",
       "ticks": 20000,
       "products": [
         "ASH_COATED_OSMIUM",
