@@ -396,6 +396,27 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
     st.altair_chart(chart, use_container_width=True)
     return df_p
 
+def render_total_chart(df_prices, df_trades):
+    # Downsample for Performance
+    df_p = df_prices.copy()
+    if len(df_p) > 3000:
+        step = len(df_p) // 3000
+        df_p = df_p.iloc[::step]
+
+    # Create a consolidated view of all products
+    chart = alt.Chart(df_p).mark_line().encode(
+        x=alt.X('timestamp:Q', title="Timestamp (Continuous)"),
+        y=alt.Y('mid_price:Q', scale=alt.Scale(zero=False), title="Price"),
+        color=alt.Color('product:N', scale=alt.Scale(scheme='set1'), title="Product"),
+        tooltip=['day', 'timestamp', 'product', 'mid_price']
+    ).properties(
+        width='container',
+        height=380,
+        title="Total Market Price Reconstruction (All Assets)"
+    ).interactive()
+
+    st.altair_chart(chart, use_container_width=True)
+
 def render_reversal_chart(df, product, start_idx=0, window=1000):
     # Aesthetic Palette (Match Image)
     TRUE_FV_COLOR = "#2D6A4F"
@@ -755,58 +776,141 @@ def main():
         The goal: **best average PnL across ANY situation**, not peak PnL on known data.
         """)
 
-        robust_results_dir = os.path.join(os.path.dirname(__file__))
+        robust_results_dir = os.path.dirname(os.path.abspath(__file__))
         robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_robust_results.csv")]
 
         if robust_csvs:
-            selected_result = st.selectbox("Select Results File", robust_csvs)
-            df_robust = pd.read_csv(os.path.join(robust_results_dir, selected_result))
+            tab_lead, tab_inspect = st.tabs(["🏆 Leaderboard & Comparison", "📊 Individual Inspection"])
 
-            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-            pnls = df_robust["final_pnl"]
-            col_m1.metric("Mean PnL", f"${pnls.mean():,.0f}")
-            col_m2.metric("Median PnL", f"${pnls.median():,.0f}")
-            col_m3.metric("Worst PnL", f"${pnls.min():,.0f}")
-            col_m4.metric("Win Rate", f"{(pnls > 0).mean()*100:.0f}%")
+            # Pre-load all data for leaderboard and comparison
+            all_leaderboard_data = []
+            all_dfs = []
+            for f in robust_csvs:
+                df = pd.read_csv(os.path.join(robust_results_dir, f))
+                name = f.replace("_robust_results.csv", "")
+                pnls = df["final_pnl"]
+                
+                all_leaderboard_data.append({
+                    "Trader": name,
+                    "Mean PnL": pnls.mean(),
+                    "Median PnL": pnls.median(),
+                    "Worst PnL": pnls.min(),
+                    "Win Rate": (pnls > 0).mean()
+                })
+                df["trader"] = name
+                all_dfs.append(df)
+            
+            leaderboard_df = pd.DataFrame(all_leaderboard_data)
+            full_df = pd.concat(all_dfs)
 
-            st.divider()
+            with tab_lead:
+                st.subheader("Global Leaderboard")
+                st.dataframe(
+                    leaderboard_df.sort_values("Mean PnL", ascending=False),
+                    column_config={
+                        "Trader": st.column_config.TextColumn("Trader Profile"),
+                        "Mean PnL": st.column_config.NumberColumn("Mean PnL", format="$%d"),
+                        "Median PnL": st.column_config.NumberColumn("Median PnL", format="$%d"),
+                        "Worst PnL": st.column_config.NumberColumn("Worst PnL", format="$%d"),
+                        "Win Rate": st.column_config.NumberColumn("Win Rate", format="%.0f%%"),
+                    },
+                    use_container_width=True,
+                    hide_index=True
+                )
 
-            st.subheader("PnL by Category")
-            if "category" in df_robust.columns:
-                cat_stats = df_robust.groupby("category")["final_pnl"].agg(["mean", "min", "max", "count"])
-                cat_stats.columns = ["Mean PnL", "Worst PnL", "Best PnL", "Count"]
-                st.dataframe(cat_stats.style.format("${:,.0f}", subset=["Mean PnL", "Worst PnL", "Best PnL"]))
+                st.divider()
+                st.subheader("Comparative Analysis")
+                
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    st.markdown("**PnL Distribution (Robustness Range)**")
+                    dist_chart = alt.Chart(full_df).mark_boxplot(extent='min-max').encode(
+                        x=alt.X("trader:N", title="Trader"),
+                        y=alt.Y("final_pnl:Q", title="Final PnL ($)"),
+                        color=alt.Color("trader:N", legend=None)
+                    ).properties(height=350)
+                    st.altair_chart(dist_chart, use_container_width=True)
 
-            st.subheader("PnL by Scenario")
-            bar_data = df_robust[["name", "final_pnl", "category"]].copy()
-            bar_data = bar_data.sort_values("final_pnl")
+                with col_c2:
+                    st.markdown("**Mean PnL by Category**")
+                    cat_comp = full_df.groupby(["trader", "category"])["final_pnl"].mean().reset_index()
+                    cat_chart = alt.Chart(cat_comp).mark_bar().encode(
+                        x=alt.X("category:N", title="Category"),
+                        y=alt.Y("final_pnl:Q", title="Mean PnL ($)"),
+                        color=alt.Color("trader:N", title="Trader"),
+                        xOffset="trader:N"
+                    ).properties(height=350)
+                    st.altair_chart(cat_chart, use_container_width=True)
 
-            bar_chart = alt.Chart(bar_data).mark_bar().encode(
-                x=alt.X("final_pnl:Q", title="Final PnL ($)"),
-                y=alt.Y("name:N", sort="-x", title=""),
-                color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
-                tooltip=["name", "final_pnl", "category"],
-            ).properties(height=max(300, len(bar_data) * 22), width="container",
-                         title="PnL Across All Scenarios")
-            st.altair_chart(bar_chart, use_container_width=True)
-
-            st.subheader("PnL Distribution")
-            hist_chart = alt.Chart(df_robust).mark_bar(opacity=0.8).encode(
-                x=alt.X("final_pnl:Q", bin=alt.Bin(maxbins=25), title="PnL ($)"),
-                y=alt.Y("count()", title="Scenarios"),
-                color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
-            ).properties(height=300, title="PnL Distribution Histogram")
-            st.altair_chart(hist_chart, use_container_width=True)
-
-            if "max_drawdown" in df_robust.columns:
-                st.subheader("Risk: PnL vs Drawdown")
-                scatter = alt.Chart(df_robust).mark_circle(size=80).encode(
+                st.divider()
+                st.markdown("**Risk Frontier: PnL vs Max Drawdown (All Scenarios)**")
+                risk_scatter = alt.Chart(full_df).mark_circle(size=60, opacity=0.6).encode(
                     x=alt.X("final_pnl:Q", title="Final PnL ($)"),
                     y=alt.Y("max_drawdown:Q", title="Max Drawdown ($)"),
+                    color=alt.Color("trader:N", title="Trader"),
+                    tooltip=["trader", "name", "final_pnl", "max_drawdown", "category"]
+                ).properties(height=450, title="Risk vs Reward across all simulation paths").interactive()
+                st.altair_chart(risk_scatter, use_container_width=True)
+
+                st.divider()
+                st.markdown("**PnL by Scenario Comparison (Heatmap)**")
+                heatmap = alt.Chart(full_df).mark_rect().encode(
+                    x=alt.X("trader:N", title="Trader", axis=alt.Axis(labelAngle=-45)),
+                    y=alt.Y("name:N", title="Scenario", sort="descending"),
+                    color=alt.Color("final_pnl:Q", scale=alt.Scale(scheme="redyellowgreen", domainMid=0), title="PnL ($)"),
+                    tooltip=["trader", "name", "final_pnl", "category"]
+                ).properties(height=max(400, len(full_df["name"].unique()) * 15))
+                st.altair_chart(heatmap, use_container_width=True)
+
+            with tab_inspect:
+                selected_result = st.selectbox("Select Results File for Deep Dive", robust_csvs, format_func=lambda x: x.replace("_robust_results.csv", ""))
+                df_robust = pd.read_csv(os.path.join(robust_results_dir, selected_result))
+
+                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                pnls = df_robust["final_pnl"]
+                col_m1.metric("Mean PnL", f"${pnls.mean():,.0f}")
+                col_m2.metric("Median PnL", f"${pnls.median():,.0f}")
+                col_m3.metric("Worst PnL", f"${pnls.min():,.0f}")
+                col_m4.metric("Win Rate", f"{(pnls > 0).mean()*100:.0f}%")
+
+                st.divider()
+
+                st.subheader("PnL by Category")
+                if "category" in df_robust.columns:
+                    cat_stats = df_robust.groupby("category")["final_pnl"].agg(["mean", "min", "max", "count"])
+                    cat_stats.columns = ["Mean PnL", "Worst PnL", "Best PnL", "Count"]
+                    st.dataframe(cat_stats.style.format("${:,.0f}", subset=["Mean PnL", "Worst PnL", "Best PnL"]))
+
+                st.subheader("PnL by Scenario")
+                bar_data = df_robust[["name", "final_pnl", "category"]].copy()
+                bar_data = bar_data.sort_values("final_pnl")
+
+                bar_chart = alt.Chart(bar_data).mark_bar().encode(
+                    x=alt.X("final_pnl:Q", title="Final PnL ($)"),
+                    y=alt.Y("name:N", sort="-x", title=""),
                     color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
-                    tooltip=["name", "final_pnl", "max_drawdown", "category"],
-                ).properties(height=400, title="PnL vs Drawdown (bottom-right = best)")
-                st.altair_chart(scatter, use_container_width=True)
+                    tooltip=["name", "final_pnl", "category"],
+                ).properties(height=max(300, len(bar_data) * 22), width="container",
+                            title="PnL Across All Scenarios")
+                st.altair_chart(bar_chart, use_container_width=True)
+
+                st.subheader("PnL Distribution")
+                hist_chart = alt.Chart(df_robust).mark_bar(opacity=0.8).encode(
+                    x=alt.X("final_pnl:Q", bin=alt.Bin(maxbins=25), title="PnL ($)"),
+                    y=alt.Y("count()", title="Scenarios"),
+                    color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
+                ).properties(height=300, title="PnL Distribution Histogram")
+                st.altair_chart(hist_chart, use_container_width=True)
+
+                if "max_drawdown" in df_robust.columns:
+                    st.subheader("Risk: PnL vs Drawdown")
+                    scatter = alt.Chart(df_robust).mark_circle(size=80).encode(
+                        x=alt.X("final_pnl:Q", title="Final PnL ($)"),
+                        y=alt.Y("max_drawdown:Q", title="Max Drawdown ($)"),
+                        color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
+                        tooltip=["name", "final_pnl", "max_drawdown", "category"],
+                    ).properties(height=400, title="PnL vs Drawdown (bottom-right = best)")
+                    st.altair_chart(scatter, use_container_width=True)
 
         else:
             st.warning("No robust results found. Run the robust backtester first:")
@@ -822,7 +926,7 @@ def main():
                     st.image(os.path.join(sweep_dir, png), caption=png.replace("_", " ").replace(".png", ""))
 
     with tab_backtest:
-        st.success("**Mission Status:** Currently analyzing Tutorial Data. Goal: Maintain Emeralds at ~10,000 and manage Tomato volatility.")
+        st.success("**Mission Status:** Currently analyzing Round 1 Data. Goal: Maintain Osmium at ~10,000 and manage Pepper volatility.")
 
         col_day, col_btn = st.columns([1, 1])
         with col_day:
@@ -867,8 +971,8 @@ def main():
             st.markdown("#### 🌶️ INTARIAN PEPPER ROOT (Trend MM)")
             render_chart(df_prices, df_trades, "INTARIAN_PEPPER_ROOT", "#e74c3c", show_mean=False)
 
-            st.markdown("### Raw Prices Preview")
-            st.dataframe(df_prices.tail(10), width="stretch")
+            st.markdown("#### 🌎 Total Market Reconstruction")
+            render_total_chart(df_prices, df_trades)
 
         else:
             st.warning(f"Could not locate data for Day {selected_day} at: {DATA_DIR}")
