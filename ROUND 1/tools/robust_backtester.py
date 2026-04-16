@@ -228,14 +228,14 @@ def discover_datasets(imc_only=False, scenarios_only=False, quick=False) -> List
     return datasets
 
 
-def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]]) -> Dict:
+def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], tag: str = "default") -> Dict:
     results: List[BacktestResult] = []
 
     print(f"\nRunning {len(datasets)} backtests for: {trader_file}")
     print("=" * 70)
 
     for i, (name, path, category) in enumerate(datasets):
-        tag = f"[{i+1}/{len(datasets)}]"
+        progress_tag = f"[{i+1}/{len(datasets)}]"
         result = run_backtest_on_csv(trader_file, path, name, category)
         if result:
             marker = ""
@@ -243,10 +243,10 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]]) 
                 marker = " *** BLOW UP ***"
             elif result.final_pnl < 0:
                 marker = " (LOSS)"
-            print(f"  {tag} {name:45s} PnL: ${result.final_pnl:>12,.2f}  DD: ${result.max_drawdown:>10,.2f}{marker}")
+            print(f"  {progress_tag} {name:45s} PnL: ${result.final_pnl:>12,.2f}  DD: ${result.max_drawdown:>10,.2f}{marker}")
             results.append(result)
         else:
-            print(f"  {tag} {name:45s} SKIPPED")
+            print(f"  {progress_tag} {name:45s} SKIPPED")
 
     if not results:
         print("No results!")
@@ -309,7 +309,11 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]]) 
               f"range=[${cat_stats['min']:>10,.2f}, ${cat_stats['max']:>10,.2f}]")
     print("=" * 70)
 
-    out_csv = Path(trader_file).stem + "_robust_results.csv"
+    out_tag = tag
+    if out_tag == "default" and len(datasets) < 50: # Heuristic for manual overrides
+        out_tag = "quick"
+        
+    out_csv = f"{Path(trader_file).stem}_{out_tag}_robust_results.csv"
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = RESULTS_DIR / out_csv
     rows = []
@@ -335,11 +339,24 @@ if __name__ == "__main__":
     parser.add_argument("--imc-only", action="store_true", help="Only test IMC historical data")
     parser.add_argument("--scenarios-only", action="store_true", help="Only test synthetic scenarios")
     parser.add_argument("--quick", action="store_true", help="Subset for speed (1 per regime)")
+    parser.add_argument("--tag", type=str, default=None, help="Custom tag for this run (e.g. 'v4-beta')")
     args = parser.parse_args()
+
+    # Determine automatic tag if none provided
+    if args.tag:
+        run_tag = args.tag
+    elif args.quick:
+        run_tag = "quick"
+    elif args.imc_only:
+        run_tag = "imc"
+    elif args.scenarios_only:
+        run_tag = "scenarios"
+    else:
+        run_tag = "default"
 
     datasets = discover_datasets(
         imc_only=args.imc_only,
         scenarios_only=args.scenarios_only,
         quick=args.quick,
     )
-    run_robust_backtest(args.trader, datasets)
+    run_robust_backtest(args.trader, datasets, tag=run_tag)
