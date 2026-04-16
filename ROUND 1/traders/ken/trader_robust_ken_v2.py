@@ -29,16 +29,16 @@ class Trader:
     """
     Robust Adaptive Trader (Ken v2) - Passive-First with Guards
     ------------------------------------------------------------
-    Changes from v1:
-      1. Warmup guard: no orders until EMA history is sufficient
-      2. Volatility filter: widen spreads + reduce size in low-vol regimes
-      3. Stronger inventory skew for faster mean-reversion
-      4. Earlier emergency unwind thresholds
-      5. Spread-aware sizing: reduce size when spread is tight
+    Changes from v1 (conservative -- don't break scenario profits):
+      1. Warmup guard: skip first 8/5 ticks until fast EMA is meaningful
+      2. Ramp-up period: half-size orders for first 50 ticks
+      3. Mild inventory skew increase (pepper 0.03 -> 0.04)
+      4. Earlier emergency unwind for pepper (60 -> 55)
     """
 
-    WARMUP_PEPPER = 15
-    WARMUP_OSMIUM = 10
+    WARMUP_PEPPER = 8
+    WARMUP_OSMIUM = 5
+    RAMP_TICKS = 50
 
     def __init__(self):
         self.limits = {
@@ -95,35 +95,29 @@ class Trader:
             hist = hist[-200:]
         self.history["pp"] = hist
 
-        # --- Change 1: Warmup guard ---
+        # Change 1: Warmup guard -- collect history, don't trade yet
         if len(hist) < self.WARMUP_PEPPER:
             return []
 
         ema_f = self._ema(hist, 8)
         ema_s = self._ema(hist, 40)
 
-        recent = hist[-20:] if len(hist) >= 20 else hist
-        vol = max(1.0, float(max(recent) - min(recent)))
-
         trend = 0.0
         if len(hist) >= 40:
-            trend = (ema_f - ema_s) / vol
+            recent = hist[-20:] if len(hist) >= 20 else hist
+            vol = max(1.0, float(max(recent) - min(recent)))
+            trend = (ema_f - ema_s) / max(vol, 1.0)
 
         trend_skew = max(-2.0, min(2.0, trend * 6.0))
 
-        # --- Change 3: Stronger inventory skew (0.03 -> 0.05) ---
-        inv_skew = pos * 0.05
+        # Change 3: Mild inventory skew increase (0.03 -> 0.04)
+        inv_skew = pos * 0.04
 
-        fair = ema_f
+        fair = ema_f if len(hist) >= 8 else mid
 
-        # --- Change 2: Volatility filter ---
-        low_vol = vol < 5.0
-        spread_offset = 3 if low_vol else 1
-        base_qty = 10 if low_vol else 20
-
-        # --- Change 5: Spread-aware sizing ---
-        if spread < 4 and not low_vol:
-            base_qty = 12
+        # Change 2: Ramp-up period -- half size while EMA is settling
+        in_ramp = len(hist) < self.RAMP_TICKS
+        base_qty = 10 if in_ramp else 20
 
         orders = []
         buy_cap = limit - pos
@@ -131,7 +125,7 @@ class Trader:
 
         if best_bid and buy_cap > 0:
             price = best_bid + 1
-            price = min(price, math.floor(fair - spread_offset + trend_skew - inv_skew))
+            price = min(price, math.floor(fair - 1 + trend_skew - inv_skew))
             q = min(buy_cap, base_qty)
             orders.append(Order(product, int(price), q))
             rem = buy_cap - q
@@ -140,18 +134,18 @@ class Trader:
 
         if best_ask and sell_cap > 0:
             price = best_ask - 1
-            price = max(price, math.ceil(fair + spread_offset + trend_skew - inv_skew))
+            price = max(price, math.ceil(fair + 1 + trend_skew - inv_skew))
             q = min(sell_cap, base_qty)
             orders.append(Order(product, int(price), -q))
             rem = sell_cap - q
             if rem > 0:
                 orders.append(Order(product, int(price + 2), -min(rem, 15)))
 
-        # --- Change 4: Earlier emergency unwind (60 -> 50, target 40) ---
-        if pos > 50 and best_bid:
-            orders.append(Order(product, best_bid, -min(pos - 40, 15)))
-        elif pos < -50 and best_ask:
-            orders.append(Order(product, best_ask, min(abs(pos) - 40, 15)))
+        # Change 4: Earlier emergency unwind (60 -> 55, target 45)
+        if pos > 55 and best_bid:
+            orders.append(Order(product, best_bid, -min(pos - 45, 15)))
+        elif pos < -55 and best_ask:
+            orders.append(Order(product, best_ask, min(abs(pos) - 45, 15)))
 
         return orders
 
@@ -180,7 +174,7 @@ class Trader:
             hist = hist[-100:]
         self.history["op"] = hist
 
-        # --- Change 1: Warmup guard ---
+        # Change 1: Warmup guard for osmium
         if len(hist) < self.WARMUP_OSMIUM:
             return []
 
@@ -196,9 +190,7 @@ class Trader:
         tape_adj = math.copysign(min(abs(tape_adj) * 0.15, 2.0), tape_adj)
 
         fair = anchor + tape_adj
-
-        # --- Change 3: Stronger inventory skew (0.05 -> 0.08) ---
-        skew = pos * 0.08
+        skew = pos * 0.05
 
         bid_price = math.floor(fair - 0.5 - skew)
         ask_price = math.ceil(fair + 0.5 - skew)
@@ -242,12 +234,6 @@ class Trader:
             orders.append(Order(product, int(ask_price), -top))
             if deep > 0:
                 orders.append(Order(product, int(ask_price + 1), -deep))
-
-        # --- Change 4: Emergency unwind for osmium (new) ---
-        if pos > 55 and best_bid:
-            orders.append(Order(product, best_bid, -min(pos - 40, 15)))
-        elif pos < -55 and best_ask:
-            orders.append(Order(product, best_ask, min(abs(pos) - 40, 15)))
 
         return orders
 
