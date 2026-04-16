@@ -11,7 +11,7 @@ from datamodel import OrderDepth, TradingState, Observation, Listing
 # Import trader
 sys.path.append("ROUND 1/traders")
 import importlib.util
-spec = importlib.util.spec_from_file_location("TraderModule", "ROUND 1/traders/trader_robust.py")
+spec = importlib.util.spec_from_file_location("TraderModule", "ROUND 1/traders/trader_robust_v3.py")
 trader_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(trader_module)
 Trader = trader_module.Trader
