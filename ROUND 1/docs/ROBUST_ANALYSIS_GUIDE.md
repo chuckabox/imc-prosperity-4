@@ -57,6 +57,19 @@ After the run, the tool outputs a comprehensive distribution. Focus on these **T
 
 ---
 
+## ⚠️ Reality Check: Local vs. Live Performance
+
+It is common to see **unrealistically high PnL** (e.g., $500k+) in local robust results. This is often "suspicious" for several reasons:
+
+*   **Fill Model Exploitation**: Many local backtesters use a "Simple Taker" model where your orders are filled instantly if they touch the best opposite price. In the real IMC portal, you are competing with thousands of bots for the same 20-80 units of liquidity.
+*   **Zero Market Impact**: Local tests assume you can buy/sell unlimited quantities without moving the market price. In reality, large "Taking" orders cause immediate price reversals against you.
+*   **Latency & Slippage**: Local snapshots are static. On the live server, by the time your order arrives, the price has often moved (Slippage), turning a winning "Take" into a losing one.
+*   **What is Realistic?**: 
+    - **Live Portal**: A top-tier Round 1 bot usually earns **$2,000 – $15,000** per day.
+    - **Local Robust**: A **Mean PnL of $10,000 – $30,000** is a very strong, realistic signal. If you see $500,000, your bot is likely "gaming" the drift in the datasets rather than trading a sustainable edge.
+
+---
+
 ## 🚩 Robustness Killers (What to Fix)
 
 *   **"BLOW UP" Marker**: The tool flags any scenario where you lose >$10,000. This usually means your position limits aren't being respected or you're "chasing" a price that isn't coming back.
