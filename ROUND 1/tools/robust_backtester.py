@@ -32,6 +32,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 DATA_DIR = PROJECT_ROOT / "data_capsule"
 SCENARIO_DIR = DATA_DIR / "scenarios"
 REAL_DIR = DATA_DIR / "real_world" / "normalized"
+RESULTS_DIR = PROJECT_ROOT / "results" / "robust"
 
 sys.path.insert(0, str(PROJECT_ROOT / "config"))
 from datamodel import Listing, OrderDepth, TradingState, Observation, Order
@@ -309,7 +310,8 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]]) 
     print("=" * 70)
 
     out_csv = Path(trader_file).stem + "_robust_results.csv"
-    out_path = SCRIPT_DIR / out_csv
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = RESULTS_DIR / out_csv
     rows = []
     for r in results:
         rows.append({

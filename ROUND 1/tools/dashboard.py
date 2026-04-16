@@ -776,8 +776,17 @@ def main():
         The goal: **best average PnL across ANY situation**, not peak PnL on known data.
         """)
 
-        robust_results_dir = os.path.dirname(os.path.abspath(__file__))
-        robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_robust_results.csv")]
+        # Robust backtester outputs are now saved under ROUND 1/results/robust.
+        # Keep a fallback to ROUND 1/tools for older runs.
+        robust_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "robust"))
+        fallback_tools_dir = os.path.dirname(os.path.abspath(__file__))
+
+        robust_csvs = []
+        if os.path.isdir(robust_results_dir):
+            robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_robust_results.csv")]
+        if not robust_csvs and os.path.isdir(fallback_tools_dir):
+            robust_results_dir = fallback_tools_dir
+            robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_robust_results.csv")]
 
         if robust_csvs:
             col_f, col_spacer = st.columns([1, 2])
