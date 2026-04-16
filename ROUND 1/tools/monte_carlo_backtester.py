@@ -219,29 +219,60 @@ class MonteCarloBacktester:
                 print(f"Session {session_id}: Error on step {step}: {e}")
                 continue
 
-            # Simulate fills (aggressive matching)
+            # Simulate fills
             for product, order_list in orders.items():
+                mkt_trades = market_trades.get(product, [])
+                
                 for order in order_list:
-                    if order.quantity > 0:  # Buy
-                        # Try to match at best ask
-                        if order_depths[product].sell_orders:
-                            best_ask = min(order_depths[product].sell_orders.keys())
-                            if order.price >= best_ask:
-                                fill_qty = min(order.quantity,
-                                             order_depths[product].sell_orders[best_ask])
-                                position[product] += fill_qty
-                                cash -= fill_qty * best_ask
+                    qty = order.quantity
+                    if qty == 0: continue
+                    
+                    depth = order_depths.get(product)
+                    if not depth: continue
+                    
+                    # 1. Aggressive Fills (Take)
+                    if qty > 0: # Buy
+                        best_ask = min(depth.sell_orders.keys()) if depth.sell_orders else None
+                        if best_ask is not None and order.price >= best_ask:
+                            fill = min(qty, abs(depth.sell_orders[best_ask]), self.trader.limits.get(product, 80) - position[product])
+                            if fill > 0:
+                                position[product] += fill
+                                cash -= fill * best_ask
                                 trade_count[product] += 1
-                    else:  # Sell
-                        # Try to match at best bid
-                        if order_depths[product].buy_orders:
-                            best_bid = max(order_depths[product].buy_orders.keys())
-                            if order.price <= best_bid:
-                                fill_qty = min(abs(order.quantity),
-                                             order_depths[product].buy_orders[best_bid])
-                                position[product] -= fill_qty
-                                cash += fill_qty * best_bid
+                                qty -= fill
+                    else: # Sell
+                        best_bid = max(depth.buy_orders.keys()) if depth.buy_orders else None
+                        if best_bid is not None and order.price <= best_bid:
+                            fill = min(abs(qty), depth.buy_orders[best_bid], position[product] + self.trader.limits.get(product, 80))
+                            if fill > 0:
+                                position[product] -= fill
+                                cash += fill * best_bid
                                 trade_count[product] += 1
+                                qty += abs(fill) # Should be subtract from abs, but simpler to just track remaining qty
+
+                    # 2. Passive Fills (Make) - Match against simulated market trades
+                    if qty != 0:
+                        for t in mkt_trades:
+                            if t.quantity <= 0: continue
+                            # If someone buys from the market (side_is_buy=True in simulator)
+                            # They hit our SELL orders if our price is <= their purchase price
+                            if order.quantity < 0 and order.price <= t.price:
+                                fill = min(abs(order.quantity), t.quantity, position[product] + self.trader.limits.get(product, 80))
+                                if fill > 0:
+                                    position[product] -= fill
+                                    cash += fill * order.price
+                                    trade_count[product] += 1
+                                    break # Order partially or fully filled
+                                    
+                            # If someone sells to the market
+                            # They hit our BUY orders if our price is >= their sale price
+                            if order.quantity > 0 and order.price >= t.price:
+                                fill = min(order.quantity, t.quantity, self.trader.limits.get(product, 80) - position[product])
+                                if fill > 0:
+                                    position[product] += fill
+                                    cash -= fill * order.price
+                                    trade_count[product] += 1
+                                    break
 
             # Calculate MTM PnL
             mtm = cash
