@@ -806,16 +806,18 @@ def main():
                 name = f.replace("_robust_results.csv", "")
                 
                 # Dynamic column selection with strict fallback for products
+                data_missing = False
                 if target_col in df.columns:
                     pnls = df[target_col]
                 elif p_filter == "All":
                     pnls = df["final_pnl"] if "final_pnl" in df.columns else pd.Series([0]*len(df))
                 else:
-                    # Filter is Osmium or Root but column missing - show 0 for consistency
+                    # Filter is Osmium or Root but column missing
                     pnls = pd.Series([0.0]*len(df))
+                    data_missing = True
                 
                 all_leaderboard_data.append({
-                    "Trader": name,
+                    "Trader": name + (" (⚠️ RECALC)" if data_missing else ""),
                     "Mean PnL": pnls.mean(),
                     "Median PnL": pnls.median(),
                     "Worst PnL": pnls.min(),
@@ -891,14 +893,19 @@ def main():
                 df_robust = pd.read_csv(os.path.join(robust_results_dir, selected_result))
                 
                 # Dynamic column selection with strict fallback for products
+                data_missing = False
                 if target_col in df_robust.columns:
                     pnls = df_robust[target_col]
                 elif p_filter == "All":
                     pnls = df_robust["final_pnl"] if "final_pnl" in df_robust.columns else pd.Series([0]*len(df_robust))
                 else:
                     pnls = pd.Series([0.0]*len(df_robust))
+                    data_missing = True
                 
                 df_robust["target_pnl"] = pnls
+
+                if data_missing:
+                    st.warning(f"⚠️ **Granular Data Missing:** This result file does not contain {p_filter}-specific PnL. Please re-run the robust backtester to enable filtering.")
 
                 col_m1, col_m2, col_m3, col_m4 = st.columns(4)
                 col_m1.metric(f"Mean PnL ({p_filter})", f"${pnls.mean():,.0f}")
