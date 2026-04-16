@@ -27,14 +27,17 @@ logger = Logger()
 
 class Trader:
     """
-    Robust Adaptive Trader (Ken v2) - Guarded Passive-First
-    -------------------------------------------------------
-    Keep the profitable v1 core, but only engage stronger defenses when
-    history is still warming up or inventory becomes stretched.
+    Robust Adaptive Trader (Ken v2) - Drift Defense
+    ----------------------------------------------
+    Start from the profitable v1 passive-first core.
+
+    Targeted change: in low-vol / weak-trend regimes where inventory starts
+    accumulating (classic slow-drift adverse selection), widen quotes and
+    cut size. Everywhere else behave like v1.
     """
 
-    WARMUP_PEPPER = 80
-    WARMUP_OSMIUM = 40
+    WARMUP_PEPPER = 8
+    WARMUP_OSMIUM = 8
 
     def __init__(self):
         self.limits = {
@@ -94,9 +97,6 @@ class Trader:
             hist = hist[-200:]
         self.history["pp"] = hist
 
-        if len(hist) < self.WARMUP_PEPPER:
-            return []
-
         ema_f = self._ema(hist, 8)
         ema_s = self._ema(hist, 40)
         recent = hist[-20:] if len(hist) >= 20 else hist
@@ -104,22 +104,25 @@ class Trader:
         trend = (ema_f - ema_s) / vol if len(hist) >= 40 else 0.0
         trend_skew = self._clamp(trend * 6.0, -2.0, 2.0)
 
-        fair = ema_f
+        fair = ema_f if len(hist) >= self.WARMUP_PEPPER else mid
         inv_skew = pos * 0.03
 
+        # Default v1 sizing/offsets
         buy_offset = 1
         ask_offset = 1
-        deep_qty = 15
         base_qty = 20
+        deep_qty = 15
 
-        if pos > 40:
+        # Drift defense: only activate when (a) low vol, (b) weak trend signal,
+        # and (c) inventory already leaning.
+        low_vol = vol < 8.0
+        weak_trend = abs(trend) < 0.10
+        leaning = abs(pos) >= 18
+        if low_vol and weak_trend and leaning:
             buy_offset = 3
-            base_qty = 12
-            deep_qty = 8
-        elif pos < -40:
             ask_offset = 3
-            base_qty = 12
-            deep_qty = 8
+            base_qty = 10
+            deep_qty = 6
 
         orders = []
         buy_cap = limit - pos
@@ -143,10 +146,10 @@ class Trader:
             if rem > 0:
                 orders.append(Order(product, int(price + 2), -min(rem, deep_qty)))
 
-        if pos > 55 and best_bid:
-            orders.append(Order(product, best_bid, -min(pos - 45, 15)))
-        elif pos < -55 and best_ask:
-            orders.append(Order(product, best_ask, min(abs(pos) - 45, 15)))
+        if pos > 60 and best_bid:
+            orders.append(Order(product, best_bid, -min(pos - 50, 15)))
+        elif pos < -60 and best_ask:
+            orders.append(Order(product, best_ask, min(abs(pos) - 50, 15)))
 
         return orders
 
@@ -175,9 +178,6 @@ class Trader:
             hist = hist[-100:]
         self.history["op"] = hist
 
-        if len(hist) < self.WARMUP_OSMIUM:
-            return []
-
         anchor = self._ema(hist, 50)
         recent = hist[-20:] if len(hist) >= 20 else hist
         local_vol = max(1.0, float(max(recent) - min(recent)))
@@ -194,10 +194,12 @@ class Trader:
         fair = anchor + tape_adj
         skew = pos * 0.05
         inv_stretched = abs(pos) >= 35
-        thin_edge = spread <= 1
-        quote_size = 12 if (inv_stretched or thin_edge) else 20
+        quote_size = 20
+        if inv_stretched:
+            quote_size = 14
 
-        width = 0.5
+        # Slightly widen only in high local vol
+        width = 0.5 + (0.5 if local_vol >= 8 else 0.0)
 
         bid_price = math.floor(fair - width - skew)
         ask_price = math.ceil(fair + width - skew)
@@ -242,10 +244,7 @@ class Trader:
             if deep > 0 and not inv_stretched:
                 orders.append(Order(product, int(ask_price + 1), -min(deep, max(6, quote_size // 2))))
 
-        if pos > 65 and best_bid:
-            orders.append(Order(product, best_bid, -min(pos - 50, 10)))
-        elif pos < -65 and best_ask:
-            orders.append(Order(product, best_ask, min(abs(pos) - 50, 10)))
+        # Keep v1 behavior: no extra emergency unwind beyond quote skew
 
         return orders
 
