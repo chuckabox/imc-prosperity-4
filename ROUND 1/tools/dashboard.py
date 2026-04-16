@@ -613,8 +613,8 @@ def main():
     # --- MAIN CONTENT ---
     st.title("📈 Prosperity 4: Operations Console")
 
-    tab_backtest, tab_forge, tab_advanced, tab_ai, tab_external = st.tabs([
-        "📉 Visual Backtester", "🛠️ One-Click Forge", "🔬 Advanced Analysis", "🧠 AI Optimizer", "🌐 Market Data (AV)"
+    tab_backtest, tab_forge, tab_advanced, tab_ai, tab_performance, tab_external = st.tabs([
+        "📉 Visual Backtester", "🛠️ One-Click Forge", "🔬 Advanced Analysis", "🧠 AI Optimizer", "📊 Performance Scatter", "🌐 Market Data (AV)"
     ])
 
     with tab_ai:
@@ -775,6 +775,82 @@ def main():
 
         st.divider()
         st.caption("Aesthetic profile: Institutional White/Grey. Matplotlib High-DPI Vector Backend.")
+
+
+    with tab_performance:
+        st.header("📊 Trader Performance Matrix")
+        st.markdown("""
+        Detailed comparison of all traders based on **Monte Carlo Stability**.
+        - **X-Axis**: PnL Variance (Risk/Instability)
+        - **Y-Axis**: Average PnL (Expected Return)
+        """)
+
+        trader_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "traders"))
+        results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))
+        results = []
+
+        if os.path.exists(trader_dir):
+            trader_files = [f for f in os.listdir(trader_dir) if f.endswith(".py")]
+            for trader_file in trader_files:
+                trader_id = trader_file.replace(".py", "")
+                csv_path = os.path.join(results_dir, f"{trader_id}_mc_results.csv")
+                
+                if os.path.exists(csv_path):
+                    try:
+                        df_mc = pd.read_csv(csv_path)
+                        if not df_mc.empty:
+                            avg_pnl = df_mc['final_pnl'].mean()
+                            var_pnl = df_mc['final_pnl'].var()
+                            if pd.isna(var_pnl): var_pnl = 0
+                            
+                            robust_file = os.path.join(results_dir, f"{trader_id}_robustness_results.json")
+                            external_stability = "N/A"
+                            if os.path.exists(robust_file):
+                                with open(robust_file, "r") as rf:
+                                    robust_data = json.load(rf)
+                                    external_stability = np.mean([r['final_pnl'] for r in robust_data])
+
+                            results.append({
+                                "trader_id": trader_id,
+                                "avg_pnl": avg_pnl,
+                                "variance": var_pnl,
+                                "external_robustness": external_stability,
+                                "sharpe_proxy": avg_pnl / (np.sqrt(var_pnl) + 1e-6)
+                            })
+                    except Exception as e:
+                        st.error(f"Error loading results for {trader_id}: {e}")
+
+        if results:
+            df_perf = pd.DataFrame(results)
+            
+            # Highlight top 10%
+            threshold = df_perf['avg_pnl'].quantile(0.9)
+            df_perf['highlight'] = df_perf['avg_pnl'] >= threshold
+
+            scatter = alt.Chart(df_perf).mark_circle(size=100).encode(
+                x=alt.X('variance:Q', title='PnL Variance (Risk)'),
+                y=alt.Y('avg_pnl:Q', title='Average PnL (Performance)'),
+                color=alt.Color('highlight:N', scale=alt.Scale(domain=[True, False], range=['#FF4B4B', '#1F77B4']), legend=None),
+                tooltip=['trader_id', 'avg_pnl', 'variance', 'sharpe_proxy', 'external_robustness']
+            ).properties(
+                width=700,
+                height=500
+            ).interactive()
+
+            # Add labels
+            labels = scatter.mark_text(
+                align='left',
+                baseline='middle',
+                dx=7
+            ).encode(
+                text='trader_id'
+            )
+
+            st.altair_chart(scatter + labels, use_container_width=True)
+            
+            st.dataframe(df_perf.sort_values("avg_pnl", ascending=False))
+        else:
+            st.info("No simulation results found in `traders/`. Run Monte Carlo Analysis to generate data.")
 
     with tab_external:
         st.header("🌐 Alpha Vantage Real Market Terminal")
