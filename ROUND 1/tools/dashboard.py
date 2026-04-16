@@ -526,92 +526,46 @@ def main():
             st.session_state[k] = v
         save_config(st.session_state.config)
         del st.session_state["pending_apply"]
-        st.toast("✅ Optimization parameters applied to sidebar!")
+        st.toast("✅ Optimization parameters applied to configuration!")
         # No rerun here to keep tab state if possible, or use a small toast
-    st.set_page_config(page_title="P4 Control Center", layout="wide")
+    st.set_page_config(
+        page_title="P4 Control Center",
+        layout="wide"
+    )
 
     if "config" not in st.session_state:
         st.session_state.config = load_config()
 
     def on_change_callback():
-        st.session_state.config["osmium_active"] = st.session_state.osmium_active
-        st.session_state.config["pepper_active"] = st.session_state.pepper_active
-        st.session_state.config["osmium_limit"] = st.session_state.osmium_limit
-        st.session_state.config["pepper_limit"] = st.session_state.pepper_limit
-        st.session_state.config["target_spread"] = st.session_state.target_spread
-        st.session_state.config["mr_threshold"] = st.session_state.mr_threshold
-        st.session_state.config["edge"] = st.session_state.edge
-        st.session_state.config["skew"] = st.session_state.skew
+        for key in ["osmium_active", "pepper_active", "osmium_limit", "pepper_limit", "target_spread", "mr_threshold", "edge", "skew"]:
+             if key in st.session_state:
+                 st.session_state.config[key] = st.session_state[key]
         save_config(st.session_state.config)
-
-    # --- SIDEBAR & TRADING SETUP ---
-    with st.sidebar:
-        st.divider()
-        st.header("🎚️ Bot Setup")
-
-        st.subheader("Strategy Activation")
-        st.toggle("🟩 OSMIUM (Mean Reversion)",
-                  key="osmium_active",
-                  value=st.session_state.config["osmium_active"],
-                  on_change=on_change_callback)
-        st.caption("The 'Rubber Band' strategy: Buy low, sell high around the 10,000 mark.")
-
-        st.toggle("🟥 PEPPER ROOT (Trend MM)",
-                  key="pepper_active",
-                  value=st.session_state.config["pepper_active"],
-                  on_change=on_change_callback)
-        st.caption("Profit from trends and volatility using dynamic EMA.")
-
-        st.divider()
-        st.subheader("Inventory Limits")
-
-        # Safe-Fail Warning
-        if st.session_state.config["osmium_limit"] > 100 or st.session_state.config["pepper_limit"] > 100:
-            st.error("⚠️ DANGER: Keeping limits at max is risky.")
-
-        st.slider("💎 Osmium", 0, 80,
-                  key="osmium_limit",
-                  value=st.session_state.config["osmium_limit"],
-                  on_change=on_change_callback)
-        st.caption("Max units you can carry.")
-
-        st.slider("🌶️ Pepper Root", 0, 80,
-                  key="pepper_limit",
-                  value=st.session_state.config["pepper_limit"],
-                  on_change=on_change_callback)
-        st.caption("Max units you can carry.")
-
-        st.divider()
-        st.subheader("Pricing Multipliers")
-        st.slider("🎯 Target Spread", 1.0, 15.0,
-                  key="target_spread",
-                  value=float(st.session_state.config["target_spread"]),
-                  on_change=on_change_callback)
-        st.caption("Aggressiveness. Higher = bigger profit per trade.")
-
-        st.slider("📏 MR Threshold", 1.0, 20.0,
-                  key="mr_threshold",
-                  value=float(st.session_state.config["mr_threshold"]),
-                  on_change=on_change_callback)
-        st.caption("Reversion sensitivity.")
-
-        st.slider("⚔️ Edge Margin", 0.0, 10.0,
-                  key="edge",
-                  value=float(st.session_state.config.get("edge", 1.5)),
-                  on_change=on_change_callback)
-        st.caption("Minimum profit buffer for aggressive takes.")
-
-        st.slider("⚖️ Inventory Skew", 0.0, 2.0,
-                  key="skew",
-                  value=float(st.session_state.config.get("skew", 0.2)),
-                  on_change=on_change_callback)
-        st.caption("Shift pricing based on current position.")
-
-        st.divider()
-        st.info("Configuration is synchronized actively to JSON.")
 
     # --- MAIN CONTENT ---
     st.title("📈 Prosperity 4: Operations Console")
+
+    with st.expander("⚙️ Strategy Configuration", expanded=False):
+        col_act, col_lim, col_prc = st.columns(3)
+        with col_act:
+            st.subheader("Activation")
+            st.toggle("🟩 OSMIUM (MR)", key="osmium_active", value=st.session_state.config["osmium_active"], on_change=on_change_callback)
+            st.toggle("🟥 PEPPER (Trend)", key="pepper_active", value=st.session_state.config["pepper_active"], on_change=on_change_callback)
+        with col_lim:
+            st.subheader("Limits")
+            st.slider("💎 Osmium", 0, 80, key="osmium_limit", value=st.session_state.config["osmium_limit"], on_change=on_change_callback)
+            st.slider("🌶️ Pepper", 0, 80, key="pepper_limit", value=st.session_state.config["pepper_limit"], on_change=on_change_callback)
+        with col_prc:
+            st.subheader("Parameters")
+            st.slider("🎯 Spread", 1.0, 15.0, key="target_spread", value=float(st.session_state.config["target_spread"]), on_change=on_change_callback)
+            st.slider("📏 MR Thresh", 1.0, 20.0, key="mr_threshold", value=float(st.session_state.config["mr_threshold"]), on_change=on_change_callback)
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                st.slider("⚔️ Edge", 0.0, 10.0, key="edge", value=float(st.session_state.config.get("edge", 1.5)), on_change=on_change_callback)
+            with col_s2:
+                st.slider("⚖️ Skew", 0.0, 2.0, key="skew", value=float(st.session_state.config.get("skew", 0.2)), on_change=on_change_callback)
+
+    # Final tab layout
 
     tab_backtest, tab_robust, tab_archive = st.tabs([
         "📉 Visual Backtester",
@@ -638,7 +592,7 @@ def main():
                     """)
                     if "best_params" in st.session_state:
                         st.success(f"Best: **${st.session_state.get('best_pnl', 0):,.2f}**")
-                        if st.button("✅ Apply to Sidebar", type="primary"):
+                        if st.button("✅ Apply to Config", type="primary"):
                             st.session_state.pending_apply = True
                             st.rerun()
                         st.table(pd.DataFrame([st.session_state.best_params]).T.rename(columns={0: "Value"}))
