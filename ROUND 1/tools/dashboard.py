@@ -823,13 +823,23 @@ def main():
         if results:
             df_perf = pd.DataFrame(results)
             
+            # Renaming columns for better UX with directional hints
+            df_perf_display = df_perf.rename(columns={
+                "trader_id": "Trader ID",
+                "avg_pnl": "Avg PnL (↑ Higher is Better)",
+                "variance": "Variance (↓ Lower is Better/Risk)",
+                "external_robustness": "Ext Robustness (↑ Higher is Better)",
+                "sharpe_proxy": "Sharpe Proxy (↑ Higher is Better)",
+                "highlight": "Top 10%?"
+            })
+            
             # Highlight top 10%
             threshold = df_perf['avg_pnl'].quantile(0.9)
             df_perf['highlight'] = df_perf['avg_pnl'] >= threshold
 
             scatter = alt.Chart(df_perf).mark_circle(size=100).encode(
-                x=alt.X('variance:Q', title='PnL Variance (Risk)'),
-                y=alt.Y('avg_pnl:Q', title='Average PnL (Performance)'),
+                x=alt.X('variance:Q', title='PnL Variance (Risk - Lower is Better)'),
+                y=alt.Y('avg_pnl:Q', title='Average PnL (Performance - Higher is Better)'),
                 color=alt.Color('highlight:N', scale=alt.Scale(domain=[True, False], range=['#FF4B4B', '#1F77B4']), legend=None),
                 tooltip=['trader_id', 'avg_pnl', 'variance', 'sharpe_proxy', 'external_robustness']
             ).properties(
@@ -848,7 +858,7 @@ def main():
 
             st.altair_chart(scatter + labels, use_container_width=True)
             
-            st.dataframe(df_perf.sort_values("avg_pnl", ascending=False))
+            st.dataframe(df_perf_display.sort_values("Avg PnL (↑ Higher is Better)", ascending=False))
         else:
             st.info("No simulation results found in `traders/`. Run Monte Carlo Analysis to generate data.")
 
