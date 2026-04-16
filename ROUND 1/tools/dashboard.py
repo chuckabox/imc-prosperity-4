@@ -613,89 +613,96 @@ def main():
     # --- MAIN CONTENT ---
     st.title("📈 Prosperity 4: Operations Console")
 
-    tab_backtest, tab_forge, tab_advanced, tab_ai, tab_performance, tab_external, tab_robust = st.tabs([
+    tab_backtest, tab_robust, tab_archive = st.tabs([
         "📉 Visual Backtester",
-        "🛠️ One-Click Forge",
-        "🔬 Advanced Analysis",
-        "🧠 AI Optimizer",
-        "📊 Performance Scatter",
-        "🌐 Market Data (AV)",
         "🛡️ Robust Analysis",
+        "🕰️ Archive",
     ])
 
-    with tab_ai:
-        if not OPTUNA_AVAILABLE:
-            st.error("📉 AI Optimizer is currently unavailable.")
-            st.info("To enable Bayesian Optimization, please run: `pip install optuna` and restart the dashboard.")
-        else:
-            st.header("🧠 Bayesian Hyperparameter Search")
-            
-            # --- Results at the top ---
-            if "best_params" in st.session_state:
-                st.markdown("### 🏆 Hall of Fame")
-                col_res1, col_res2 = st.columns([1, 1])
-                with col_res1:
-                    st.success(f"Best PnL found: **${st.session_state.get('best_pnl', 0):,.2f}**")
-                    st.table(pd.DataFrame([st.session_state.best_params]).T.rename(columns={0: "Optimum Value"}))
-                with col_res2:
-                    if st.button("✅ Apply These Params to Sidebar", type="primary"):
-                        st.session_state.pending_apply = True
-                        st.rerun() # This will now work because we'll catch it at the top of next run
+    # Content for the remaining tabs
+    # (tab_ai and tab_market are now moved inside tab_archive below)
 
-                st.divider()
 
-            st.markdown("""
-            Utilizing a **Tree-structured Parzen Estimator (TPE)** algorithm to navigate the parameter space.
-            This system simulates hundreds of trading scenarios to find the global optimum for PnL.
-            """)
-            
-            col_opt1, col_opt2 = st.columns(2)
-            with col_opt1:
-                # Dynamically find traders
-                trader_search = []
-                trader_base = os.path.join(os.path.dirname(__file__), "..", "traders")
-                for root, _, files in os.walk(trader_base):
-                    for f in files:
-                        if f.endswith(".py") and not f.startswith("__"):
-                            trader_search.append(os.path.relpath(os.path.join(root, f), os.getcwd()))
-                
-                selected_trader = st.selectbox("Target Trader File", trader_search)
-                n_trials = st.number_input("Search Iterations", 10, 200, 30)
-                target_day = st.selectbox("Optimize For Style", ["All Days (Robust)", -1, -2, 0], index=0)
-            
-            if st.button("🚀 Start Deep Search", type="primary"):
-                pbar = st.progress(0)
-                
-                def objective(trial):
-                    config = {
-                        "osmium_limit": trial.suggest_int("osmium_limit", 5, 80),
-                        "pepper_limit": trial.suggest_int("pepper_limit", 5, 80),
-                        "edge": trial.suggest_float("edge", 0.5, 5.0),
-                        "skew": trial.suggest_float("skew", 0.1, 1.0)
-                    }
-                    full_path = os.path.abspath(selected_trader)
+
+    with tab_archive:
+        st.header("🕰️ Legacy & Experimental Tools")
+
+        with st.expander("🧠 AI Optimizer (Bayesian)", expanded=False):
+            if not OPTUNA_AVAILABLE:
+                st.error("📉 AI Optimizer is currently unavailable.")
+            else:
+                col_info, col_setup = st.columns([1, 1])
+                with col_info:
+                    st.markdown("""
+                    Utilizing a **Tree-structured Parzen Estimator (TPE)** algorithm.
+                    """)
+                    if "best_params" in st.session_state:
+                        st.success(f"Best: **${st.session_state.get('best_pnl', 0):,.2f}**")
+                        if st.button("✅ Apply to Sidebar", type="primary"):
+                            st.session_state.pending_apply = True
+                            st.rerun()
+                        st.table(pd.DataFrame([st.session_state.best_params]).T.rename(columns={0: "Value"}))
+                with col_setup:
+                    trader_search = []
+                    trader_base = os.path.join(os.path.dirname(__file__), "..", "traders")
+                    for root, _, files in os.walk(trader_base):
+                        for f in files:
+                            if f.endswith(".py") and not f.startswith("__"):
+                                trader_search.append(os.path.relpath(os.path.join(root, f), os.getcwd()))
                     
-                    # Robustness Check: Average across multiple datasets
-                    days_to_test = [-1, -2, 0] if target_day == "All Days (Robust)" else [target_day]
-                    total_res = 0
-                    for d in days_to_test:
-                        total_res += execute_backtest_headless(d, full_path, config)
-                    
-                    res = total_res / len(days_to_test)
-                    pbar.progress((trial.number + 1) / n_trials)
-                    return res
+                    sel_trader = st.selectbox("Target File", trader_search, key="opt_trader")
+                    n_tri = st.number_input("Iterations", 10, 200, 30, key="opt_n")
+                    t_day = st.selectbox("Style", ["All Days (Robust)", -1, -2, 0], index=0, key="opt_day")
 
-                study = optuna.create_study(direction="maximize")
-                study.optimize(objective, n_trials=n_trials)
-                
-                st.session_state.best_params = study.best_params
-                st.session_state.best_pnl = study.best_value
-                st.rerun() # Refresh to show results at the top
+                    if st.button("🚀 Start Search", type="primary", use_container_width=True):
+                        pbar = st.progress(0)
+                        def obj(trial):
+                            cfg = {
+                                "osmium_limit": trial.suggest_int("osmium_limit", 5, 80),
+                                "pepper_limit": trial.suggest_int("pepper_limit", 5, 80),
+                                "edge": trial.suggest_float("edge", 0.5, 5.0),
+                                "skew": trial.suggest_float("skew", 0.1, 1.0)
+                            }
+                            f_path = os.path.abspath(sel_trader)
+                            d_test = [-1, -2, 0] if t_day == "All Days (Robust)" else [t_day]
+                            t_res = sum(execute_backtest_headless(d, f_path, cfg) for d in d_test)
+                            r = t_res / len(d_test)
+                            pbar.progress((trial.number + 1) / n_tri)
+                            return r
+                        study = optuna.create_study(direction="maximize")
+                        study.optimize(obj, n_trials=n_tri)
+                        st.session_state.best_params = study.best_params
+                        st.session_state.best_pnl = study.best_value
+                        st.rerun()
 
+        with st.expander("🌐 Market Data Terminal", expanded=False):
+            ext_path = 'ROUND 1/data/external/processed/SPY.csv'
+            if os.path.exists(ext_path):
+                df_ext = pd.read_csv(ext_path)
+                st.altair_chart(alt.Chart(df_ext).mark_line().encode(
+                    x='timestamp:T', y=alt.Y('close:Q', scale=alt.Scale(zero=False))
+                ).properties(height=300).interactive(), use_container_width=True)
+            else:
+                st.warning("No external data found.")
+        
+        with st.expander("🛠️ One-Click Forge", expanded=False):
+            st.markdown("Generate a `trader.py` based on current analysis and config.")
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                if st.button("🔍 Run Auto-Analysis", use_container_width=True):
+                    perform_auto_analysis()
+            with col_f2:
+                if st.button("🔨 Forge Trader.py", type="primary", use_container_width=True):
+                    if "analysis" not in st.session_state:
+                         st.error("Please run Auto-Analysis first!")
+                    else:
+                        forge_trader()
+            
+            if "forged_code" in st.session_state:
+                st.code(st.session_state.forged_code, language="python")
 
-
-    with tab_performance:
-        st.header("📊 Performance Matrix")
+        st.divider()
+        st.subheader("📊 Performance Matrix (Scatter)")
         st.markdown("""
         Comparative audit of all strategy variations.
         - **Actual (Historical)**: PnL summed across all Round 1 CSV files (`data_capsule`).
@@ -786,32 +793,6 @@ def main():
         else:
             st.info("No simulation results found in `results/`. Run Historical Audit to generate data.")
 
-    with tab_external:
-        st.header("🌐 Alpha Vantage Real Market Terminal")
-        
-        ext_path = 'ROUND 1/data/external/processed/SPY.csv'
-        if os.path.exists(ext_path):
-            df_ext = pd.read_csv(ext_path)
-            st.success(f"Successfully loaded SPY from local cache ({len(df_ext)} rows).")
-            
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                chart_ext = alt.Chart(df_ext).mark_line(color='#1e90ff').encode(
-                    x=alt.X('timestamp:T', title="Time"),
-                    y=alt.Y('close:Q', scale=alt.Scale(zero=False), title="Price"),
-                    tooltip=['timestamp', 'close', 'volume']
-                ).properties(height=400).interactive()
-                st.altair_chart(chart_ext, use_container_width=True)
-            
-            with col2:
-                st.metric("Latest Price", f"${df_ext['close'].iloc[-1]:.2f}")
-                st.metric("Avg Volume", f"{df_ext['volume'].mean():.0f}")
-                st.info("Cross-validation: Use this to test if your IMC signals generalize to standard liquid equities.")
-        else:
-            st.warning("No external data found. Run Alpha Vantage sync script first.")
-            if st.button("🔄 Sync SPY Now"):
-                st.info("Triggering sync...")
-                # Note: In real app, you would run the request here.
 
     with tab_robust:
         st.header("🛡️ Robust Multi-Scenario Analysis")
