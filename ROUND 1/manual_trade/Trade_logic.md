@@ -6,6 +6,26 @@ As a special welcoming event, the Intarians are organizing an exchange auction. 
 
 ---
 
+### **Auction rules**
+
+You have to submit a single limit order (price, quantity). When the auction ends, the exchange selects a single clearing price that:
+
+1. maximizes total traded volume, then
+2. breaks ties by choosing the higher price.
+
+All bids with price ≥ clearing price and asks with price ≤ clearing price execute at the clearing price. Allocation is price priority, then time priority. Since you are last to submit, you are last in line at any price level you join.
+
+### Guaranteed buyback after the auction
+
+You will not trade these products in continuous trading. Instead, right after the auction the Merchant Guild will buy any inventory you trade at a fixed price:
+
+- `DRYLAND_FLAX`: 30 per unit (no fees)
+- `EMBER_MUSHROOM`: 20 per unit (fee: 0.10 per unit traded)
+
+### Submit your orders
+
+Choose a bid price and quantity for each product to maximize your profit. Enter your orders directly in the Manual Challenge Overview window and click the “Submit” button. You can re-submit new orders until the end of the trading round. When the round ends, the last submitted orders will be executed.
+
 ## Order Books
 
 ### DRYLAND FLAX
