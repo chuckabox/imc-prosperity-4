@@ -795,7 +795,7 @@ def main():
                     "Mean PnL": pnls.mean(),
                     "Median PnL": pnls.median(),
                     "Worst PnL": pnls.min(),
-                    "Win Rate": (pnls > 0).mean()
+                    "Win Rate": (pnls > 0).mean() * 100
                 })
                 df["trader"] = name
                 all_dfs.append(df)
