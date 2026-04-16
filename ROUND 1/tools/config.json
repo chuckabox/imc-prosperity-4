@@ -1,7 +1,7 @@
 {
     "osmium_active": true,
     "pepper_active": true,
-    "osmium_limit": 36,
+    "osmium_limit": 29,
     "pepper_limit": 64,
     "emerald_active": true,
     "tomato_active": true,
