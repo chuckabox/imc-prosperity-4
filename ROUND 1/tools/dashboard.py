@@ -613,7 +613,6 @@ def main():
     # --- MAIN CONTENT ---
     st.title("📈 Prosperity 4: Operations Console")
 
-<<<<<<< Updated upstream
     tab_backtest, tab_forge, tab_advanced, tab_ai, tab_performance, tab_external, tab_robust = st.tabs([
         "📉 Visual Backtester",
         "🛠️ One-Click Forge",
@@ -622,10 +621,6 @@ def main():
         "📊 Performance Scatter",
         "🌐 Market Data (AV)",
         "🛡️ Robust Analysis",
-=======
-    tab_backtest, tab_ai, tab_performance, tab_external = st.tabs([
-        "📉 Visual Backtester", "🧠 AI Optimizer", "📊 Performance Matrix", "🌐 Market Data (AV)"
->>>>>>> Stashed changes
     ])
 
     with tab_ai:
@@ -717,21 +712,6 @@ def main():
             for trader_file in trader_files:
                 trader_id = trader_file.replace(".py", "")
                 csv_path = os.path.join(results_dir, f"{trader_id}_mc_results.csv")
-<<<<<<< Updated upstream
-                if os.path.exists(csv_path):
-                    try:
-                        df_mc = pd.read_csv(csv_path)
-                        if not df_mc.empty:
-                            avg_pnl = df_mc['final_pnl'].mean()
-                            var_pnl = df_mc['final_pnl'].var()
-                            if pd.isna(var_pnl): var_pnl = 0
-                            robust_file = os.path.join(results_dir, f"{trader_id}_robustness_results.json")
-                            external_stability = "N/A"
-                            if os.path.exists(robust_file):
-                                with open(robust_file, "r") as rf:
-                                    robust_data = json.load(rf)
-                                    external_stability = np.mean([r['final_pnl'] for r in robust_data])
-=======
                 hist_path = os.path.join(results_dir, f"{trader_id}_historical_results.json")
                 
                 if os.path.exists(csv_path):
@@ -753,7 +733,6 @@ def main():
                             with open(robust_file, "r") as rf:
                                 robust_data = json.load(rf)
                                 external_stability = np.mean([r['final_pnl'] for r in robust_data])
->>>>>>> Stashed changes
 
                             results.append({
                                 "trader_id": trader_id,
@@ -803,13 +782,7 @@ def main():
             )
 
             st.altair_chart(scatter + labels, use_container_width=True)
-<<<<<<< Updated upstream
-
-            st.dataframe(df_perf_display.sort_values("Avg PnL (↑ Higher is Better)", ascending=False))
-=======
-            
             st.dataframe(df_perf_display.sort_values("Expected (MC PnL) ↑", ascending=False))
->>>>>>> Stashed changes
         else:
             st.info("No simulation results found in `results/`. Run Historical Audit to generate data.")
 
