@@ -1,72 +1,34 @@
-# 🏛️ IMC Prosperity 4: High-Performance Round 1 Suite
+# 🏛️ IMC Prosperity 4: Round 1 Trading Suite
 
 ![Status](https://img.shields.io/badge/Status-Leaderboard_Ready-success)
 ![PnL](https://img.shields.io/badge/Backtest_PnL-%24272k_total-blue)
-![Architecture](https://img.shields.io/badge/Algo-Categorical_Traders_|_Monte_Carlo_Validated-orange)
 
-Welcome to the **Round 1 Production Suite**. This repository contains a production-grade algorithmic trading suite and high-fidelity backtesting tools optimized for **Ash-coated Osmium** and **Intarian Pepper Root**.
-
----
-
-## 🚦 Quick Start Guide
-
-### 📂 1. Select Your Strategy
-We have categorized our top performers into three distinct trading archetypes located in `ROUND 1/traders/peter/`:
-- **`trader_peter_aggressive.py`** ($272k): The PnL King. Greedily takes liquidity for maximum volume capture.
-- **`trader_peter_safe.py`** ($246k): The Robust MM. Uses hard anchors and wide margins for risk-averse growth.
-- **`trader_peter_trend.py`** ($209k): The Adaptive Core. Uses 20-period EMA to dynamically track fair price drifts.
-
-### 🧪 2. Validate Locally
-Before uploading to the portal, run a full verification cycle across historical and synthetic markets.
-
-#### **A. Historical Backtest (The Truth)**
-Check performance against the exact Round 1 tape.
-- **Run command:** `python "ROUND 1/tools/backtest_cli.py" "ROUND 1/traders/peter/trader_peter_aggressive.py"`
-
-#### **B. Monte Carlo Simulation (The Robustness)**
-Test against 100+ synthetic market paths to ensure your strategy doesn't "blow up" in edge cases.
-- **Run command:** `python "ROUND 1/tools/monte_carlo_cli.py" "ROUND 1/traders/peter/trader_peter_aggressive.py" --quick`
-
-#### **C. Visual Debugging (The Microstructure)**
-Watch your fills happen in real-time on the order book.
-- **Run command:** `streamlit run "ROUND 1/tools/dashboard.py"`
+Welcome to the **Round 1 Production Suite**. This repository contains high-fidelity backtesting tools and production strategies optimized for **Ash-coated Osmium** and **Intarian Pepper Root**.
 
 ---
 
-## 📂 Documentation Index
+## 🚀 Easy Start Guide
 
-Detailed audits and technical guides are located in the `ROUND 1/docs/` directory:
+Follow these three steps to build and validate a winning strategy.
 
-| Document | Purpose |
-| :--- | :--- |
-| [**peter_comparisons.md**](ROUND%201/docs/peter_comparisons.md) | Technical deep-dive and pairwise comparison of the categorical traders. |
-| [**XIREC_ESTIMATION.md**](ROUND%201/docs/XIREC_ESTIMATION.md) | Consolidated profit estimation combining Manual Auction and Algo results. |
-| [**TESTING_TOOLKIT.md**](ROUND%201/docs/TESTING_TOOLKIT.md) | One-page cheat sheet for all backtesting commands. |
-| [**BACKTESTING_GUIDE.md**](ROUND%201/docs/BACKTESTING_GUIDE.md) | Comprehensive walkthrough of the 4 different backtesting engines. |
-| [**STRATEGY_ANALYSIS.md**](ROUND%201/docs/STRATEGY_ANALYSIS.md) | Repository-wide audit explaining successes and failures of legacy models. |
+### 1️⃣ Develop Strategy
+Place your trade logic in `ROUND 1/traders/`. 
+- **Base Template:** Use `ken/trader_robust_ken_v2.py`. It is our current champion with the best risk-adjusted returns.
 
----
+### 2️⃣ Run Robust Audit
+Run this command to stress-test your strategy against **40+ market scenarios** (crashes, trends, and real historical data).
+- **Run:** `python "ROUND 1/tools/robust_backtester.py" "ROUND 1/traders/ken/trader_robust_ken_v2.py" --quick`
+- *This produces a `.csv` file that lets you compare this version on the leaderboard.*
 
-## 📂 Project Structure
+### 3️⃣ Analyze in Dashboard
+Launch the visual command center to see how your strategy behaves.
+- **Command:** `streamlit run "ROUND 1/tools/dashboard.py"`
 
-```bash
-├── ROUND 1/
-│   ├── traders/peter/         # Categorical Production Traders (Best 3)
-│   ├── tools/                 # Backtesting, MC, and Dashboard engines
-│   ├── config/                # Datamodel and environment config
-│   ├── data_capsule/          # Raw Round 1 Price/Trade CSVs
-│   ├── docs/                  # Strategy Audits and Technical Guides
-│   └── archive/old_peter/     # Legacy and failed experiments
-├── tutorial/                  # Historical data from previous rounds
-└── README.md                  # Main documentation (You are here)
-```
+#### **📉 Visual Backtester**
+Use this tab to **debug your fills**. It shows your orders hitting the book in real-time on historical data. Perfect for checking if your "passive" prices are actually being executed.
+
+#### **🛡️ Robust Analysis & Leaderboard**
+Use this to **compare strategies**. Check your win rate across all 40 scenarios and use the **🏆 Leaderboard** sub-tab to rank your new version against previous ones by Mean PnL and Max Drawdown.
 
 ---
-
-## ⚖️ Portfolio Estimation
-Our current project target is **200,000 XIRECs**. Following our latest audit:
-- **Manual Auction (Arbitrage)**: 376,700 XIRECs (Risk-Free)
-- **Algorithmic (10k Series)**: 272,842 shells (Local High-Fidelity)
-- **Total Combined**: **~649,542 Estimated XIRECs**.
-
 *“In Prosperity, edge is found at the intersection of speed and safety.”*
