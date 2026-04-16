@@ -117,10 +117,10 @@ class Trader:
         ask_price = math.ceil(fair + spread_half - inv_skew)
 
         # Microstructure bounds
-        best_bid = max(depth.buy_orders.keys())
-        best_ask = min(depth.sell_orders.keys())
-        bid_price = min(bid_price, best_bid + 1)
-        ask_price = max(ask_price, best_ask - 1)
+        best_bid = max(depth.buy_orders.keys()) if depth.buy_orders else None
+        best_ask = min(depth.sell_orders.keys()) if depth.sell_orders else None
+        if best_bid is not None: bid_price = min(bid_price, best_bid + 1)
+        if best_ask is not None: ask_price = max(ask_price, best_ask - 1)
         if bid_price >= ask_price: ask_price = bid_price + 1
 
         orders = []
@@ -142,8 +142,10 @@ class Trader:
 
         # Emergency Unwind
         if abs(pos) > limit * 0.75:
-            if pos > 0: orders.append(Order(product, best_bid, -min(pos - 35, 20)))
-            else: orders.append(Order(product, best_ask, min(abs(pos) - 35, 20)))
+            if pos > 35 and best_bid is not None:
+                orders.append(Order(product, best_bid, -min(pos - 35, 20)))
+            elif pos < -35 and best_ask is not None:
+                orders.append(Order(product, best_ask, min(abs(pos) - 35, 20)))
 
         return orders
 
@@ -185,10 +187,10 @@ class Trader:
         bid_price = math.floor(fair - spread_base - inv_skew)
         ask_price = math.ceil(fair + spread_base - inv_skew)
 
-        best_bid = max(depth.buy_orders.keys())
-        best_ask = min(depth.sell_orders.keys())
-        bid_price = min(bid_price, best_bid + 1)
-        ask_price = max(ask_price, best_ask - 1)
+        best_bid = max(depth.buy_orders.keys()) if depth.buy_orders else None
+        best_ask = min(depth.sell_orders.keys()) if depth.sell_orders else None
+        if best_bid is not None: bid_price = min(bid_price, best_bid + 1)
+        if best_ask is not None: ask_price = max(ask_price, best_ask - 1)
 
         orders = []
         rem_buy = limit - pos
@@ -196,11 +198,11 @@ class Trader:
 
         # Aggressive Take
         take_threshold = max(2.0, volat * 1.2)
-        if best_ask <= fair - take_threshold and rem_buy > 0:
+        if best_ask is not None and best_ask <= fair - take_threshold and rem_buy > 0:
             q = min(rem_buy, -depth.sell_orders.get(best_ask, 0))
             orders.append(Order(product, best_ask, q))
             rem_buy -= q
-        if best_bid >= fair + take_threshold and rem_sell > 0:
+        if best_bid is not None and best_bid >= fair + take_threshold and rem_sell > 0:
             q = min(rem_sell, depth.buy_orders.get(best_bid, 0))
             orders.append(Order(product, best_bid, -q))
             rem_sell -= q

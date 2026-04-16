@@ -42,6 +42,8 @@ class BacktestResult:
     name: str
     category: str
     final_pnl: float
+    pnl_osmium: float
+    pnl_pepper: float
     max_drawdown: float
     max_position: Dict[str, int] = field(default_factory=dict)
     trade_count: int = 0
@@ -74,7 +76,7 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
         "INTARIAN_PEPPER_ROOT": Listing("INTARIAN_PEPPER_ROOT", "INTARIAN_PEPPER_ROOT", "SEASHELLS"),
     }
 
-    cash = 0.0
+    cash_per_product = {"ASH_COATED_OSMIUM": 0.0, "INTARIAN_PEPPER_ROOT": 0.0}
     positions = {"ASH_COATED_OSMIUM": 0, "INTARIAN_PEPPER_ROOT": 0}
     pnl_history = []
     trade_count = 0
@@ -138,7 +140,7 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
                             fill = min(qty, avail, limit - positions[product])
                             if fill > 0:
                                 positions[product] += fill
-                                cash -= fill * ask
+                                cash_per_product[product] -= fill * ask
                                 qty -= fill
                                 trade_count += 1
                 elif qty < 0:
@@ -148,13 +150,13 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
                             fill = min(-qty, avail, limit + positions[product])
                             if fill > 0:
                                 positions[product] -= fill
-                                cash += fill * bid
+                                cash_per_product[product] += fill * bid
                                 qty += fill
                                 trade_count += 1
 
             max_pos[product] = max(max_pos[product], abs(positions[product]))
 
-        mtm = cash
+        mtm = sum(cash_per_product.values())
         for product, pos in positions.items():
             if product in mid_prices:
                 mtm += pos * mid_prices[product]
@@ -172,10 +174,15 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
         if dd > max_dd:
             max_dd = dd
 
+    pnl_os = cash_per_product["ASH_COATED_OSMIUM"] + (positions["ASH_COATED_OSMIUM"] * mid_prices["ASH_COATED_OSMIUM"] if "ASH_COATED_OSMIUM" in mid_prices else 0)
+    pnl_pp = cash_per_product["INTARIAN_PEPPER_ROOT"] + (positions["INTARIAN_PEPPER_ROOT"] * mid_prices["INTARIAN_PEPPER_ROOT"] if "INTARIAN_PEPPER_ROOT" in mid_prices else 0)
+
     return BacktestResult(
         name=name,
         category=category,
         final_pnl=pnl_history[-1],
+        pnl_osmium=pnl_os,
+        pnl_pepper=pnl_pp,
         max_drawdown=max_dd,
         max_position=max_pos,
         trade_count=trade_count,
@@ -309,6 +316,8 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]]) 
             "name": r.name,
             "category": r.category,
             "final_pnl": r.final_pnl,
+            "pnl_osmium": r.pnl_osmium,
+            "pnl_pepper": r.pnl_pepper,
             "max_drawdown": r.max_drawdown,
             "trade_count": r.trade_count,
         })
