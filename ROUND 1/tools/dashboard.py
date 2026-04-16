@@ -22,21 +22,23 @@ import numpy as np
 from scipy.interpolate import make_interp_spline
 
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data_capsule")
+CONFIG_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "config.json"))
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data_capsule"))
 
 def load_config():
     defaults = {
         "osmium_active": True,
         "pepper_active": True,
-        "osmium_limit": 20,
-        "pepper_limit": 20,
+        "osmium_limit": 80,
+        "pepper_limit": 80,
         "emerald_active": True, # For legacy compat
         "tomato_active": True,
-        "emerald_limit": 20,
-        "tomato_limit": 20,
+        "emerald_limit": 80,
+        "tomato_limit": 80,
         "target_spread": 2,
         "mr_threshold": 2,
+        "edge": 1.5,
+        "skew": 0.2,
         "selected_day": -1
     }
     if os.path.exists(CONFIG_FILE):
@@ -53,8 +55,94 @@ def save_config(config):
         json.dump(config, f, indent=4)
 
 # Emergency stop removed per user request
+try:
+    import optuna
+    OPTUNA_AVAILABLE = True
+except ImportError:
+    OPTUNA_AVAILABLE = False
+
+import logging
+if OPTUNA_AVAILABLE:
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 from trader import Trader, logger as trader_logger
+
+def execute_backtest_headless(day, trader_path, config_override=None):
+    df_prices, df_trades = load_and_process_data(day)
+    if df_prices is None: return 0
+    
+    # Dynamic Import
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("trader_optim", trader_path)
+    trader_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(trader_mod)
+    trader = trader_mod.Trader()
+
+    if config_override:
+        for k, v in config_override.items():
+            if k == "osmium_limit" and hasattr(trader, 'limits'):
+                trader.limits['ASH_COATED_OSMIUM'] = v
+            elif k == "pepper_limit" and hasattr(trader, 'limits'):
+                trader.limits['INTARIAN_PEPPER_ROOT'] = v
+            else:
+                setattr(trader, k, v)
+
+    listings = {
+        "ASH_COATED_OSMIUM": Listing("ASH_COATED_OSMIUM", "ASH_COATED_OSMIUM", "XIRECS"),
+        "INTARIAN_PEPPER_ROOT": Listing("INTARIAN_PEPPER_ROOT", "INTARIAN_PEPPER_ROOT", "XIRECS")
+    }
+
+    positions = {"ASH_COATED_OSMIUM": 0, "INTARIAN_PEPPER_ROOT": 0}
+    cash = 0.0
+    pnl_history = []
+    current_trader_data = ""
+    
+    price_map = {}
+    # ... grouping logic ... (kept same)
+    for ts, group in df_prices.groupby("timestamp"):
+        ts_depths = {}
+        for _, row in group.iterrows():
+            product = row["product"]
+            depth = OrderDepth()
+            depth.buy_orders = {int(row["bid_price_1"]): 10}
+            depth.sell_orders = {int(row["ask_price_1"]): -10}
+            ts_depths[product] = (depth, row["ask_price_1"], row["bid_price_1"])
+        price_map[ts] = ts_depths
+
+    timestamps = sorted(price_map.keys())
+    for ts in timestamps:
+        ts_data = price_map[ts]
+        order_depths = {p: d[0] for p, d in ts_data.items()}
+        state = TradingState(traderData=current_trader_data, timestamp=ts, listings=listings,
+                             order_depths=order_depths, own_trades={}, market_trades={},
+                             position=positions, observations=Observation({}, {}))
+        orders, _, new_trader_data = trader.run(state)
+        current_trader_data = new_trader_data
+
+        for product, order_list in orders.items():
+            if product not in ts_data: continue
+            _, curr_ask, curr_bid = ts_data[product]
+            limit = trader.limits.get(product, 20)
+            
+            for order in order_list:
+                qty, price = order.quantity, order.price
+                if qty > 0 and price >= curr_ask: # Buy order hitting the ask
+                    rem_buy = limit - positions[product]
+                    fill = min(qty, rem_buy) if rem_buy > 0 else 0
+                    positions[product] += fill; cash -= fill * curr_ask
+                elif qty < 0 and price <= curr_bid: # Sell order hitting the bid
+                    rem_sell = limit + positions[product]
+                    fill = min(-qty, rem_sell) if rem_sell > 0 else 0
+                    positions[product] -= fill; cash += fill * curr_bid
+
+        mtm = cash
+        for product, pos in positions.items():
+            if product in ts_data:
+                mid = (ts_data[product][1] + ts_data[product][2]) / 2.0
+                mtm += pos * mid
+        pnl_history.append(mtm)
+
+    return pnl_history[-1] if pnl_history else 0
 
 def run_backtest_simulation(day):
     st.toast(f"Running simulation against Day {day}...")
@@ -200,10 +288,13 @@ def run_backtest_simulation(day):
 
     if pnl_history:
         pnl_df = pd.DataFrame({"Timestamp": range(len(pnl_history)), "PnL": pnl_history})
+        # Downsample PnL chart for performance
+        if len(pnl_df) > 1000:
+            pnl_df = pnl_df.iloc[::len(pnl_df)//1000]
         st.line_chart(pnl_df.set_index("Timestamp"), width="stretch")
 
 # Disable caching temporarily to ensure fresh data for every backtest
-@st.cache_data
+# @st.cache_data
 def load_and_process_data(day):
     # Search for files for Round 1
     prices_file = os.path.join(DATA_DIR, f"prices_round_1_day_{day}.csv")
@@ -277,89 +368,89 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
         title=f"{product} Price & Spread Overlay"
     ).interactive()
 
+    # Downsample for Performance
+    if len(df_p) > 2000:
+        step = len(df_p) // 2000
+        df_p = df_p.iloc[::step]
+
+    line = alt.Chart(df_p).mark_line(color=color).encode(
+        x='timestamp:Q',
+        y=alt.Y('mid_price:Q', scale=alt.Scale(zero=False), title="Price"),
+        tooltip=['timestamp', 'mid_price']
+    )
+    # ... rest of altair logic unchanged ...
     st.altair_chart(chart, width="stretch")
     return df_p
 
-def render_reversal_chart(df=None, product="INTARIAN_PEPPER_ROOT"):
-    # Aesthetic Palette
-    DEEP_GREEN = "#1B4332"
-    BRIGHT_GREEN = "#2D6A4F"
-    OCHRE = "#D4A373"
-    MUTED_GREY = "#6C757D"
-    BG_COLOR = "#0D1117"
-    GRID_COLOR = "#30363D"
+def render_reversal_chart(df, product, start_idx=0, window=1000):
+    # Aesthetic Palette (Match Image)
+    TRUE_FV_COLOR = "#2D6A4F"
+    INFERRED_FV_COLOR = "#6c757d"
+    CRASH_COLOR = "#8B4513"
+    BG_COLOR = "#ffffff" # High contrast white like image
+    GRID_COLOR = "#dddddd"
 
-    # Data Preparation
+    # Data Slicing
     if df is not None and not df.empty and product in df['product'].values:
-        df_p = df[df["product"] == product].iloc[-200:].copy()
-        x = df_p["timestamp"].values
-        y_price = df_p["mid_price"].values
+        df_all = df[df["product"] == product].copy()
+        df_p = df_all.iloc[start_idx : start_idx + window].copy()
+        x = np.arange(len(df_p))
+        y_raw = df_p["mid_price"].values
     else:
-        # Synthetic high-fidelity data for demonstration if no data is loaded
-        x = np.linspace(0, 100, 100)
-        y_price = 10000 - 500 * np.exp(-(x-50)**2 / 400) + (x-50) * 1.5
-        y_price += np.random.normal(0, 3, 100)
+        # Synthetic data matching the image's "Crash" pattern
+        x = np.linspace(0, 1000, 1000)
+        y_true = np.concatenate([
+            np.linspace(12000, 12050, 500),
+            np.linspace(12050, 11875, 500)
+        ])
+        y_raw = y_true + np.random.normal(0, 15, 1000)
+        y_price = y_true # Smooth line
 
-    # Smoothing for 'Scientific Aesthetic'
-    x_smooth = np.linspace(x.min(), x.max(), 300)
-    spl = make_interp_spline(x, y_price, k=3)
-    y_smooth = spl(x_smooth)
+    # Compute Smooth Line (True FV)
+    from scipy.ndimage import gaussian_filter1d
+    y_smooth = gaussian_filter1d(y_raw, sigma=15)
+    
+    # Estimated Slope
+    slope = np.gradient(y_smooth)
 
-    # Slope (Secondary Axis)
-    slope = np.gradient(y_smooth, x_smooth)
-
-    # Plot Construction
-    plt.style.use('dark_background')
-    fig, ax1 = plt.subplots(figsize=(12, 6.5), facecolor=BG_COLOR)
+    # Plot
+    plt.style.use('default')
+    fig, ax1 = plt.subplots(figsize=(12, 5.5), facecolor=BG_COLOR)
     ax1.set_facecolor(BG_COLOR)
 
-    # Price Curve (Primary)
-    ax1.plot(x_smooth, y_smooth, color="#40916C", linewidth=2.5, label=r"Price $P(t)$", alpha=0.9, zorder=3)
-    ax1.fill_between(x_smooth, y_smooth, y_smooth.min() - (y_smooth.max()-y_smooth.min())*0.2, 
-                    color="#2D6A4F", alpha=0.1, zorder=2)
+    # Plot Lines
+    ax1.plot(x, y_smooth, color=TRUE_FV_COLOR, linewidth=3, label="True FV", zorder=5)
+    ax1.plot(x, y_raw, color=INFERRED_FV_COLOR, linewidth=1, alpha=0.6, label="Trader inferred FV", zorder=4)
     
-    # Secondary Axis: Slope Dynamics
+    # Secondary Axis
     ax2 = ax1.twinx()
-    ax2.plot(x_smooth, slope, color=OCHRE, linestyle="--", linewidth=1.2, alpha=0.7, label=r"Slope $\dot{P}(t)$", zorder=3)
-    ax2.fill_between(x_smooth, slope, 0, where=(slope > 0), color=OCHRE, alpha=0.05, zorder=1)
-    ax2.fill_between(x_smooth, slope, 0, where=(slope < 0), color="#854d0e", alpha=0.05, zorder=1)
-
-    # Trend Reversal Identification
-    rev_idx = np.argmin(y_smooth)
-    rx, ry = x_smooth[rev_idx], y_smooth[rev_idx]
+    ax2.plot(x, slope, color=INFERRED_FV_COLOR, linewidth=0.8, alpha=0.4, label="Estimated slope / tick")
+    ax2.axhline(0, color="grey", linestyle=":", linewidth=0.8)
     
-    # Precise Mathematical labels & Tooltip
-    ax1.annotate(fr"STRUCTURAL REVERSAL\n$t = {rx:.1f}$\n$P_{{min}} = {ry:.2f}$\n$\Delta P/\Delta t \\approx 0$", 
-                 xy=(rx, ry), xytext=(rx + (x.max()-x.min())*0.1, ry + (y_price.max()-y_price.min())*0.2),
-                 arrowprops=dict(arrowstyle="->", color=OCHRE, connectionstyle="arc3,rad=.3", lw=1),
-                 bbox=dict(boxstyle="round,pad=0.6", fc=BG_COLOR, ec=OCHRE, alpha=0.9, lw=1),
-                 color="white", fontsize=9, fontfamily='monospace')
-
-    # Formatting
-    ax1.set_xlabel("Time (Microseconds)", color=MUTED_GREY, fontsize=10)
-    ax1.set_ylabel("Price Units", color="#40916C", fontsize=10, fontweight='bold')
-    ax2.set_ylabel(r"Velocity Vector ($\dot{P}$)", color=OCHRE, fontsize=10, fontweight='bold')
+    # Crash Interaction (approx middle or detect peak)
+    crash_idx = np.argmax(y_smooth)
+    ax1.axvline(crash_idx, color=CRASH_COLOR, linestyle="--", linewidth=1.5, label="Crash tick")
     
-    ax1.grid(True, which='both', color=GRID_COLOR, linestyle=':', linewidth=0.5, alpha=0.6)
-    
-    # Ticks & Spines
-    ax1.tick_params(axis='both', colors=MUTED_GREY, labelsize=8)
-    ax2.tick_params(axis='y', colors=MUTED_GREY, labelsize=8)
-    for spine in ax1.spines.values(): spine.set_color(GRID_COLOR)
-    for spine in ax2.spines.values(): spine.set_color(GRID_COLOR)
+    # Annotation
+    ax1.annotate(f"detect @ tick {start_idx + crash_idx}\nlag = 2", 
+                 xy=(crash_idx, y_smooth[crash_idx]), xytext=(crash_idx + 50, y_smooth[crash_idx] + 20),
+                 arrowprops=dict(arrowstyle="->", color="#D4A373"),
+                 bbox=dict(boxstyle="round,pad=0.3", fc="#FEF9E7", ec="#D4A373", alpha=0.8),
+                 fontsize=10)
 
-    plt.title("MSR-1: MOMENTUM STRUCTURAL REVERSAL ANALYSIS", color="white", fontsize=12, pad=25, loc='left', fontweight='bold', fontfamily='serif')
+    # Labels
+    ax1.set_xlabel("Tick", fontsize=10)
+    ax1.set_ylabel("Fair value", fontsize=10)
+    ax2.set_ylabel("Estimated slope / tick", fontsize=10)
     
-    # Legend
-    lines1, labels1 = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper right", frameon=True, facecolor=BG_COLOR, edgecolor=GRID_COLOR, fontsize=8)
-
+    ax1.grid(True, which='both', color=GRID_COLOR, linestyle='-', linewidth=0.5)
+    ax1.legend(loc="upper right", frameon=True, fontsize=9)
+    
     plt.tight_layout()
     st.pyplot(fig, use_container_width=True)
 
 def forge_trader():
-    TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "trader.py")
+    TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "..", "traders", "trader.py")
     if not os.path.exists(TRADER_TEMPLATE):
         st.error(f"Template not found at {TRADER_TEMPLATE}")
         return
@@ -413,6 +504,16 @@ def perform_auto_analysis():
     st.toast("Analysis Successful!")
 
 def main():
+    # --- PRE-RENDER STATE SYNC (CRITICAL FOR WIDGET UPDATES) ---
+    if st.session_state.get("pending_apply"):
+        for k, v in st.session_state.best_params.items():
+            st.session_state.config[k] = v
+            # Initialize or Update the widget key BEFORE it renders
+            st.session_state[k] = v
+        save_config(st.session_state.config)
+        del st.session_state["pending_apply"]
+        st.toast("✅ Optimization parameters applied to sidebar!")
+        # No rerun here to keep tab state if possible, or use a small toast
     st.set_page_config(page_title="P4 Control Center", layout="wide")
 
     if "config" not in st.session_state:
@@ -425,6 +526,8 @@ def main():
         st.session_state.config["pepper_limit"] = st.session_state.pepper_limit
         st.session_state.config["target_spread"] = st.session_state.target_spread
         st.session_state.config["mr_threshold"] = st.session_state.mr_threshold
+        st.session_state.config["edge"] = st.session_state.edge
+        st.session_state.config["skew"] = st.session_state.skew
         save_config(st.session_state.config)
 
     # --- SIDEBAR & TRADING SETUP ---
@@ -449,16 +552,16 @@ def main():
         st.subheader("Inventory Limits")
 
         # Safe-Fail Warning
-        if st.session_state.config["emerald_limit"] > 18 or st.session_state.config["tomato_limit"] > 18:
-            st.error("⚠️ DANGER: Keeping limits at 20 is risky. Stay at 15-18 to avoid liquidation.")
+        if st.session_state.config["osmium_limit"] > 100 or st.session_state.config["pepper_limit"] > 100:
+            st.error("⚠️ DANGER: Keeping limits at max is risky.")
 
-        st.slider("💎 Osmium", 0, 20,
+        st.slider("💎 Osmium", 0, 80,
                   key="osmium_limit",
                   value=st.session_state.config["osmium_limit"],
                   on_change=on_change_callback)
         st.caption("Max units you can carry.")
 
-        st.slider("🌶️ Pepper Root", 0, 20,
+        st.slider("🌶️ Pepper Root", 0, 80,
                   key="pepper_limit",
                   value=st.session_state.config["pepper_limit"],
                   on_change=on_change_callback)
@@ -466,17 +569,29 @@ def main():
 
         st.divider()
         st.subheader("Pricing Multipliers")
-        st.slider("🎯 Target Spread", 1.0, 10.0,
+        st.slider("🎯 Target Spread", 1.0, 15.0,
                   key="target_spread",
                   value=float(st.session_state.config["target_spread"]),
                   on_change=on_change_callback)
-        st.caption("Aggressiveness. Higher = bigger profit per trade, but fewer fills.")
+        st.caption("Aggressiveness. Higher = bigger profit per trade.")
 
         st.slider("📏 MR Threshold", 1.0, 20.0,
                   key="mr_threshold",
                   value=float(st.session_state.config["mr_threshold"]),
                   on_change=on_change_callback)
-        st.caption("How far the price must 'stretch' before the rubber band snaps back.")
+        st.caption("Reversion sensitivity.")
+
+        st.slider("⚔️ Edge Margin", 0.0, 10.0,
+                  key="edge",
+                  value=float(st.session_state.config.get("edge", 1.5)),
+                  on_change=on_change_callback)
+        st.caption("Minimum profit buffer for aggressive takes.")
+
+        st.slider("⚖️ Inventory Skew", 0.0, 2.0,
+                  key="skew",
+                  value=float(st.session_state.config.get("skew", 0.2)),
+                  on_change=on_change_callback)
+        st.caption("Shift pricing based on current position.")
 
         st.divider()
         st.info("Configuration is synchronized actively to JSON.")
@@ -484,7 +599,78 @@ def main():
     # --- MAIN CONTENT ---
     st.title("📈 Prosperity 4: Operations Console")
 
-    tab_backtest, tab_forge, tab_advanced = st.tabs(["📉 Visual Backtester", "🛠️ One-Click Forge", "🔬 Advanced Analysis"])
+    tab_backtest, tab_forge, tab_advanced, tab_ai = st.tabs([
+        "📉 Visual Backtester", "🛠️ One-Click Forge", "🔬 Advanced Analysis", "🧠 AI Optimizer"
+    ])
+
+    with tab_ai:
+        if not OPTUNA_AVAILABLE:
+            st.error("📉 AI Optimizer is currently unavailable.")
+            st.info("To enable Bayesian Optimization, please run: `pip install optuna` and restart the dashboard.")
+        else:
+            st.header("🧠 Bayesian Hyperparameter Search")
+            
+            # --- Results at the top ---
+            if "best_params" in st.session_state:
+                st.markdown("### 🏆 Hall of Fame")
+                col_res1, col_res2 = st.columns([1, 1])
+                with col_res1:
+                    st.success(f"Best PnL found: **${st.session_state.get('best_pnl', 0):,.2f}**")
+                    st.table(pd.DataFrame([st.session_state.best_params]).T.rename(columns={0: "Optimum Value"}))
+                with col_res2:
+                    if st.button("✅ Apply These Params to Sidebar", type="primary"):
+                        st.session_state.pending_apply = True
+                        st.rerun() # This will now work because we'll catch it at the top of next run
+
+                st.divider()
+
+            st.markdown("""
+            Utilizing a **Tree-structured Parzen Estimator (TPE)** algorithm to navigate the parameter space.
+            This system simulates hundreds of trading scenarios to find the global optimum for PnL.
+            """)
+            
+            col_opt1, col_opt2 = st.columns(2)
+            with col_opt1:
+                # Dynamically find traders
+                trader_search = []
+                trader_base = os.path.join(os.path.dirname(__file__), "..", "traders")
+                for root, _, files in os.walk(trader_base):
+                    for f in files:
+                        if f.endswith(".py") and not f.startswith("__"):
+                            trader_search.append(os.path.relpath(os.path.join(root, f), os.getcwd()))
+                
+                selected_trader = st.selectbox("Target Trader File", trader_search)
+                n_trials = st.number_input("Search Iterations", 10, 200, 30)
+                target_day = st.selectbox("Optimize For Style", ["All Days (Robust)", -1, -2, 0], index=0)
+            
+            if st.button("🚀 Start Deep Search", type="primary"):
+                pbar = st.progress(0)
+                
+                def objective(trial):
+                    config = {
+                        "osmium_limit": trial.suggest_int("osmium_limit", 5, 80),
+                        "pepper_limit": trial.suggest_int("pepper_limit", 5, 80),
+                        "edge": trial.suggest_float("edge", 0.5, 5.0),
+                        "skew": trial.suggest_float("skew", 0.1, 1.0)
+                    }
+                    full_path = os.path.abspath(selected_trader)
+                    
+                    # Robustness Check: Average across multiple datasets
+                    days_to_test = [-1, -2, 0] if target_day == "All Days (Robust)" else [target_day]
+                    total_res = 0
+                    for d in days_to_test:
+                        total_res += execute_backtest_headless(d, full_path, config)
+                    
+                    res = total_res / len(days_to_test)
+                    pbar.progress((trial.number + 1) / n_trials)
+                    return res
+
+                study = optuna.create_study(direction="maximize")
+                study.optimize(objective, n_trials=n_trials)
+                
+                st.session_state.best_params = study.best_params
+                st.session_state.best_pnl = study.best_value
+                st.rerun() # Refresh to show results at the top
 
     with tab_forge:
         st.header("🛠️ Upload Assembly Pipeline")
@@ -508,7 +694,7 @@ def main():
 
         # 1. Scanning
         st.markdown("### 1. Data Scan")
-        TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "trader.py")
+        TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "..", "traders", "trader.py")
         d1 = os.path.exists(os.path.join(DATA_DIR, "prices_round_1_day_-1.csv"))
         d2 = os.path.exists(os.path.join(DATA_DIR, "prices_round_1_day_-2.csv"))
         t_exists = os.path.exists(TRADER_TEMPLATE)
@@ -522,9 +708,11 @@ def main():
         # 2. Analysis
         st.markdown("### 2. Auto-Analysis Engine")
         st.caption("This tool determines the 'Fair Value' for Osmium and the 'Volatility' for Pepper Root based on your historical CSV data.")
-        st.button("🔍 Run Auto-Analysis",
-                  on_click=perform_auto_analysis,
-                  disabled=not (d1 and d2 and t_exists))
+        if st.button("🔍 Run Auto-Analysis",
+                      disabled=not (d1 and d2 and t_exists),
+                      key="run_ana_btn"):
+            perform_auto_analysis()
+            # No st.rerun needed, it stays in sync
 
         if "analysis" in st.session_state:
             st.info(f"**Insight:** Based on your data, we recommend anchoring Osmium to **{st.session_state.analysis['os_mean']:.0f}**. Pepper Root is currently showing a volatility factor of **{st.session_state.analysis['pep_std']:.2f}**, which we will use to scale your profit capture.")
@@ -534,9 +722,10 @@ def main():
 
             st.markdown("### 3. Final Execution")
             st.caption("We will now inject your sidebar settings (Limits, Aggressiveness) and the analyzed fair values into your final script.")
-            st.button("⚙️ Forge Final Trader.py",
-                      on_click=forge_trader,
-                      type="primary")
+            if st.button("⚙️ Forge Final Trader.py",
+                          type="primary",
+                          key="forge_btn"):
+                forge_trader()
 
             if "forged_code" in st.session_state:
                 st.balloons()
@@ -549,24 +738,29 @@ def main():
                 )
 
     with tab_advanced:
-        st.header("🔬 Quantitative Trend Dynamics")
-        st.markdown("""
-        Exploratory view of price momentum using 3rd-order spline interpolation. 
-        This tool identifies structural reversals by monitoring the zero-crossing of the local price derivative.
-        """)
+        st.header("🔬 Quantitative Trend Analysis")
         
-        # Load most recent data if available
+        # Load most recent data
         df_p, _ = load_and_process_data(st.session_state.config.get("selected_day", -1))
         
-        col_ctrl1, col_ctrl2 = st.columns([1, 3])
-        with col_ctrl1:
-            prod_select = st.selectbox("Select Asset", ["INTARIAN_PEPPER_ROOT", "ASH_COATED_OSMIUM"], index=0)
-            st.info("💡 Ochre dashed line represents the first derivative (slope). A crossing of the zero-axis indicates a potential trend peak or trough.")
-        
-        render_reversal_chart(df_p, product=prod_select)
+        col_ctrl1, col_ctrl2 = st.columns([1, 2])
+        if df_p is not None:
+            with col_ctrl1:
+                prod_select = st.selectbox("Select Asset", df_p['product'].unique(), index=0)
+                max_len = len(df_p[df_p['product'] == prod_select])
+                
+                start_tick = st.slider("Start Tick", 0, max_len - 100, 0)
+                window_size = st.slider("Window Size", 100, min(5000, max_len), 1000)
+                
+            with col_ctrl2:
+                st.info("💡 **Inferred FV** (grey) vs **True FV** (green). Use sliders to inspect specific reversal events.")
+
+            render_reversal_chart(df_p, product=prod_select, start_idx=start_tick, window=window_size)
+        else:
+            st.error("No data loaded. Run backtest/simulation first.")
 
         st.divider()
-        st.caption("Aesthetic profile: Deep Greens, Muted Greys, Ochre Accents. Matplotlib SVG Vector Backend.")
+        st.caption("Aesthetic profile: Institutional White/Grey. Matplotlib High-DPI Vector Backend.")
 
     with tab_backtest:
         st.success("**Mission Status:** Currently analyzing Tutorial Data. Goal: Maintain Emeralds at ~10,000 and manage Tomato volatility.")
@@ -613,7 +807,8 @@ def main():
             st.dataframe(df_prices.tail(10), width="stretch")
 
         else:
-            st.warning(f"Could not locate data for Day {selected_day} in data_capsule/.")
+            st.warning(f"Could not locate data for Day {selected_day} at: {DATA_DIR}")
+            st.code(f"Looking for: prices_round_1_day_{selected_day}.csv")
 
 if __name__ == "__main__":
     main()

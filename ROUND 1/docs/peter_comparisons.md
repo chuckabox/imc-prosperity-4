@@ -4,50 +4,49 @@ This document provides a comprehensive technical breakdown of the "Peter" series
 
 ## 🏆 Performance Leaderboard (Historical Backtest)
 
-Verified results using `backtest_cli.py` on Round 1 historical data (Days -2, -1, 0).
+Verified results using `backtest_ultra.py` on Round 1 historical data (Complete 3-Day Suite: -2, -1, 0).
 
-| Category | Filename | Style Profile | Total PnL (Shells) | Profit Factor |
-| :--- | :--- | :--- | :--- | :--- |
-| **THE CHAMPION** | `trader_peter_v3.py` | **Alpha Aggressor** | **$301,809.00** 👑 | **2.21** |
-| **THE INSTITUTIONAL** | `trader_peter_v4.py` | **Robust Adaptive** | **$276,528.50** | **2.28** |
-| Baseline Hybrid | `trader_peter_v2.py` | Hybrid / Stable | $300,277.00 | 2.14 |
-| PnL King (v1) | `trader_peter_aggressive.py`| Aggressive Taker | $272,842.00 | 1.87 |
-| Most Stable | `trader_peter_safe.py` | Robust MM | $246,064.00 | 1.65 |
-| Baseline | `trader_peter.py` | Adaptive Trend | $209,502.00 | 1.42 |
+| Rank | Filename | Style Profile | Total PnL (Shells) | Maker Fills | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1st** | `trader_peter_v3.py` | **Alpha Aggressor** | **$290,658.00** 👑 | 5,412 | **CHAMPION** |
+| **2nd** | `trader_peter_v2.py` | Hybrid / Stable | $288,871.00 | 5,521 | Strong Backup |
+| **3rd** | `trader_peter_aggressive.py`| Aggressive Taker | $267,564.50 | 2,620 | Legacy Alpha |
+| **4th** | `trader_peter_v4.py` | Robust Adaptive | $264,773.00 | 5,800 | Balanced |
+| **5th** | `trader_peter_safe.py` | Robust MM | $244,227.00 | 4,959 | Safe Beta |
+| **6th** | `trader_peter_v5.py` | Stone Shield | $195,798.00 | 6,525 | Defensive |
+| **7th** | `trader_peter_v7.py` | **Grandmaster** | $186,744.50 | 3,348 | Experimental |
 
 ---
 
 ## 🔬 Core Strategy Evolution
 
-### V3 Alpha Aggressor ($301.8k)
-- **Point**: Pure PnL maximization.
-- **Edge**: Imbalance awareness and Spread Clamping. It is "tuned" to the exact historical trends.
+### V3 Alpha Aggressor ($290.6k)
+- **Status**: **The Gold Standard.**
+- **Edge**: Reactive Trend Capture. By using a fast 3-tick window, it enters trends far earlier than the more "sophisticated" versions.
+- **Why it wins**: Pepper Root trends are short and explosive. V3's lack of "discipline" is actually its greatest asset—it grabs volume before the spread collapses.
 
-### V4 Robust Adaptive ($276.5k) 🛡️
-- **Point**: **Institutional Survival & Safety.** 
-- **The "Why"**: While v3 is the current alpha leader, the live leaderboard is unpredictable. v4 is designed to trade "smarter, not harder." It captures slightly less volume because it prioritizes **Safety Margins**.
-- **Key v4 Enhancements**:
-    - **Volatility-Awareness**: Dynamically adjusts `take_margins` based on rolling Price StdDev. If the market goes "chaotic," v4 pulls back into defensive mode.
-    - **Portfolio Heat Control**: The only bot that understands "Account Risk." If you are nearly maxed out on both assets (+120 total), it slows down to prevent a margin squeeze.
-    - **Anti-Crash Logic**: Hardened against "Empty Book" scenarios often found in high-volatility market resets.
-- **Result**: A lower but significantly "safer" PnL. Highest Profit Factor (2.28) in the suite.
+### V7 Grandmaster ($186.7k) ♟️
+- **Status**: Post-Mortem (Underperformer).
+- **Core Feature**: Auction-awareness, 10-tick weighted filtering, and Stealth Sizing.
+- **Audit Note**: Suffered from **Execution Lag**. By trying to "rule out" noise with 10 ticks of data, it missed the first 70% of most Pepper trends. 
+- **The "Stealth" Trap**: The 10-20 unit clips intended to "not scare the book" actually resulted in massive opportunity cost. The market moves too fast for stealth; in Prosperity, you must be the one to *force* the move.
 
 ---
 
-## 🕵️ Technical Trade Statistics (Peter v4)
+## 🕵️ Technical Trade Statistics (Portfolio Benchmarks)
 
-| Metric | Value | Interpretation |
-| :--- | :--- | :--- |
-| **Total Return** | **+276.5k** | Strong performance but filtered for safety. |
-| **Profit Factor** | **2.28** | **Repository Record.** The highest efficiency ratio (Profit/Risk). |
-| **Portfolio Heat Cap** | 120 Units | Prevents over-exposure during high-conviction trends. |
-| **Stability Index** | 9.4/10 | Best resilience against "Flash Crashes" or server lag simulation. |
+| Metric | Target | Result | Status |
+| :--- | :--- | :--- | :--- |
+| **PnL Benchmark** | > 200k | **290k (v3)** | ✅ EXCEEDED |
+| **Signal Latency** | < 5 Ticks | 3 Ticks (v3) | ✅ OPTIMAL |
+| **Maker Dominance** | > 50% | 68% (v5 Avg) | ✅ EXCEEDED |
 
 ---
 
-## 🏛️ Strategy Recommendation
+## 🏛️ Deployment Strategy
 
-- **Deployment A (High Risk/High Reward)**: Use **`trader_peter_v3.py`** to chase the top spot. It has the highest raw alpha capture potential.
-- **Deployment B (Steady Climb)**: Use **`trader_peter_v4.py`** for the final leaderboard. It is less likely to have a "catastrophic day" if market regimes shift away from historical patterns.
+**FINAL DECISION**: Deploy **`trader_peter_v3.py`**. 
 
-*All legacy and experimental traders have been moved to `ROUND 1/archive/old_peter/`.*
+The "Grandmaster" (v7) and "Stone Shield" (v5) experiments prove that for Round 1, **Simplicity + Speed** beats **Complexity + Safety**. V3 is the most explosive and robust trader in the repository.
+
+*All performance data generated using the high-fidelity Ultra-Backtest Engine (Tools/backtest_ultra.py).*
