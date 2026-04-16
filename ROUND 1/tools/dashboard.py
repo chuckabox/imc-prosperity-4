@@ -1,10 +1,26 @@
 import streamlit as st
 import json
 import os
+import sys
+
+# Resolve absolute paths for relative imports (datamodel in ../config, trader in ../traders)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+config_path = os.path.abspath(os.path.join(script_dir, "..", "config"))
+traders_path = os.path.abspath(os.path.join(script_dir, "..", "traders"))
+
+if config_path not in sys.path:
+    sys.path.insert(0, config_path)
+if traders_path not in sys.path:
+    sys.path.insert(0, traders_path)
+
 import pandas as pd
 import altair as alt
 import re
 from datamodel import Listing, OrderDepth, TradingState, Observation, Order
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.interpolate import make_interp_spline
+
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data_capsule")
@@ -264,6 +280,84 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
     st.altair_chart(chart, width="stretch")
     return df_p
 
+def render_reversal_chart(df=None, product="INTARIAN_PEPPER_ROOT"):
+    # Aesthetic Palette
+    DEEP_GREEN = "#1B4332"
+    BRIGHT_GREEN = "#2D6A4F"
+    OCHRE = "#D4A373"
+    MUTED_GREY = "#6C757D"
+    BG_COLOR = "#0D1117"
+    GRID_COLOR = "#30363D"
+
+    # Data Preparation
+    if df is not None and not df.empty and product in df['product'].values:
+        df_p = df[df["product"] == product].iloc[-200:].copy()
+        x = df_p["timestamp"].values
+        y_price = df_p["mid_price"].values
+    else:
+        # Synthetic high-fidelity data for demonstration if no data is loaded
+        x = np.linspace(0, 100, 100)
+        y_price = 10000 - 500 * np.exp(-(x-50)**2 / 400) + (x-50) * 1.5
+        y_price += np.random.normal(0, 3, 100)
+
+    # Smoothing for 'Scientific Aesthetic'
+    x_smooth = np.linspace(x.min(), x.max(), 300)
+    spl = make_interp_spline(x, y_price, k=3)
+    y_smooth = spl(x_smooth)
+
+    # Slope (Secondary Axis)
+    slope = np.gradient(y_smooth, x_smooth)
+
+    # Plot Construction
+    plt.style.use('dark_background')
+    fig, ax1 = plt.subplots(figsize=(12, 6.5), facecolor=BG_COLOR)
+    ax1.set_facecolor(BG_COLOR)
+
+    # Price Curve (Primary)
+    ax1.plot(x_smooth, y_smooth, color="#40916C", linewidth=2.5, label=r"Price $P(t)$", alpha=0.9, zorder=3)
+    ax1.fill_between(x_smooth, y_smooth, y_smooth.min() - (y_smooth.max()-y_smooth.min())*0.2, 
+                    color="#2D6A4F", alpha=0.1, zorder=2)
+    
+    # Secondary Axis: Slope Dynamics
+    ax2 = ax1.twinx()
+    ax2.plot(x_smooth, slope, color=OCHRE, linestyle="--", linewidth=1.2, alpha=0.7, label=r"Slope $\dot{P}(t)$", zorder=3)
+    ax2.fill_between(x_smooth, slope, 0, where=(slope > 0), color=OCHRE, alpha=0.05, zorder=1)
+    ax2.fill_between(x_smooth, slope, 0, where=(slope < 0), color="#854d0e", alpha=0.05, zorder=1)
+
+    # Trend Reversal Identification
+    rev_idx = np.argmin(y_smooth)
+    rx, ry = x_smooth[rev_idx], y_smooth[rev_idx]
+    
+    # Precise Mathematical labels & Tooltip
+    ax1.annotate(fr"STRUCTURAL REVERSAL\n$t = {rx:.1f}$\n$P_{{min}} = {ry:.2f}$\n$\Delta P/\Delta t \\approx 0$", 
+                 xy=(rx, ry), xytext=(rx + (x.max()-x.min())*0.1, ry + (y_price.max()-y_price.min())*0.2),
+                 arrowprops=dict(arrowstyle="->", color=OCHRE, connectionstyle="arc3,rad=.3", lw=1),
+                 bbox=dict(boxstyle="round,pad=0.6", fc=BG_COLOR, ec=OCHRE, alpha=0.9, lw=1),
+                 color="white", fontsize=9, fontfamily='monospace')
+
+    # Formatting
+    ax1.set_xlabel("Time (Microseconds)", color=MUTED_GREY, fontsize=10)
+    ax1.set_ylabel("Price Units", color="#40916C", fontsize=10, fontweight='bold')
+    ax2.set_ylabel(r"Velocity Vector ($\dot{P}$)", color=OCHRE, fontsize=10, fontweight='bold')
+    
+    ax1.grid(True, which='both', color=GRID_COLOR, linestyle=':', linewidth=0.5, alpha=0.6)
+    
+    # Ticks & Spines
+    ax1.tick_params(axis='both', colors=MUTED_GREY, labelsize=8)
+    ax2.tick_params(axis='y', colors=MUTED_GREY, labelsize=8)
+    for spine in ax1.spines.values(): spine.set_color(GRID_COLOR)
+    for spine in ax2.spines.values(): spine.set_color(GRID_COLOR)
+
+    plt.title("MSR-1: MOMENTUM STRUCTURAL REVERSAL ANALYSIS", color="white", fontsize=12, pad=25, loc='left', fontweight='bold', fontfamily='serif')
+    
+    # Legend
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper right", frameon=True, facecolor=BG_COLOR, edgecolor=GRID_COLOR, fontsize=8)
+
+    plt.tight_layout()
+    st.pyplot(fig, use_container_width=True)
+
 def forge_trader():
     TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "trader.py")
     if not os.path.exists(TRADER_TEMPLATE):
@@ -390,7 +484,7 @@ def main():
     # --- MAIN CONTENT ---
     st.title("📈 Prosperity 4: Operations Console")
 
-    tab_backtest, tab_forge = st.tabs(["📉 Visual Backtester", "🛠️ One-Click Forge"])
+    tab_backtest, tab_forge, tab_advanced = st.tabs(["📉 Visual Backtester", "🛠️ One-Click Forge", "🔬 Advanced Analysis"])
 
     with tab_forge:
         st.header("🛠️ Upload Assembly Pipeline")
@@ -453,6 +547,26 @@ def main():
                     mime="text/x-python",
                     type="primary"
                 )
+
+    with tab_advanced:
+        st.header("🔬 Quantitative Trend Dynamics")
+        st.markdown("""
+        Exploratory view of price momentum using 3rd-order spline interpolation. 
+        This tool identifies structural reversals by monitoring the zero-crossing of the local price derivative.
+        """)
+        
+        # Load most recent data if available
+        df_p, _ = load_and_process_data(st.session_state.config.get("selected_day", -1))
+        
+        col_ctrl1, col_ctrl2 = st.columns([1, 3])
+        with col_ctrl1:
+            prod_select = st.selectbox("Select Asset", ["INTARIAN_PEPPER_ROOT", "ASH_COATED_OSMIUM"], index=0)
+            st.info("💡 Ochre dashed line represents the first derivative (slope). A crossing of the zero-axis indicates a potential trend peak or trough.")
+        
+        render_reversal_chart(df_p, product=prod_select)
+
+        st.divider()
+        st.caption("Aesthetic profile: Deep Greens, Muted Greys, Ochre Accents. Matplotlib SVG Vector Backend.")
 
     with tab_backtest:
         st.success("**Mission Status:** Currently analyzing Tutorial Data. Goal: Maintain Emeralds at ~10,000 and manage Tomato volatility.")
