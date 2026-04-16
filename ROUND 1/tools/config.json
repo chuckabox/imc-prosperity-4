@@ -1,15 +1,15 @@
 {
     "osmium_active": true,
     "pepper_active": true,
-    "osmium_limit": 70,
-    "pepper_limit": 74,
+    "osmium_limit": 76,
+    "pepper_limit": 5,
     "emerald_active": true,
     "tomato_active": true,
     "emerald_limit": 20,
     "tomato_limit": 20,
     "target_spread": 2.0,
     "mr_threshold": 2.0,
-    "edge": 2.9523534609434083,
-    "skew": 0.5753192199163136,
+    "edge": 2.9650721429801856,
+    "skew": 0.45400448165824,
     "selected_day": "All"
 }

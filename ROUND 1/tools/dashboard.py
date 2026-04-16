@@ -613,8 +613,8 @@ def main():
     # --- MAIN CONTENT ---
     st.title("📈 Prosperity 4: Operations Console")
 
-    tab_backtest, tab_forge, tab_advanced, tab_ai = st.tabs([
-        "📉 Visual Backtester", "🛠️ One-Click Forge", "🔬 Advanced Analysis", "🧠 AI Optimizer"
+    tab_backtest, tab_forge, tab_advanced, tab_ai, tab_external = st.tabs([
+        "📉 Visual Backtester", "🛠️ One-Click Forge", "🔬 Advanced Analysis", "🧠 AI Optimizer", "🌐 Market Data (AV)"
     ])
 
     with tab_ai:
@@ -775,6 +775,33 @@ def main():
 
         st.divider()
         st.caption("Aesthetic profile: Institutional White/Grey. Matplotlib High-DPI Vector Backend.")
+
+    with tab_external:
+        st.header("🌐 Alpha Vantage Real Market Terminal")
+        
+        ext_path = 'ROUND 1/data/external/processed/SPY.csv'
+        if os.path.exists(ext_path):
+            df_ext = pd.read_csv(ext_path)
+            st.success(f"Successfully loaded SPY from local cache ({len(df_ext)} rows).")
+            
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                chart_ext = alt.Chart(df_ext).mark_line(color='#1e90ff').encode(
+                    x=alt.X('timestamp:T', title="Time"),
+                    y=alt.Y('close:Q', scale=alt.Scale(zero=False), title="Price"),
+                    tooltip=['timestamp', 'close', 'volume']
+                ).properties(height=400).interactive()
+                st.altair_chart(chart_ext, use_container_width=True)
+            
+            with col2:
+                st.metric("Latest Price", f"${df_ext['close'].iloc[-1]:.2f}")
+                st.metric("Avg Volume", f"{df_ext['volume'].mean():.0f}")
+                st.info("Cross-validation: Use this to test if your IMC signals generalize to standard liquid equities.")
+        else:
+            st.warning("No external data found. Run Alpha Vantage sync script first.")
+            if st.button("🔄 Sync SPY Now"):
+                st.info("Triggering sync...")
+                # Note: In real app, you would run the request here.
 
     with tab_backtest:
         st.success("**Mission Status:** Currently analyzing Tutorial Data. Goal: Maintain Emeralds at ~10,000 and manage Tomato volatility.")
