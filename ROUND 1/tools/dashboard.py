@@ -613,6 +613,7 @@ def main():
     # --- MAIN CONTENT ---
     st.title("📈 Prosperity 4: Operations Console")
 
+<<<<<<< Updated upstream
     tab_backtest, tab_forge, tab_advanced, tab_ai, tab_performance, tab_external, tab_robust = st.tabs([
         "📉 Visual Backtester",
         "🛠️ One-Click Forge",
@@ -621,6 +622,10 @@ def main():
         "📊 Performance Scatter",
         "🌐 Market Data (AV)",
         "🛡️ Robust Analysis",
+=======
+    tab_backtest, tab_ai, tab_performance, tab_external = st.tabs([
+        "📉 Visual Backtester", "🧠 AI Optimizer", "📊 Performance Matrix", "🌐 Market Data (AV)"
+>>>>>>> Stashed changes
     ])
 
     with tab_ai:
@@ -692,103 +697,15 @@ def main():
                 st.session_state.best_pnl = study.best_value
                 st.rerun() # Refresh to show results at the top
 
-    with tab_forge:
-        st.header("🛠️ Upload Assembly Pipeline")
-        st.write("Compile your findings and configurations into a professional `trader.py` ready for the IMC portal.")
-
-        # --- STRATEGY SCHOOL ---
-        st.markdown("## 🏫 Strategy School: Mean Reversion")
-        col_text, col_viz = st.columns([2, 1])
-        with col_text:
-            st.markdown("""
-            **The 'Rubber Band' Concept:**
-            Think of the price of an asset like a rubber band anchored to a fixed point. In Mean Reversion, we assume that whenever the price stretches too far away from its "Fair Value," it will eventually snap back to the middle.
-
-            *   **When to Buy:** When the price is significantly *below* the fair value.
-            *   **When to Sell:** When the price is significantly *above* the fair value.
-            """)
-        with col_viz:
-            st.success("💎 **Osmium** is perfect for this because it rarely moves far from 10,000.")
-
-        st.divider()
-
-        # 1. Scanning
-        st.markdown("### 1. Data Scan")
-        TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "..", "traders", "trader.py")
-        d1 = os.path.exists(os.path.join(DATA_DIR, "prices_round_1_day_-1.csv"))
-        d2 = os.path.exists(os.path.join(DATA_DIR, "prices_round_1_day_-2.csv"))
-        t_exists = os.path.exists(TRADER_TEMPLATE)
-
-        if d1 and d2 and t_exists:
-            st.success("✅ System check passed: Price data and Trader template are ready.")
-        else:
-            if not t_exists: st.error("❌ Template Error: `trader.py` not found in folder.")
-            if not (d1 and d2): st.error("❌ Data Error: Historical CSVs missing from `data_capsule/`.")
-
-        # 2. Analysis
-        st.markdown("### 2. Auto-Analysis Engine")
-        st.caption("This tool determines the 'Fair Value' for Osmium and the 'Volatility' for Pepper Root based on your historical CSV data.")
-        if st.button("🔍 Run Auto-Analysis",
-                      disabled=not (d1 and d2 and t_exists),
-                      key="run_ana_btn"):
-            perform_auto_analysis()
-            # No st.rerun needed, it stays in sync
-
-        if "analysis" in st.session_state:
-            st.info(f"**Insight:** Based on your data, we recommend anchoring Osmium to **{st.session_state.analysis['os_mean']:.0f}**. Pepper Root is currently showing a volatility factor of **{st.session_state.analysis['pep_std']:.2f}**, which we will use to scale your profit capture.")
-
-            st.metric("Derived Osmium Fair Value", f"{st.session_state.analysis['os_mean']:.1f}")
-            st.metric("Derived Pepper Root Volatility", f"{st.session_state.analysis['pep_std']:.2f}")
-
-            st.markdown("### 3. Final Execution")
-            st.caption("We will now inject your sidebar settings (Limits, Aggressiveness) and the analyzed fair values into your final script.")
-            if st.button("⚙️ Forge Final Trader.py",
-                          type="primary",
-                          key="forge_btn"):
-                forge_trader()
-
-            if "forged_code" in st.session_state:
-                st.balloons()
-                st.download_button(
-                    label="⬇️ Download Your Optimized Trader.py",
-                    data=st.session_state.forged_code,
-                    file_name="trader.py",
-                    mime="text/x-python",
-                    type="primary"
-                )
-
-    with tab_advanced:
-        st.header("🔬 Quantitative Trend Analysis")
-        
-        # Load most recent data
-        df_p, _ = load_and_process_data(st.session_state.config.get("selected_day", -1))
-        
-        col_ctrl1, col_ctrl2 = st.columns([1, 2])
-        if df_p is not None:
-            with col_ctrl1:
-                prod_select = st.selectbox("Select Asset", df_p['product'].unique(), index=0)
-                max_len = len(df_p[df_p['product'] == prod_select])
-                
-                start_tick = st.slider("Start Tick", 0, max_len - 100, 0)
-                window_size = st.slider("Window Size", 100, min(5000, max_len), 1000)
-                
-            with col_ctrl2:
-                st.info("💡 **Inferred FV** (grey) vs **True FV** (green). Use sliders to inspect specific reversal events.")
-
-            render_reversal_chart(df_p, product=prod_select, start_idx=start_tick, window=window_size)
-        else:
-            st.error("No data loaded. Run backtest/simulation first.")
-
-        st.divider()
-        st.caption("Aesthetic profile: Institutional White/Grey. Matplotlib High-DPI Vector Backend.")
 
 
     with tab_performance:
-        st.header("📊 Trader Performance Matrix")
+        st.header("📊 Performance Matrix")
         st.markdown("""
-        Detailed comparison of all traders based on **Monte Carlo Stability**.
-        - **X-Axis**: PnL Variance (Risk/Instability)
-        - **Y-Axis**: Average PnL (Expected Return)
+        Comparative audit of all strategy variations.
+        - **Actual (Historical)**: PnL summed across all Round 1 CSV files (`data_capsule`).
+        - **Monte Carlo**: Expected PnL / Variance over synthetic synthetic paths.
+        - **Note**: Data is actual, sourced from `ROUND 1/results/` logs.
         """)
 
         trader_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "traders"))
@@ -800,6 +717,7 @@ def main():
             for trader_file in trader_files:
                 trader_id = trader_file.replace(".py", "")
                 csv_path = os.path.join(results_dir, f"{trader_id}_mc_results.csv")
+<<<<<<< Updated upstream
                 if os.path.exists(csv_path):
                     try:
                         df_mc = pd.read_csv(csv_path)
@@ -813,10 +731,34 @@ def main():
                                 with open(robust_file, "r") as rf:
                                     robust_data = json.load(rf)
                                     external_stability = np.mean([r['final_pnl'] for r in robust_data])
+=======
+                hist_path = os.path.join(results_dir, f"{trader_id}_historical_results.json")
+                
+                if os.path.exists(csv_path):
+                    try:
+                        df_mc = pd.read_csv(csv_path)
+                        avg_pnl = df_mc['final_pnl'].mean()
+                        var_pnl = df_mc['final_pnl'].var()
+                        if pd.isna(var_pnl): var_pnl = 0
+                        
+                        # Load Actual Historical Value
+                        hist_pnl = "N/A"
+                        if os.path.exists(hist_path):
+                            with open(hist_path, "r") as hf:
+                                hist_pnl = json.load(hf).get("total_pnl", 0)
+
+                        robust_file = os.path.join(results_dir, f"{trader_id}_robustness_results.json")
+                        external_stability = "N/A"
+                        if os.path.exists(robust_file):
+                            with open(robust_file, "r") as rf:
+                                robust_data = json.load(rf)
+                                external_stability = np.mean([r['final_pnl'] for r in robust_data])
+>>>>>>> Stashed changes
 
                             results.append({
                                 "trader_id": trader_id,
-                                "avg_pnl": avg_pnl,
+                                "actual_historical": hist_pnl,
+                                "avg_mc_pnl": avg_pnl,
                                 "variance": var_pnl,
                                 "external_robustness": external_stability,
                                 "sharpe_proxy": avg_pnl / (np.sqrt(var_pnl) + 1e-6)
@@ -830,22 +772,22 @@ def main():
             # Renaming columns for better UX with directional hints
             df_perf_display = df_perf.rename(columns={
                 "trader_id": "Trader ID",
-                "avg_pnl": "Avg PnL (↑ Higher is Better)",
-                "variance": "Variance (↓ Lower is Better/Risk)",
-                "external_robustness": "Ext Robustness (↑ Higher is Better)",
-                "sharpe_proxy": "Sharpe Proxy (↑ Higher is Better)",
-                "highlight": "Top 10%?"
+                "actual_historical": "Actual (Historical PnL) ↑",
+                "avg_mc_pnl": "Expected (MC PnL) ↑",
+                "variance": "Risk (MC Variance) ↓",
+                "external_robustness": "Ext Robustness (yFinance) ↑",
+                "sharpe_proxy": "Stability Score ↑",
             })
 
             # Highlight top 10%
-            threshold = df_perf['avg_pnl'].quantile(0.9)
-            df_perf['highlight'] = df_perf['avg_pnl'] >= threshold
+            threshold = df_perf['avg_mc_pnl'].quantile(0.9)
+            df_perf['highlight'] = df_perf['avg_mc_pnl'] >= threshold
 
             scatter = alt.Chart(df_perf).mark_circle(size=100).encode(
                 x=alt.X('variance:Q', title='PnL Variance (Risk - Lower is Better)'),
-                y=alt.Y('avg_pnl:Q', title='Average PnL (Performance - Higher is Better)'),
+                y=alt.Y('avg_mc_pnl:Q', title='Average MC PnL (Performance - Higher is Better)'),
                 color=alt.Color('highlight:N', scale=alt.Scale(domain=[True, False], range=['#FF4B4B', '#1F77B4']), legend=None),
-                tooltip=['trader_id', 'avg_pnl', 'variance', 'sharpe_proxy', 'external_robustness']
+                tooltip=['trader_id', 'actual_historical', 'avg_mc_pnl', 'variance', 'sharpe_proxy', 'external_robustness']
             ).properties(
                 width=700,
                 height=500
@@ -861,10 +803,15 @@ def main():
             )
 
             st.altair_chart(scatter + labels, use_container_width=True)
+<<<<<<< Updated upstream
 
             st.dataframe(df_perf_display.sort_values("Avg PnL (↑ Higher is Better)", ascending=False))
+=======
+            
+            st.dataframe(df_perf_display.sort_values("Expected (MC PnL) ↑", ascending=False))
+>>>>>>> Stashed changes
         else:
-            st.info("No simulation results found in `traders/`. Run Monte Carlo Analysis to generate data.")
+            st.info("No simulation results found in `results/`. Run Historical Audit to generate data.")
 
     with tab_external:
         st.header("🌐 Alpha Vantage Real Market Terminal")
