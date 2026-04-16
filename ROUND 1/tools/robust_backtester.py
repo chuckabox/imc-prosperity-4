@@ -49,10 +49,14 @@ class BacktestResult:
 
 
 def load_trader(trader_file: str):
-    spec = importlib.util.spec_from_file_location("TraderModule", trader_file)
+    module_name = f"trader_{Path(trader_file).stem}_{id(trader_file)}"
+    spec = importlib.util.spec_from_file_location(module_name, trader_file)
     module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
     spec.loader.exec_module(module)
-    return module.Trader()
+    trader = module.Trader()
+    del sys.modules[module_name]
+    return trader
 
 
 def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: str) -> Optional[BacktestResult]:
