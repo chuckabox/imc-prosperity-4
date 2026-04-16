@@ -21,7 +21,7 @@ Trader = trader_module.Trader
 def run_cli_backtest(day):
     # Adjust paths for ROUND 1
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    data_dir = os.path.join(root_dir, "ROUND 1", "data_capsule")
+    data_dir = os.path.join(root_dir, "data_capsule")
     prices_file = os.path.join(data_dir, f"prices_round_1_day_{day}.csv")
     trades_file = os.path.join(data_dir, f"trades_round_1_day_{day}.csv")
 

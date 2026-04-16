@@ -1,26 +1,44 @@
 import streamlit as st
 import json
 import os
+import sys
+
+# Resolve absolute paths for relative imports (datamodel in ../config, trader in ../traders)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+config_path = os.path.abspath(os.path.join(script_dir, "..", "config"))
+traders_path = os.path.abspath(os.path.join(script_dir, "..", "traders"))
+
+if config_path not in sys.path:
+    sys.path.insert(0, config_path)
+if traders_path not in sys.path:
+    sys.path.insert(0, traders_path)
+
 import pandas as pd
 import altair as alt
 import re
 from datamodel import Listing, OrderDepth, TradingState, Observation, Order
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.interpolate import make_interp_spline
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data_capsule")
+
+CONFIG_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "config.json"))
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data_capsule"))
 
 def load_config():
     defaults = {
         "osmium_active": True,
         "pepper_active": True,
-        "osmium_limit": 20,
-        "pepper_limit": 20,
+        "osmium_limit": 80,
+        "pepper_limit": 80,
         "emerald_active": True, # For legacy compat
         "tomato_active": True,
-        "emerald_limit": 20,
-        "tomato_limit": 20,
+        "emerald_limit": 80,
+        "tomato_limit": 80,
         "target_spread": 2,
         "mr_threshold": 2,
+        "edge": 1.5,
+        "skew": 0.2,
         "selected_day": -1
     }
     if os.path.exists(CONFIG_FILE):
@@ -37,8 +55,94 @@ def save_config(config):
         json.dump(config, f, indent=4)
 
 # Emergency stop removed per user request
+try:
+    import optuna
+    OPTUNA_AVAILABLE = True
+except ImportError:
+    OPTUNA_AVAILABLE = False
+
+import logging
+if OPTUNA_AVAILABLE:
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 from trader import Trader, logger as trader_logger
+
+def execute_backtest_headless(day, trader_path, config_override=None):
+    df_prices, df_trades = load_and_process_data(day)
+    if df_prices is None: return 0
+    
+    # Dynamic Import
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("trader_optim", trader_path)
+    trader_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(trader_mod)
+    trader = trader_mod.Trader()
+
+    if config_override:
+        for k, v in config_override.items():
+            if k == "osmium_limit" and hasattr(trader, 'limits'):
+                trader.limits['ASH_COATED_OSMIUM'] = v
+            elif k == "pepper_limit" and hasattr(trader, 'limits'):
+                trader.limits['INTARIAN_PEPPER_ROOT'] = v
+            else:
+                setattr(trader, k, v)
+
+    listings = {
+        "ASH_COATED_OSMIUM": Listing("ASH_COATED_OSMIUM", "ASH_COATED_OSMIUM", "XIRECS"),
+        "INTARIAN_PEPPER_ROOT": Listing("INTARIAN_PEPPER_ROOT", "INTARIAN_PEPPER_ROOT", "XIRECS")
+    }
+
+    positions = {"ASH_COATED_OSMIUM": 0, "INTARIAN_PEPPER_ROOT": 0}
+    cash = 0.0
+    pnl_history = []
+    current_trader_data = ""
+    
+    price_map = {}
+    # ... grouping logic ... (kept same)
+    for ts, group in df_prices.groupby("timestamp"):
+        ts_depths = {}
+        for _, row in group.iterrows():
+            product = row["product"]
+            depth = OrderDepth()
+            depth.buy_orders = {int(row["bid_price_1"]): 10}
+            depth.sell_orders = {int(row["ask_price_1"]): -10}
+            ts_depths[product] = (depth, row["ask_price_1"], row["bid_price_1"])
+        price_map[ts] = ts_depths
+
+    timestamps = sorted(price_map.keys())
+    for ts in timestamps:
+        ts_data = price_map[ts]
+        order_depths = {p: d[0] for p, d in ts_data.items()}
+        state = TradingState(traderData=current_trader_data, timestamp=ts, listings=listings,
+                             order_depths=order_depths, own_trades={}, market_trades={},
+                             position=positions, observations=Observation({}, {}))
+        orders, _, new_trader_data = trader.run(state)
+        current_trader_data = new_trader_data
+
+        for product, order_list in orders.items():
+            if product not in ts_data: continue
+            _, curr_ask, curr_bid = ts_data[product]
+            limit = trader.limits.get(product, 20)
+            
+            for order in order_list:
+                qty, price = order.quantity, order.price
+                if qty > 0 and price >= curr_ask: # Buy order hitting the ask
+                    rem_buy = limit - positions[product]
+                    fill = min(qty, rem_buy) if rem_buy > 0 else 0
+                    positions[product] += fill; cash -= fill * curr_ask
+                elif qty < 0 and price <= curr_bid: # Sell order hitting the bid
+                    rem_sell = limit + positions[product]
+                    fill = min(-qty, rem_sell) if rem_sell > 0 else 0
+                    positions[product] -= fill; cash += fill * curr_bid
+
+        mtm = cash
+        for product, pos in positions.items():
+            if product in ts_data:
+                mid = (ts_data[product][1] + ts_data[product][2]) / 2.0
+                mtm += pos * mid
+        pnl_history.append(mtm)
+
+    return pnl_history[-1] if pnl_history else 0
 
 def run_backtest_simulation(day):
     st.toast(f"Running simulation against Day {day}...")
@@ -184,38 +288,56 @@ def run_backtest_simulation(day):
 
     if pnl_history:
         pnl_df = pd.DataFrame({"Timestamp": range(len(pnl_history)), "PnL": pnl_history})
+        # Downsample PnL chart for performance
+        if len(pnl_df) > 1000:
+            pnl_df = pnl_df.iloc[::len(pnl_df)//1000]
         st.line_chart(pnl_df.set_index("Timestamp"), width="stretch")
 
 # Disable caching temporarily to ensure fresh data for every backtest
-@st.cache_data
+# @st.cache_data
 def load_and_process_data(day):
-    # Search for files for Round 1
-    prices_file = os.path.join(DATA_DIR, f"prices_round_1_day_{day}.csv")
-    trades_file = os.path.join(DATA_DIR, f"trades_round_1_day_{day}.csv")
+    days_to_load = [-2, -1, 0] if day == "All" else [day]
+    all_prices = []
+    all_trades = []
+    
+    for d in days_to_load:
+        prices_file = os.path.join(DATA_DIR, f"prices_round_1_day_{d}.csv")
+        trades_file = os.path.join(DATA_DIR, f"trades_round_1_day_{d}.csv")
+        
+        if os.path.exists(prices_file):
+            df_p = pd.read_csv(prices_file, sep=";")
+            df_p = df_p.dropna(subset=["bid_price_1", "ask_price_1", "timestamp"])
+            # Offset timestamp for continuity if showing All
+            if day == "All":
+                # days are -2, -1, 0 -> normalized to index 0, 1, 2 for continuous timeline
+                offset = (d + 2) * 1000000 
+                df_p["timestamp"] = df_p["timestamp"] + offset
+            df_p["day"] = d
+            all_prices.append(df_p)
+            
+        if os.path.exists(trades_file):
+            df_t = pd.read_csv(trades_file, sep=";")
+            if "symbol" in df_t.columns:
+                df_t = df_t.rename(columns={"symbol": "product"})
+            if day == "All":
+                offset = (d + 2) * 1000000
+                df_t["timestamp"] = df_t["timestamp"] + offset
+            df_t["day"] = d
+            all_trades.append(df_t)
 
-    if not os.path.exists(prices_file):
+    if not all_prices:
         return None, None
-
-    df_prices = pd.read_csv(prices_file, sep=";")
-
-    # Fix: Drop NaNs to prevent ValueError: cannot convert float NaN to integer
-    df_prices = df_prices.dropna(subset=["bid_price_1", "ask_price_1", "timestamp"])
-
+    
+    df_prices = pd.concat(all_prices, ignore_index=True)
     df_prices["mid_price"] = (df_prices["bid_price_1"] + df_prices["ask_price_1"]) / 2.0
+    
+    # Avoid rounding timestamps as it breaks the drift logic.
+    # Just resolve duplicates for the same timestamp/product if they exist.
+    df_prices = df_prices.groupby(["timestamp", "product", "day"]).mean(numeric_only=True).reset_index()
 
-    if "timestamp" in df_prices.columns:
-        # Avoid rounding timestamps as it breaks the drift logic.
-        # Just resolve duplicates for the same timestamp/product if they exist.
-        df_prices = df_prices.groupby(["timestamp", "product"]).mean(numeric_only=True).reset_index()
+    df_trades = pd.concat(all_trades, ignore_index=True) if all_trades else None
 
-    df_trades = None
-    if os.path.exists(trades_file):
-        df_trades = pd.read_csv(trades_file, sep=";")
-        if "symbol" in df_trades.columns:
-            df_trades = df_trades.rename(columns={"symbol": "product"})
-
-    st.info(f"Loaded {len(df_prices)} price rows and {len(df_trades) if df_trades is not None else 0} market trades.")
-
+    st.info(f"Loaded {len(df_prices)} price rows total (Mode: {day}).")
     return df_prices, df_trades
 
 def render_chart(df_prices, df_trades, product, color, show_mean=False):
@@ -224,16 +346,21 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
         st.warning(f"No data for {product}")
         return
 
-    line = alt.Chart(df_p).mark_line(color=color).encode(
-        x='timestamp:Q',
+    is_multi_day = df_p['day'].nunique() > 1
+    color_encoding = alt.Color('day:N', scale=alt.Scale(scheme='category10')) if is_multi_day else alt.value(color)
+
+    line = alt.Chart(df_p).mark_line().encode(
+        x=alt.X('timestamp:Q', title="Timestamp (Continuous)"),
         y=alt.Y('mid_price:Q', scale=alt.Scale(zero=False), title="Price"),
-        tooltip=['timestamp', 'mid_price']
+        color=color_encoding,
+        tooltip=['day', 'timestamp', 'mid_price']
     )
 
-    band = alt.Chart(df_p).mark_area(opacity=0.3, color=color).encode(
+    band = alt.Chart(df_p).mark_area(opacity=0.3).encode(
         x='timestamp:Q',
         y='bid_price_1:Q',
-        y2='ask_price_1:Q'
+        y2='ask_price_1:Q',
+        color=color_encoding
     )
 
     layers = [band, line]
@@ -251,21 +378,114 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
             scatter = alt.Chart(df_t).mark_circle(size=60, color='white', opacity=0.8, stroke='black').encode(
                 x='timestamp:Q',
                 y='price:Q',
-                tooltip=['timestamp', 'price']
+                tooltip=['day', 'timestamp', 'price']
             )
             layers.append(scatter)
 
     chart = alt.layer(*layers).properties(
-        width=800,
-        height=300,
-        title=f"{product} Price & Spread Overlay"
+        width='container',
+        height=320,
+        title=f"{product} Price & Spread Overlay {'(All Days Concurrent)' if is_multi_day else ''}"
     ).interactive()
 
-    st.altair_chart(chart, width="stretch")
+    # Downsample for Performance
+    if len(df_p) > 2000:
+        step = len(df_p) // 2000
+        df_p = df_p.iloc[::step]
+    
+    st.altair_chart(chart, use_container_width=True)
     return df_p
 
+def render_total_chart(df_prices, df_trades):
+    # Downsample for Performance
+    df_p = df_prices.copy()
+    if len(df_p) > 3000:
+        step = len(df_p) // 3000
+        df_p = df_p.iloc[::step]
+
+    # Create a consolidated view of all products
+    chart = alt.Chart(df_p).mark_line().encode(
+        x=alt.X('timestamp:Q', title="Timestamp (Continuous)"),
+        y=alt.Y('mid_price:Q', scale=alt.Scale(zero=False), title="Price"),
+        color=alt.Color('product:N', scale=alt.Scale(scheme='set1'), title="Product"),
+        tooltip=['day', 'timestamp', 'product', 'mid_price']
+    ).properties(
+        width='container',
+        height=380,
+        title="Total Market Price Reconstruction (All Assets)"
+    ).interactive()
+
+    st.altair_chart(chart, use_container_width=True)
+
+def render_reversal_chart(df, product, start_idx=0, window=1000):
+    # Aesthetic Palette (Match Image)
+    TRUE_FV_COLOR = "#2D6A4F"
+    INFERRED_FV_COLOR = "#6c757d"
+    CRASH_COLOR = "#8B4513"
+    BG_COLOR = "#ffffff" # High contrast white like image
+    GRID_COLOR = "#dddddd"
+
+    # Data Slicing
+    if df is not None and not df.empty and product in df['product'].values:
+        df_all = df[df["product"] == product].copy()
+        df_p = df_all.iloc[start_idx : start_idx + window].copy()
+        x = np.arange(len(df_p))
+        y_raw = df_p["mid_price"].values
+    else:
+        # Synthetic data matching the image's "Crash" pattern
+        x = np.linspace(0, 1000, 1000)
+        y_true = np.concatenate([
+            np.linspace(12000, 12050, 500),
+            np.linspace(12050, 11875, 500)
+        ])
+        y_raw = y_true + np.random.normal(0, 15, 1000)
+        y_price = y_true # Smooth line
+
+    # Compute Smooth Line (True FV)
+    from scipy.ndimage import gaussian_filter1d
+    y_smooth = gaussian_filter1d(y_raw, sigma=15)
+    
+    # Estimated Slope
+    slope = np.gradient(y_smooth)
+
+    # Plot
+    plt.style.use('default')
+    fig, ax1 = plt.subplots(figsize=(12, 5.5), facecolor=BG_COLOR)
+    ax1.set_facecolor(BG_COLOR)
+
+    # Plot Lines
+    ax1.plot(x, y_smooth, color=TRUE_FV_COLOR, linewidth=3, label="True FV", zorder=5)
+    ax1.plot(x, y_raw, color=INFERRED_FV_COLOR, linewidth=1, alpha=0.6, label="Trader inferred FV", zorder=4)
+    
+    # Secondary Axis
+    ax2 = ax1.twinx()
+    ax2.plot(x, slope, color=INFERRED_FV_COLOR, linewidth=0.8, alpha=0.4, label="Estimated slope / tick")
+    ax2.axhline(0, color="grey", linestyle=":", linewidth=0.8)
+    
+    # Crash Interaction (approx middle or detect peak)
+    crash_idx = np.argmax(y_smooth)
+    ax1.axvline(crash_idx, color=CRASH_COLOR, linestyle="--", linewidth=1.5, label="Crash tick")
+    
+    # Annotation
+    ax1.annotate(f"detect @ tick {start_idx + crash_idx}\nlag = 2", 
+                 xy=(crash_idx, y_smooth[crash_idx]), xytext=(crash_idx + 50, y_smooth[crash_idx] + 20),
+                 arrowprops=dict(arrowstyle="->", color="#D4A373"),
+                 bbox=dict(boxstyle="round,pad=0.3", fc="#FEF9E7", ec="#D4A373", alpha=0.8),
+                 fontsize=10)
+
+    # Labels
+    ax1.set_xlabel("Tick", fontsize=10)
+    ax1.set_ylabel("Fair value", fontsize=10)
+    ax2.set_ylabel("Estimated slope / tick", fontsize=10)
+    
+    ax1.grid(True, which='both', color=GRID_COLOR, linestyle='-', linewidth=0.5)
+    ax1.legend(loc="upper right", frameon=True, fontsize=9)
+    
+    plt.tight_layout()
+    st.pyplot(fig, use_container_width=True)
+
 def forge_trader():
-    TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "trader.py")
+    TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "..", "traders", "trader.py")
     if not os.path.exists(TRADER_TEMPLATE):
         st.error(f"Template not found at {TRADER_TEMPLATE}")
         return
@@ -319,143 +539,434 @@ def perform_auto_analysis():
     st.toast("Analysis Successful!")
 
 def main():
-    st.set_page_config(page_title="P4 Control Center", layout="wide")
+    # --- PRE-RENDER STATE SYNC (CRITICAL FOR WIDGET UPDATES) ---
+    if st.session_state.get("pending_apply"):
+        for k, v in st.session_state.best_params.items():
+            st.session_state.config[k] = v
+            # Initialize or Update the widget key BEFORE it renders
+            st.session_state[k] = v
+        save_config(st.session_state.config)
+        del st.session_state["pending_apply"]
+        st.toast("✅ Optimization parameters applied to configuration!")
+        # No rerun here to keep tab state if possible, or use a small toast
+    st.set_page_config(
+        page_title="P4 Control Center",
+        layout="wide"
+    )
 
     if "config" not in st.session_state:
         st.session_state.config = load_config()
 
     def on_change_callback():
-        st.session_state.config["osmium_active"] = st.session_state.osmium_active
-        st.session_state.config["pepper_active"] = st.session_state.pepper_active
-        st.session_state.config["osmium_limit"] = st.session_state.osmium_limit
-        st.session_state.config["pepper_limit"] = st.session_state.pepper_limit
-        st.session_state.config["target_spread"] = st.session_state.target_spread
-        st.session_state.config["mr_threshold"] = st.session_state.mr_threshold
+        for key in ["osmium_active", "pepper_active", "osmium_limit", "pepper_limit", "target_spread", "mr_threshold", "edge", "skew"]:
+             if key in st.session_state:
+                 st.session_state.config[key] = st.session_state[key]
         save_config(st.session_state.config)
-
-    # --- SIDEBAR & TRADING SETUP ---
-    with st.sidebar:
-        st.divider()
-        st.header("🎚️ Bot Setup")
-
-        st.subheader("Strategy Activation")
-        st.toggle("🟩 OSMIUM (Mean Reversion)",
-                  key="osmium_active",
-                  value=st.session_state.config["osmium_active"],
-                  on_change=on_change_callback)
-        st.caption("The 'Rubber Band' strategy: Buy low, sell high around the 10,000 mark.")
-
-        st.toggle("🟥 PEPPER ROOT (Trend MM)",
-                  key="pepper_active",
-                  value=st.session_state.config["pepper_active"],
-                  on_change=on_change_callback)
-        st.caption("Profit from trends and volatility using dynamic EMA.")
-
-        st.divider()
-        st.subheader("Inventory Limits")
-
-        # Safe-Fail Warning
-        if st.session_state.config["emerald_limit"] > 18 or st.session_state.config["tomato_limit"] > 18:
-            st.error("⚠️ DANGER: Keeping limits at 20 is risky. Stay at 15-18 to avoid liquidation.")
-
-        st.slider("💎 Osmium", 0, 20,
-                  key="osmium_limit",
-                  value=st.session_state.config["osmium_limit"],
-                  on_change=on_change_callback)
-        st.caption("Max units you can carry.")
-
-        st.slider("🌶️ Pepper Root", 0, 20,
-                  key="pepper_limit",
-                  value=st.session_state.config["pepper_limit"],
-                  on_change=on_change_callback)
-        st.caption("Max units you can carry.")
-
-        st.divider()
-        st.subheader("Pricing Multipliers")
-        st.slider("🎯 Target Spread", 1.0, 10.0,
-                  key="target_spread",
-                  value=float(st.session_state.config["target_spread"]),
-                  on_change=on_change_callback)
-        st.caption("Aggressiveness. Higher = bigger profit per trade, but fewer fills.")
-
-        st.slider("📏 MR Threshold", 1.0, 20.0,
-                  key="mr_threshold",
-                  value=float(st.session_state.config["mr_threshold"]),
-                  on_change=on_change_callback)
-        st.caption("How far the price must 'stretch' before the rubber band snaps back.")
-
-        st.divider()
-        st.info("Configuration is synchronized actively to JSON.")
 
     # --- MAIN CONTENT ---
     st.title("📈 Prosperity 4: Operations Console")
 
-    tab_backtest, tab_forge = st.tabs(["📉 Visual Backtester", "🛠️ One-Click Forge"])
+    with st.expander("⚙️ Strategy Configuration", expanded=False):
+        col_act, col_lim, col_prc = st.columns(3)
+        with col_act:
+            st.subheader("Activation")
+            st.toggle("🟩 OSMIUM (MR)", key="osmium_active", value=st.session_state.config["osmium_active"], on_change=on_change_callback)
+            st.toggle("🟥 PEPPER (Trend)", key="pepper_active", value=st.session_state.config["pepper_active"], on_change=on_change_callback)
+        with col_lim:
+            st.subheader("Limits")
+            st.slider("💎 Osmium", 0, 80, key="osmium_limit", value=st.session_state.config["osmium_limit"], on_change=on_change_callback)
+            st.slider("🌶️ Pepper", 0, 80, key="pepper_limit", value=st.session_state.config["pepper_limit"], on_change=on_change_callback)
+        with col_prc:
+            st.subheader("Parameters")
+            st.slider("🎯 Spread", 1.0, 15.0, key="target_spread", value=float(st.session_state.config["target_spread"]), on_change=on_change_callback)
+            st.slider("📏 MR Thresh", 1.0, 20.0, key="mr_threshold", value=float(st.session_state.config["mr_threshold"]), on_change=on_change_callback)
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                st.slider("⚔️ Edge", 0.0, 10.0, key="edge", value=float(st.session_state.config.get("edge", 1.5)), on_change=on_change_callback)
+            with col_s2:
+                st.slider("⚖️ Skew", 0.0, 2.0, key="skew", value=float(st.session_state.config.get("skew", 0.2)), on_change=on_change_callback)
 
-    with tab_forge:
-        st.header("🛠️ Upload Assembly Pipeline")
-        st.write("Compile your findings and configurations into a professional `trader.py` ready for the IMC portal.")
+    # Final tab layout
 
-        # --- STRATEGY SCHOOL ---
-        st.markdown("## 🏫 Strategy School: Mean Reversion")
-        col_text, col_viz = st.columns([2, 1])
-        with col_text:
-            st.markdown("""
-            **The 'Rubber Band' Concept:**
-            Think of the price of an asset like a rubber band anchored to a fixed point. In Mean Reversion, we assume that whenever the price stretches too far away from its "Fair Value," it will eventually snap back to the middle.
+    tab_backtest, tab_robust, tab_archive = st.tabs([
+        "📉 Visual Backtester",
+        "🛡️ Robust Analysis",
+        "🕰️ Archive",
+    ])
 
-            *   **When to Buy:** When the price is significantly *below* the fair value.
-            *   **When to Sell:** When the price is significantly *above* the fair value.
-            """)
-        with col_viz:
-            st.success("💎 **Osmium** is perfect for this because it rarely moves far from 10,000.")
+    # Content for the remaining tabs
+    # (tab_ai and tab_market are now moved inside tab_archive below)
+
+
+
+    with tab_archive:
+        st.header("🕰️ Legacy & Experimental Tools")
+
+        with st.expander("🧠 AI Optimizer (Bayesian)", expanded=False):
+            if not OPTUNA_AVAILABLE:
+                st.error("📉 AI Optimizer is currently unavailable.")
+            else:
+                col_info, col_setup = st.columns([1, 1])
+                with col_info:
+                    st.markdown("""
+                    Utilizing a **Tree-structured Parzen Estimator (TPE)** algorithm.
+                    """)
+                    if "best_params" in st.session_state:
+                        st.success(f"Best: **${st.session_state.get('best_pnl', 0):,.2f}**")
+                        if st.button("✅ Apply to Config", type="primary"):
+                            st.session_state.pending_apply = True
+                            st.rerun()
+                        st.table(pd.DataFrame([st.session_state.best_params]).T.rename(columns={0: "Value"}))
+                with col_setup:
+                    trader_search = []
+                    trader_base = os.path.join(os.path.dirname(__file__), "..", "traders")
+                    for root, _, files in os.walk(trader_base):
+                        for f in files:
+                            if f.endswith(".py") and not f.startswith("__"):
+                                trader_search.append(os.path.relpath(os.path.join(root, f), os.getcwd()))
+                    
+                    sel_trader = st.selectbox("Target File", trader_search, key="opt_trader")
+                    n_tri = st.number_input("Iterations", 10, 200, 30, key="opt_n")
+                    t_day = st.selectbox("Style", ["All Days (Robust)", -1, -2, 0], index=0, key="opt_day")
+
+                    if st.button("🚀 Start Search", type="primary", use_container_width=True):
+                        pbar = st.progress(0)
+                        def obj(trial):
+                            cfg = {
+                                "osmium_limit": trial.suggest_int("osmium_limit", 5, 80),
+                                "pepper_limit": trial.suggest_int("pepper_limit", 5, 80),
+                                "edge": trial.suggest_float("edge", 0.5, 5.0),
+                                "skew": trial.suggest_float("skew", 0.1, 1.0)
+                            }
+                            f_path = os.path.abspath(sel_trader)
+                            d_test = [-1, -2, 0] if t_day == "All Days (Robust)" else [t_day]
+                            t_res = sum(execute_backtest_headless(d, f_path, cfg) for d in d_test)
+                            r = t_res / len(d_test)
+                            pbar.progress((trial.number + 1) / n_tri)
+                            return r
+                        study = optuna.create_study(direction="maximize")
+                        study.optimize(obj, n_trials=n_tri)
+                        st.session_state.best_params = study.best_params
+                        st.session_state.best_pnl = study.best_value
+                        st.rerun()
+
+        with st.expander("🌐 Market Data Terminal", expanded=False):
+            ext_path = 'ROUND 1/data/external/processed/SPY.csv'
+            if os.path.exists(ext_path):
+                df_ext = pd.read_csv(ext_path)
+                st.altair_chart(alt.Chart(df_ext).mark_line().encode(
+                    x='timestamp:T', y=alt.Y('close:Q', scale=alt.Scale(zero=False))
+                ).properties(height=300).interactive(), use_container_width=True)
+            else:
+                st.warning("No external data found.")
+        
+        with st.expander("🛠️ One-Click Forge", expanded=False):
+            st.markdown("Generate a `trader.py` based on current analysis and config.")
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                if st.button("🔍 Run Auto-Analysis", use_container_width=True):
+                    perform_auto_analysis()
+            with col_f2:
+                if st.button("🔨 Forge Trader.py", type="primary", use_container_width=True):
+                    if "analysis" not in st.session_state:
+                         st.error("Please run Auto-Analysis first!")
+                    else:
+                        forge_trader()
+            
+            if "forged_code" in st.session_state:
+                st.code(st.session_state.forged_code, language="python")
 
         st.divider()
+        st.subheader("📊 Performance Matrix (Scatter)")
+        st.markdown("""
+        Comparative audit of all strategy variations.
+        - **Actual (Historical)**: PnL summed across all Round 1 CSV files (`data_capsule`).
+        - **Monte Carlo**: Expected PnL / Variance over synthetic synthetic paths.
+        - **Note**: Data is actual, sourced from `ROUND 1/results/` logs.
+        """)
 
-        # 1. Scanning
-        st.markdown("### 1. Data Scan")
-        TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "trader.py")
-        d1 = os.path.exists(os.path.join(DATA_DIR, "prices_round_1_day_-1.csv"))
-        d2 = os.path.exists(os.path.join(DATA_DIR, "prices_round_1_day_-2.csv"))
-        t_exists = os.path.exists(TRADER_TEMPLATE)
+        trader_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "traders"))
+        results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))
+        results = []
 
-        if d1 and d2 and t_exists:
-            st.success("✅ System check passed: Price data and Trader template are ready.")
+        if os.path.exists(trader_dir):
+            trader_files = [f for f in os.listdir(trader_dir) if f.endswith(".py")]
+            for trader_file in trader_files:
+                trader_id = trader_file.replace(".py", "")
+                csv_path = os.path.join(results_dir, f"{trader_id}_mc_results.csv")
+                hist_path = os.path.join(results_dir, f"{trader_id}_historical_results.json")
+                
+                if os.path.exists(csv_path):
+                    try:
+                        df_mc = pd.read_csv(csv_path)
+                        avg_pnl = df_mc['final_pnl'].mean()
+                        var_pnl = df_mc['final_pnl'].var()
+                        if pd.isna(var_pnl): var_pnl = 0
+                        
+                        # Load Actual Historical Value
+                        hist_pnl = "N/A"
+                        if os.path.exists(hist_path):
+                            with open(hist_path, "r") as hf:
+                                hist_pnl = json.load(hf).get("total_pnl", 0)
+
+                        robust_file = os.path.join(results_dir, f"{trader_id}_robustness_results.json")
+                        external_stability = "N/A"
+                        if os.path.exists(robust_file):
+                            with open(robust_file, "r") as rf:
+                                robust_data = json.load(rf)
+                                external_stability = np.mean([r['final_pnl'] for r in robust_data])
+
+                            results.append({
+                                "trader_id": trader_id,
+                                "actual_historical": hist_pnl,
+                                "avg_mc_pnl": avg_pnl,
+                                "variance": var_pnl,
+                                "external_robustness": external_stability,
+                                "sharpe_proxy": avg_pnl / (np.sqrt(var_pnl) + 1e-6)
+                            })
+                    except Exception as e:
+                        st.error(f"Error loading results for {trader_id}: {e}")
+
+        if results:
+            df_perf = pd.DataFrame(results)
+
+            # Renaming columns for better UX with directional hints
+            df_perf_display = df_perf.rename(columns={
+                "trader_id": "Trader ID",
+                "actual_historical": "Actual (Historical PnL) ↑",
+                "avg_mc_pnl": "Expected (MC PnL) ↑",
+                "variance": "Risk (MC Variance) ↓",
+                "external_robustness": "Ext Robustness (yFinance) ↑",
+                "sharpe_proxy": "Stability Score ↑",
+            })
+
+            # Highlight top 10%
+            threshold = df_perf['avg_mc_pnl'].quantile(0.9)
+            df_perf['highlight'] = df_perf['avg_mc_pnl'] >= threshold
+
+            scatter = alt.Chart(df_perf).mark_circle(size=100).encode(
+                x=alt.X('variance:Q', title='PnL Variance (Risk - Lower is Better)'),
+                y=alt.Y('avg_mc_pnl:Q', title='Average MC PnL (Performance - Higher is Better)'),
+                color=alt.Color('highlight:N', scale=alt.Scale(domain=[True, False], range=['#FF4B4B', '#1F77B4']), legend=None),
+                tooltip=['trader_id', 'actual_historical', 'avg_mc_pnl', 'variance', 'sharpe_proxy', 'external_robustness']
+            ).properties(
+                width=700,
+                height=500
+            ).interactive()
+
+            # Add labels
+            labels = scatter.mark_text(
+                align='left',
+                baseline='middle',
+                dx=7
+            ).encode(
+                text='trader_id'
+            )
+
+            st.altair_chart(scatter + labels, use_container_width=True)
+            st.dataframe(df_perf_display.sort_values("Expected (MC PnL) ↑", ascending=False))
         else:
-            if not t_exists: st.error("❌ Template Error: `trader.py` not found in folder.")
-            if not (d1 and d2): st.error("❌ Data Error: Historical CSVs missing from `data_capsule/`.")
+            st.info("No simulation results found in `results/`. Run Historical Audit to generate data.")
 
-        # 2. Analysis
-        st.markdown("### 2. Auto-Analysis Engine")
-        st.caption("This tool determines the 'Fair Value' for Osmium and the 'Volatility' for Pepper Root based on your historical CSV data.")
-        st.button("🔍 Run Auto-Analysis",
-                  on_click=perform_auto_analysis,
-                  disabled=not (d1 and d2 and t_exists))
 
-        if "analysis" in st.session_state:
-            st.info(f"**Insight:** Based on your data, we recommend anchoring Osmium to **{st.session_state.analysis['os_mean']:.0f}**. Pepper Root is currently showing a volatility factor of **{st.session_state.analysis['pep_std']:.2f}**, which we will use to scale your profit capture.")
+    with tab_robust:
+        st.header("🛡️ Robust Multi-Scenario Analysis")
+        st.markdown("""
+        Test traders against **real-world market data** and **synthetic regime scenarios** to prevent overfitting.
+        The goal: **best average PnL across ANY situation**, not peak PnL on known data.
+        """)
 
-            st.metric("Derived Osmium Fair Value", f"{st.session_state.analysis['os_mean']:.1f}")
-            st.metric("Derived Pepper Root Volatility", f"{st.session_state.analysis['pep_std']:.2f}")
+        # Robust backtester outputs are now saved under ROUND 1/results/robust.
+        # Keep a fallback to ROUND 1/tools for older runs.
+        robust_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "robust"))
+        fallback_tools_dir = os.path.dirname(os.path.abspath(__file__))
 
-            st.markdown("### 3. Final Execution")
-            st.caption("We will now inject your sidebar settings (Limits, Aggressiveness) and the analyzed fair values into your final script.")
-            st.button("⚙️ Forge Final Trader.py",
-                      on_click=forge_trader,
-                      type="primary")
+        robust_csvs = []
+        if os.path.isdir(robust_results_dir):
+            robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_robust_results.csv")]
+        if not robust_csvs and os.path.isdir(fallback_tools_dir):
+            robust_results_dir = fallback_tools_dir
+            robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_robust_results.csv")]
 
-            if "forged_code" in st.session_state:
-                st.balloons()
-                st.download_button(
-                    label="⬇️ Download Your Optimized Trader.py",
-                    data=st.session_state.forged_code,
-                    file_name="trader.py",
-                    mime="text/x-python",
-                    type="primary"
+        if robust_csvs:
+            col_f, col_spacer = st.columns([1, 2])
+            with col_f:
+                p_filter = st.radio("Product Filter", ["All", "Osmium", "Root"], horizontal=True, key="robust_product_filter")
+            
+            p_col_map = {"All": "final_pnl", "Osmium": "pnl_osmium", "Root": "pnl_pepper"}
+            target_col = p_col_map[p_filter]
+
+            tab_lead, tab_inspect = st.tabs(["🏆 Leaderboard & Comparison", "📊 Individual Inspection"])
+
+            # Pre-load all data for leaderboard and comparison
+            all_leaderboard_data = []
+            all_dfs = []
+            for f in robust_csvs:
+                df = pd.read_csv(os.path.join(robust_results_dir, f))
+                name = f.replace("_robust_results.csv", "")
+                
+                # Dynamic column selection with strict fallback for products
+                data_missing = False
+                if target_col in df.columns:
+                    pnls = df[target_col]
+                elif p_filter == "All":
+                    pnls = df["final_pnl"] if "final_pnl" in df.columns else pd.Series([0]*len(df))
+                else:
+                    # Filter is Osmium or Root but column missing
+                    pnls = pd.Series([0.0]*len(df))
+                    data_missing = True
+                
+                all_leaderboard_data.append({
+                    "Trader": name + (" (⚠️ RECALC)" if data_missing else ""),
+                    "Mean PnL": pnls.mean(),
+                    "Median PnL": pnls.median(),
+                    "Worst PnL": pnls.min(),
+                    "Win Rate": (pnls > 0).mean() * 100
+                })
+                df["target_pnl"] = pnls # For internal plotting
+                df["trader"] = name
+                all_dfs.append(df)
+            
+            leaderboard_df = pd.DataFrame(all_leaderboard_data)
+            full_df = pd.concat(all_dfs)
+
+            with tab_lead:
+                st.subheader("Global Leaderboard")
+                st.dataframe(
+                    leaderboard_df.sort_values("Mean PnL", ascending=False),
+                    column_config={
+                        "Trader": st.column_config.TextColumn("Trader Profile"),
+                        "Mean PnL": st.column_config.NumberColumn("Mean PnL", format="$%d"),
+                        "Median PnL": st.column_config.NumberColumn("Median PnL", format="$%d"),
+                        "Worst PnL": st.column_config.NumberColumn("Worst PnL", format="$%d"),
+                        "Win Rate": st.column_config.NumberColumn("Win Rate", format="%.0f%%"),
+                    },
+                    use_container_width=True,
+                    hide_index=True
                 )
 
+                st.divider()
+                st.subheader("Comparative Analysis")
+                
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    dist_chart = alt.Chart(full_df).mark_boxplot(extent='min-max').encode(
+                        x=alt.X("trader:N", title="Trader"),
+                        y=alt.Y("target_pnl:Q", title=f"PnL ({p_filter}) ($)"),
+                        color=alt.Color("trader:N", legend=None)
+                    ).properties(height=350)
+                    st.altair_chart(dist_chart, use_container_width=True)
+
+                with col_c2:
+                    st.markdown(f"**Mean PnL by Category ({p_filter})**")
+                    cat_comp = full_df.groupby(["trader", "category"])["target_pnl"].mean().reset_index()
+                    cat_chart = alt.Chart(cat_comp).mark_bar().encode(
+                        x=alt.X("category:N", title="Category"),
+                        y=alt.Y("target_pnl:Q", title=f"Mean PnL ({p_filter}) ($)"),
+                        color=alt.Color("trader:N", title="Trader"),
+                        xOffset="trader:N"
+                    ).properties(height=350)
+                    st.altair_chart(cat_chart, use_container_width=True)
+
+                st.divider()
+                st.markdown("**Risk Frontier: PnL vs Max Drawdown (All Scenarios)**")
+                risk_scatter = alt.Chart(full_df).mark_circle(size=60, opacity=0.6).encode(
+                    x=alt.X("target_pnl:Q", title=f"PnL ({p_filter}) ($)"),
+                    y=alt.Y("max_drawdown:Q", title="Max Drawdown ($)"),
+                    color=alt.Color("trader:N", title="Trader"),
+                    tooltip=["trader", "name", "target_pnl", "max_drawdown", "category"]
+                ).properties(height=450, title=f"Risk vs Reward (PnL: {p_filter}) - All Scenarios").interactive()
+                st.altair_chart(risk_scatter, use_container_width=True)
+
+                st.divider()
+                st.markdown(f"**PnL by Scenario Comparison (Heatmap - {p_filter})**")
+                heatmap = alt.Chart(full_df).mark_rect().encode(
+                    x=alt.X("trader:N", title="Trader", axis=alt.Axis(labelAngle=-45)),
+                    y=alt.Y("name:N", title="Scenario", sort="descending"),
+                    color=alt.Color("target_pnl:Q", scale=alt.Scale(scheme="redyellowgreen", domainMid=0), title="PnL ($)"),
+                    tooltip=["trader", "name", "target_pnl", "category"]
+                ).properties(height=max(400, len(full_df["name"].unique()) * 15))
+                st.altair_chart(heatmap, use_container_width=True)
+
+            with tab_inspect:
+                selected_result = st.selectbox("Select Results File for Deep Dive", robust_csvs, format_func=lambda x: x.replace("_robust_results.csv", ""))
+                df_robust = pd.read_csv(os.path.join(robust_results_dir, selected_result))
+                
+                # Dynamic column selection with strict fallback for products
+                data_missing = False
+                if target_col in df_robust.columns:
+                    pnls = df_robust[target_col]
+                elif p_filter == "All":
+                    pnls = df_robust["final_pnl"] if "final_pnl" in df_robust.columns else pd.Series([0]*len(df_robust))
+                else:
+                    pnls = pd.Series([0.0]*len(df_robust))
+                    data_missing = True
+                
+                df_robust["target_pnl"] = pnls
+
+                if data_missing:
+                    st.warning(f"⚠️ **Granular Data Missing:** This result file does not contain {p_filter}-specific PnL. Please re-run the robust backtester to enable filtering.")
+
+                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                col_m1.metric(f"Mean PnL ({p_filter})", f"${pnls.mean():,.0f}")
+                col_m2.metric("Median PnL", f"${pnls.median():,.0f}")
+                col_m3.metric("Worst PnL", f"${pnls.min():,.0f}")
+                col_m4.metric("Win Rate", f"{(pnls > 0).mean()*100:.0f}%")
+
+                st.divider()
+
+                st.subheader(f"PnL by Category ({p_filter})")
+                if "category" in df_robust.columns:
+                    cat_stats = df_robust.groupby("category")["target_pnl"].agg(["mean", "min", "max", "count"])
+                    cat_stats.columns = ["Mean PnL", "Worst PnL", "Best PnL", "Count"]
+                    st.dataframe(cat_stats.style.format("${:,.0f}", subset=["Mean PnL", "Worst PnL", "Best PnL"]))
+
+                st.subheader(f"PnL by Scenario ({p_filter})")
+                bar_data = df_robust[["name", "target_pnl", "category"]].copy()
+                bar_data = bar_data.sort_values("target_pnl")
+
+                bar_chart = alt.Chart(bar_data).mark_bar().encode(
+                    x=alt.X("target_pnl:Q", title="PnL ($)"),
+                    y=alt.Y("name:N", sort="-x", title=""),
+                    color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
+                    tooltip=["name", "target_pnl", "category"],
+                ).properties(height=max(300, len(bar_data) * 22), width="container",
+                            title=f"PnL Across All Scenarios ({p_filter})")
+                st.altair_chart(bar_chart, use_container_width=True)
+
+                st.subheader(f"PnL Distribution ({p_filter})")
+                hist_chart = alt.Chart(df_robust).mark_bar(opacity=0.8).encode(
+                    x=alt.X("target_pnl:Q", bin=alt.Bin(maxbins=25), title="PnL ($)"),
+                    y=alt.Y("count()", title="Scenarios"),
+                    color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
+                ).properties(height=300, title=f"PnL Distribution Histogram ({p_filter})")
+                st.altair_chart(hist_chart, use_container_width=True)
+
+                if "max_drawdown" in df_robust.columns:
+                    st.subheader(f"Risk: PnL vs Drawdown ({p_filter})")
+                    scatter = alt.Chart(df_robust).mark_circle(size=80).encode(
+                        x=alt.X("target_pnl:Q", title="PnL ($)"),
+                        y=alt.Y("max_drawdown:Q", title="Max Drawdown ($)"),
+                        color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
+                        tooltip=["name", "target_pnl", "max_drawdown", "category"],
+                    ).properties(height=400, title="PnL vs Drawdown (bottom-right = best)")
+                    st.altair_chart(scatter, use_container_width=True)
+
+        else:
+            st.warning("No robust results found. Run the robust backtester first:")
+            st.code("python ROUND 1/tools/robust_backtester.py ROUND 1/traders/trader_robust.py --quick")
+
+        sweep_dir = os.path.join(os.path.dirname(__file__), "sweep_results")
+        if os.path.exists(sweep_dir):
+            pngs = [f for f in os.listdir(sweep_dir) if f.endswith(".png")]
+            if pngs:
+                st.divider()
+                st.subheader("Parameter Sweep Visualizations")
+                for png in sorted(pngs):
+                    st.image(os.path.join(sweep_dir, png), caption=png.replace("_", " ").replace(".png", ""))
+
     with tab_backtest:
-        st.success("**Mission Status:** Currently analyzing Tutorial Data. Goal: Maintain Emeralds at ~10,000 and manage Tomato volatility.")
+        st.success("**Mission Status:** Currently analyzing Round 1 Data. Goal: Maintain Osmium at ~10,000 and manage Pepper volatility.")
 
         col_day, col_btn = st.columns([1, 1])
         with col_day:
@@ -464,9 +975,14 @@ def main():
                 save_config(st.session_state.config)
                 run_backtest_simulation(st.session_state.day_radio)
 
-            selected_day = st.radio("Select Historical Data Day:", [-1, -2, 0],
+            day_options = ["All", -1, -2, 0]
+            current_day = st.session_state.config.get("selected_day", -1)
+            if current_day not in day_options:
+                current_day = -1
+
+            selected_day = st.radio("Select Historical Data Day:", day_options,
                                      key="day_radio",
-                                     index=([-1, -2, 0].index(st.session_state.config.get("selected_day", -1))),
+                                     index=day_options.index(current_day),
                                      horizontal=True,
                                      on_change=on_day_change)
         with col_btn:
@@ -484,22 +1000,23 @@ def main():
         if df_prices is not None:
             st.subheader(f"📊 Market Reconstruction (Day {selected_day})")
 
-            col_c1, col_c2 = st.columns(2)
-            with col_c1:
-                df_os = render_chart(df_prices, df_trades, "ASH_COATED_OSMIUM", "#2ecc71", show_mean=True)
-                if df_os is not None:
-                    os_mean = df_os["mid_price"].mean()
-                    if abs(os_mean - 10000) < 100:
-                        st.info(f"**Fair Value Found:** Osmium average is stable around {os_mean:.2f}. Anchoring to 10,000 is optimal.")
+            st.markdown("#### 💎 ASH COATED OSMIUM (Mean Reversion)")
+            df_os = render_chart(df_prices, df_trades, "ASH_COATED_OSMIUM", "#2ecc71", show_mean=True)
+            
+            if df_os is not None:
+                os_mean = df_os["mid_price"].mean()
+                if abs(os_mean - 10000) < 100:
+                    st.info(f"**Fair Value Found:** Osmium average is stable around {os_mean:.2f}. Anchoring to 10,000 is optimal.")
 
-            with col_c2:
-                render_chart(df_prices, df_trades, "INTARIAN_PEPPER_ROOT", "#e74c3c", show_mean=False)
+            st.markdown("#### 🌶️ INTARIAN PEPPER ROOT (Trend MM)")
+            render_chart(df_prices, df_trades, "INTARIAN_PEPPER_ROOT", "#e74c3c", show_mean=False)
 
-            st.markdown("### Raw Prices Preview")
-            st.dataframe(df_prices.tail(10), width="stretch")
+            st.markdown("#### 🌎 Total Market Reconstruction")
+            render_total_chart(df_prices, df_trades)
 
         else:
-            st.warning(f"Could not locate data for Day {selected_day} in data_capsule/.")
+            st.warning(f"Could not locate data for Day {selected_day} at: {DATA_DIR}")
+            st.code(f"Looking for: prices_round_1_day_{selected_day}.csv")
 
 if __name__ == "__main__":
     main()

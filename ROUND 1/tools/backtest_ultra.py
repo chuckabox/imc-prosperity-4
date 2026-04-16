@@ -5,15 +5,20 @@ import sys
 import math
 from typing import Dict, List, Any
 
-# Add current directory to path for trader import
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add local paths for module resolution
+import os
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.abspath(os.path.join(current_dir, "..", "config")))
+sys.path.insert(0, os.path.abspath(os.path.join(current_dir, "..", "traders")))
+
 from datamodel import Listing, OrderDepth, TradingState, Observation, Order
 
 class BacktestEngine:
     def __init__(self, days=None):
         self.days = days if days else [-2, -1, 0]
         self.root_dir = os.path.dirname(os.path.abspath(__file__))
-        self.data_dir = os.path.join(self.root_dir, "data_capsule")
+        self.data_dir = os.path.abspath(os.path.join(self.root_dir, "..", "data_capsule"))
 
     def run(self, TraderClass, name="Strategy"):
         total_pnl = 0
@@ -23,7 +28,9 @@ class BacktestEngine:
             price_file = os.path.join(self.data_dir, f"prices_round_1_day_{day}.csv")
             trade_file = os.path.join(self.data_dir, f"trades_round_1_day_{day}.csv")
             
-            if not os.path.exists(price_file): continue
+            if not os.path.exists(price_file): 
+                print(f"  [!] Missing data for day {day}")
+                continue
             
             # Load Data
             df_p = pd.read_csv(price_file, sep=";")
@@ -89,11 +96,13 @@ class BacktestEngine:
                         qty = int(order.quantity)
                         if qty == 0: continue
                         
+                        limit = trader.limits.get(sym, 20)
+                        
                         # 1. Taker (Aggressive)
                         if qty > 0: # Buy
                             best_ask = min(d.sell_orders.keys()) if d.sell_orders else 999999
                             if price >= best_ask:
-                                fill = min(qty, -d.sell_orders[best_ask], trader.limits.get(sym, 20) - pos[sym])
+                                fill = min(qty, -d.sell_orders[best_ask], limit - pos[sym])
                                 if fill > 0:
                                     pos[sym] += fill
                                     cash -= fill * best_ask
@@ -103,11 +112,11 @@ class BacktestEngine:
                         else: # Sell
                             best_bid = max(d.buy_orders.keys()) if d.buy_orders else -999999
                             if price <= best_bid:
-                                fill = min(-qty, d.buy_orders[best_bid], pos[sym] + trader.limits.get(sym, 20))
+                                fill = min(-qty, d.buy_orders[best_bid], pos[sym] + limit)
                                 if fill > 0:
                                     pos[sym] -= fill
                                     cash += fill * best_bid
-                                    qty += fill # qty is negative
+                                    qty += fill
                                     metrics["takes"] += fill
                                     metrics["take_pnl"] += fill * (best_bid - mids[sym])
                         
@@ -118,7 +127,7 @@ class BacktestEngine:
                                 tp = trade["price"]
                                 tv = trade["quantity"]
                                 if qty > 0 and price >= tp: # Buy fill
-                                    f = min(qty, int(tv * 0.4) + 1, trader.limits.get(sym, 20) - pos[sym])
+                                    f = min(qty, int(tv * 0.4) + 1, limit - pos[sym])
                                     if f > 0:
                                         pos[sym] += f
                                         cash -= f * price
@@ -126,7 +135,7 @@ class BacktestEngine:
                                         metrics["makes"] += f
                                         metrics["make_pnl"] += f * (mids[sym] - price)
                                 elif qty < 0 and price <= tp: # Sell fill
-                                    f = min(-qty, int(tv * 0.4) + 1, pos[sym] + trader.limits.get(sym, 20))
+                                    f = min(-qty, int(tv * 0.4) + 1, pos[sym] + limit)
                                     if f > 0:
                                         pos[sym] -= f
                                         cash += f * price
@@ -146,53 +155,35 @@ class BacktestEngine:
             
         return {"total_pnl": total_pnl, "days": all_results, "name": name}
 
-# Strategy A: Simple Penny
-class PennyTrader:
-    def __init__(self): self.traderData = ""; self.limits = {"ASH_COATED_OSMIUM": 20, "INTARIAN_PEPPER_ROOT": 20}
-    def run(self, state):
-        res = {}
-        for p in self.limits:
-            d = state.order_depths[p]; o = []; po = state.position.get(p, 0); lim = self.limits[p]
-            bb = max(d.buy_orders.keys()) if d.buy_orders else None
-            ba = min(d.sell_orders.keys()) if d.sell_orders else None
-            if bb and ba:
-                mid = (bb + ba) / 2.0
-                if po < lim: o.append(Order(p, bb + 1, lim - po))
-                if po > -lim: o.append(Order(p, ba - 1, -lim - po))
-            res[p] = o
-        return res, 0, ""
-
-# Strategy B: Anchor MM (Osmium 10k)
-class AnchorTrader:
-    def __init__(self): self.traderData = ""; self.limits = {"ASH_COATED_OSMIUM": 20, "INTARIAN_PEPPER_ROOT": 20}
-    def run(self, state):
-        res = {}
-        for p in self.limits:
-            d = state.order_depths[p]; o = []; po = state.position.get(p, 0); lim = self.limits[p]
-            bb = max(d.buy_orders.keys()) if d.buy_orders else None
-            ba = min(d.sell_orders.keys()) if d.sell_orders else None
-            if p == "ASH_COATED_OSMIUM": fair = 10000.0
-            elif bb and ba: fair = (bb + ba) / 2.0
-            else: fair = 10000.0
-            if po < lim: o.append(Order(p, int(fair - 1), lim - po))
-            if po > -lim: o.append(Order(p, int(fair + 1), -lim - po))
-            res[p] = o
-        return res, 0, ""
-
 if __name__ == "__main__":
     engine = BacktestEngine()
+    import importlib.util
     
-    # Import current trader_peter
-    from trader_peter import Trader as PeterTrader
-    
-    # Run Audit
+    trader_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "traders", "peter"))
     results = []
-    results.append(engine.run(PennyTrader, "Simple Penny"))
-    results.append(engine.run(AnchorTrader, "Mid-Fixed MM"))
-    results.append(engine.run(PeterTrader, "Layered MM (Current)"))
     
-    print("\n--- STRATEGY AUDIT RESULTS ---")
+    print(f"[SEARCH] Auditing Peter Portfolio in: {trader_dir}")
+    
+    trader_files = [f for f in os.listdir(trader_dir) if f.startswith("trader_peter_") and f.endswith(".py")]
+    
+    for f in sorted(trader_files):
+        path = os.path.join(trader_dir, f)
+        spec = importlib.util.spec_from_file_location("trader_module", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        
+        print(f"[RUNNING] {f}...")
+        results.append(engine.run(module.Trader, f))
+    
+    print("\n" + "="*60)
+    print(f"{'STRATEGY':<30} | {'TOTAL PNL':<15} | {'MAKES':<10}")
+    print("-" * 60)
+    
+    # Sort by total PnL
+    results.sort(key=lambda x: x['total_pnl'], reverse=True)
+    
     for r in results:
-        print(f"{r['name']}: Total PnL ${r['total_pnl']:,.2f}")
-        for d in r['days']:
-            print(f"  Day {d['day']}: ${d['pnl']:,.2f} (Takers: {d['metrics']['takes']}, Makers: {d['metrics']['makes']})")
+        total_makes = sum(d['metrics']['makes'] for d in r['days'])
+        print(f"{r['name']:<30} | ${r['total_pnl']:>12,.2f} | {total_makes:>10}")
+    
+    print("="*60)
