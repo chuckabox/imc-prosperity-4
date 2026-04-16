@@ -31,4 +31,15 @@ Use this tab to **debug your fills**. It shows your orders hitting the book in r
 Use this to **compare strategies**. Check your win rate across all 40 scenarios and use the **🏆 Leaderboard** sub-tab to rank your new version against previous ones by Mean PnL and Max Drawdown.
 
 ---
+---
 *“In Prosperity, edge is found at the intersection of speed and safety.”*
+
+## ⏱️ Tick & Timestamp Context
+Understanding the scale of evaluation is critical for out-of-sample (OOS) performance:
+
+*   **Submission Evaluation:** During the round, submissions are evaluated on **1,000 timestamps**.
+*   **Final Round Evaluation:** At the end of the round, your last successful submission is run on **10,000 timestamps** of unseen test data.
+*   **Robust Backtester:** Runs on up to **30,000 timestamps** to ensure stability across multiple regimes.
+*   **Timestamp Logic:** Timestamps have a step size of **100** (e.g., 0, 100, 200...).
+*   **PnL Scaling:** If your strategy holds perfectly out-of-sample, a 10k tick run would yield **10x the PnL** of a 1k run. However, markets rarely hold perfectly OOS; robustness is key.
+*   **R3 Qualification:** Your combined PnL (R1 Algo/Manual + R2 Algo/Manual) must exceed **200,000** to qualify for Round 3.
