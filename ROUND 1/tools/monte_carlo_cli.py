@@ -10,7 +10,15 @@ Quick start:
 
 import argparse
 import sys
+import os
 from pathlib import Path
+
+# Add relevant directories to sys.path to resolve imports
+current_dir = Path(__file__).parent
+root_dir = current_dir.parent
+sys.path.append(str(current_dir))        # tools/
+sys.path.append(str(root_dir / "config"))  # config/ (for datamodel)
+
 from monte_carlo_backtester import MonteCarloBacktester
 
 # Presets
