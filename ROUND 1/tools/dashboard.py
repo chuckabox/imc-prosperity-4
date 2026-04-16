@@ -613,8 +613,8 @@ def main():
     # --- MAIN CONTENT ---
     st.title("📈 Prosperity 4: Operations Console")
 
-    tab_backtest, tab_forge, tab_advanced, tab_ai, tab_external = st.tabs([
-        "📉 Visual Backtester", "🛠️ One-Click Forge", "🔬 Advanced Analysis", "🧠 AI Optimizer", "🌐 Market Data (AV)"
+    tab_backtest, tab_forge, tab_advanced, tab_ai, tab_external, tab_robust = st.tabs([
+        "📉 Visual Backtester", "🛠️ One-Click Forge", "🔬 Advanced Analysis", "🧠 AI Optimizer", "🌐 Market Data (AV)", "🛡️ Robust Analysis"
     ])
 
     with tab_ai:
@@ -802,6 +802,79 @@ def main():
             if st.button("🔄 Sync SPY Now"):
                 st.info("Triggering sync...")
                 # Note: In real app, you would run the request here.
+
+    with tab_robust:
+        st.header("🛡️ Robust Multi-Scenario Analysis")
+        st.markdown("""
+        Test traders against **real-world market data** and **synthetic regime scenarios** to prevent overfitting.
+        The goal: **best average PnL across ANY situation**, not peak PnL on known data.
+        """)
+
+        robust_results_dir = os.path.join(os.path.dirname(__file__))
+        robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_robust_results.csv")]
+
+        if robust_csvs:
+            selected_result = st.selectbox("Select Results File", robust_csvs)
+            df_robust = pd.read_csv(os.path.join(robust_results_dir, selected_result))
+
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            pnls = df_robust["final_pnl"]
+            col_m1.metric("Mean PnL", f"${pnls.mean():,.0f}")
+            col_m2.metric("Median PnL", f"${pnls.median():,.0f}")
+            col_m3.metric("Worst PnL", f"${pnls.min():,.0f}")
+            col_m4.metric("Win Rate", f"{(pnls > 0).mean()*100:.0f}%")
+
+            st.divider()
+
+            st.subheader("PnL by Category")
+            if "category" in df_robust.columns:
+                cat_stats = df_robust.groupby("category")["final_pnl"].agg(["mean", "min", "max", "count"])
+                cat_stats.columns = ["Mean PnL", "Worst PnL", "Best PnL", "Count"]
+                st.dataframe(cat_stats.style.format("${:,.0f}", subset=["Mean PnL", "Worst PnL", "Best PnL"]))
+
+            st.subheader("PnL by Scenario")
+            bar_data = df_robust[["name", "final_pnl", "category"]].copy()
+            bar_data = bar_data.sort_values("final_pnl")
+
+            bar_chart = alt.Chart(bar_data).mark_bar().encode(
+                x=alt.X("final_pnl:Q", title="Final PnL ($)"),
+                y=alt.Y("name:N", sort="-x", title=""),
+                color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
+                tooltip=["name", "final_pnl", "category"],
+            ).properties(height=max(300, len(bar_data) * 22), width="container",
+                         title="PnL Across All Scenarios")
+            st.altair_chart(bar_chart, use_container_width=True)
+
+            st.subheader("PnL Distribution")
+            hist_chart = alt.Chart(df_robust).mark_bar(opacity=0.8).encode(
+                x=alt.X("final_pnl:Q", bin=alt.Bin(maxbins=25), title="PnL ($)"),
+                y=alt.Y("count()", title="Scenarios"),
+                color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
+            ).properties(height=300, title="PnL Distribution Histogram")
+            st.altair_chart(hist_chart, use_container_width=True)
+
+            if "max_drawdown" in df_robust.columns:
+                st.subheader("Risk: PnL vs Drawdown")
+                scatter = alt.Chart(df_robust).mark_circle(size=80).encode(
+                    x=alt.X("final_pnl:Q", title="Final PnL ($)"),
+                    y=alt.Y("max_drawdown:Q", title="Max Drawdown ($)"),
+                    color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
+                    tooltip=["name", "final_pnl", "max_drawdown", "category"],
+                ).properties(height=400, title="PnL vs Drawdown (bottom-right = best)")
+                st.altair_chart(scatter, use_container_width=True)
+
+        else:
+            st.warning("No robust results found. Run the robust backtester first:")
+            st.code("python ROUND 1/tools/robust_backtester.py ROUND 1/traders/trader_robust.py --quick")
+
+        sweep_dir = os.path.join(os.path.dirname(__file__), "sweep_results")
+        if os.path.exists(sweep_dir):
+            pngs = [f for f in os.listdir(sweep_dir) if f.endswith(".png")]
+            if pngs:
+                st.divider()
+                st.subheader("Parameter Sweep Visualizations")
+                for png in sorted(pngs):
+                    st.image(os.path.join(sweep_dir, png), caption=png.replace("_", " ").replace(".png", ""))
 
     with tab_backtest:
         st.success("**Mission Status:** Currently analyzing Tutorial Data. Goal: Maintain Emeralds at ~10,000 and manage Tomato volatility.")
