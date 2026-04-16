@@ -296,33 +296,48 @@ def run_backtest_simulation(day):
 # Disable caching temporarily to ensure fresh data for every backtest
 # @st.cache_data
 def load_and_process_data(day):
-    # Search for files for Round 1
-    prices_file = os.path.join(DATA_DIR, f"prices_round_1_day_{day}.csv")
-    trades_file = os.path.join(DATA_DIR, f"trades_round_1_day_{day}.csv")
+    days_to_load = [-2, -1, 0] if day == "All" else [day]
+    all_prices = []
+    all_trades = []
+    
+    for d in days_to_load:
+        prices_file = os.path.join(DATA_DIR, f"prices_round_1_day_{d}.csv")
+        trades_file = os.path.join(DATA_DIR, f"trades_round_1_day_{d}.csv")
+        
+        if os.path.exists(prices_file):
+            df_p = pd.read_csv(prices_file, sep=";")
+            df_p = df_p.dropna(subset=["bid_price_1", "ask_price_1", "timestamp"])
+            # Offset timestamp for continuity if showing All
+            if day == "All":
+                # days are -2, -1, 0 -> normalized to index 0, 1, 2 for continuous timeline
+                offset = (d + 2) * 1000000 
+                df_p["timestamp"] = df_p["timestamp"] + offset
+            df_p["day"] = d
+            all_prices.append(df_p)
+            
+        if os.path.exists(trades_file):
+            df_t = pd.read_csv(trades_file, sep=";")
+            if "symbol" in df_t.columns:
+                df_t = df_t.rename(columns={"symbol": "product"})
+            if day == "All":
+                offset = (d + 2) * 1000000
+                df_t["timestamp"] = df_t["timestamp"] + offset
+            df_t["day"] = d
+            all_trades.append(df_t)
 
-    if not os.path.exists(prices_file):
+    if not all_prices:
         return None, None
-
-    df_prices = pd.read_csv(prices_file, sep=";")
-
-    # Fix: Drop NaNs to prevent ValueError: cannot convert float NaN to integer
-    df_prices = df_prices.dropna(subset=["bid_price_1", "ask_price_1", "timestamp"])
-
+    
+    df_prices = pd.concat(all_prices, ignore_index=True)
     df_prices["mid_price"] = (df_prices["bid_price_1"] + df_prices["ask_price_1"]) / 2.0
+    
+    # Avoid rounding timestamps as it breaks the drift logic.
+    # Just resolve duplicates for the same timestamp/product if they exist.
+    df_prices = df_prices.groupby(["timestamp", "product", "day"]).mean(numeric_only=True).reset_index()
 
-    if "timestamp" in df_prices.columns:
-        # Avoid rounding timestamps as it breaks the drift logic.
-        # Just resolve duplicates for the same timestamp/product if they exist.
-        df_prices = df_prices.groupby(["timestamp", "product"]).mean(numeric_only=True).reset_index()
+    df_trades = pd.concat(all_trades, ignore_index=True) if all_trades else None
 
-    df_trades = None
-    if os.path.exists(trades_file):
-        df_trades = pd.read_csv(trades_file, sep=";")
-        if "symbol" in df_trades.columns:
-            df_trades = df_trades.rename(columns={"symbol": "product"})
-
-    st.info(f"Loaded {len(df_prices)} price rows and {len(df_trades) if df_trades is not None else 0} market trades.")
-
+    st.info(f"Loaded {len(df_prices)} price rows total (Mode: {day}).")
     return df_prices, df_trades
 
 def render_chart(df_prices, df_trades, product, color, show_mean=False):
@@ -331,16 +346,21 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
         st.warning(f"No data for {product}")
         return
 
-    line = alt.Chart(df_p).mark_line(color=color).encode(
-        x='timestamp:Q',
+    is_multi_day = df_p['day'].nunique() > 1
+    color_encoding = alt.Color('day:N', scale=alt.Scale(scheme='category10')) if is_multi_day else alt.value(color)
+
+    line = alt.Chart(df_p).mark_line().encode(
+        x=alt.X('timestamp:Q', title="Timestamp (Continuous)"),
         y=alt.Y('mid_price:Q', scale=alt.Scale(zero=False), title="Price"),
-        tooltip=['timestamp', 'mid_price']
+        color=color_encoding,
+        tooltip=['day', 'timestamp', 'mid_price']
     )
 
-    band = alt.Chart(df_p).mark_area(opacity=0.3, color=color).encode(
+    band = alt.Chart(df_p).mark_area(opacity=0.3).encode(
         x='timestamp:Q',
         y='bid_price_1:Q',
-        y2='ask_price_1:Q'
+        y2='ask_price_1:Q',
+        color=color_encoding
     )
 
     layers = [band, line]
@@ -358,28 +378,22 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
             scatter = alt.Chart(df_t).mark_circle(size=60, color='white', opacity=0.8, stroke='black').encode(
                 x='timestamp:Q',
                 y='price:Q',
-                tooltip=['timestamp', 'price']
+                tooltip=['day', 'timestamp', 'price']
             )
             layers.append(scatter)
 
     chart = alt.layer(*layers).properties(
-        width=800,
-        height=300,
-        title=f"{product} Price & Spread Overlay"
+        width='container',
+        height=320,
+        title=f"{product} Price & Spread Overlay {'(All Days Concurrent)' if is_multi_day else ''}"
     ).interactive()
 
     # Downsample for Performance
     if len(df_p) > 2000:
         step = len(df_p) // 2000
         df_p = df_p.iloc[::step]
-
-    line = alt.Chart(df_p).mark_line(color=color).encode(
-        x='timestamp:Q',
-        y=alt.Y('mid_price:Q', scale=alt.Scale(zero=False), title="Price"),
-        tooltip=['timestamp', 'mid_price']
-    )
-    # ... rest of altair logic unchanged ...
-    st.altair_chart(chart, width="stretch")
+    
+    st.altair_chart(chart, use_container_width=True)
     return df_p
 
 def render_reversal_chart(df, product, start_idx=0, window=1000):
@@ -772,9 +786,14 @@ def main():
                 save_config(st.session_state.config)
                 run_backtest_simulation(st.session_state.day_radio)
 
-            selected_day = st.radio("Select Historical Data Day:", [-1, -2, 0],
+            day_options = ["All", -1, -2, 0]
+            current_day = st.session_state.config.get("selected_day", -1)
+            if current_day not in day_options:
+                current_day = -1
+
+            selected_day = st.radio("Select Historical Data Day:", day_options,
                                      key="day_radio",
-                                     index=([-1, -2, 0].index(st.session_state.config.get("selected_day", -1))),
+                                     index=day_options.index(current_day),
                                      horizontal=True,
                                      on_change=on_day_change)
         with col_btn:
@@ -792,16 +811,16 @@ def main():
         if df_prices is not None:
             st.subheader(f"📊 Market Reconstruction (Day {selected_day})")
 
-            col_c1, col_c2 = st.columns(2)
-            with col_c1:
-                df_os = render_chart(df_prices, df_trades, "ASH_COATED_OSMIUM", "#2ecc71", show_mean=True)
-                if df_os is not None:
-                    os_mean = df_os["mid_price"].mean()
-                    if abs(os_mean - 10000) < 100:
-                        st.info(f"**Fair Value Found:** Osmium average is stable around {os_mean:.2f}. Anchoring to 10,000 is optimal.")
+            st.markdown("#### 💎 ASH COATED OSMIUM (Mean Reversion)")
+            df_os = render_chart(df_prices, df_trades, "ASH_COATED_OSMIUM", "#2ecc71", show_mean=True)
+            
+            if df_os is not None:
+                os_mean = df_os["mid_price"].mean()
+                if abs(os_mean - 10000) < 100:
+                    st.info(f"**Fair Value Found:** Osmium average is stable around {os_mean:.2f}. Anchoring to 10,000 is optimal.")
 
-            with col_c2:
-                render_chart(df_prices, df_trades, "INTARIAN_PEPPER_ROOT", "#e74c3c", show_mean=False)
+            st.markdown("#### 🌶️ INTARIAN PEPPER ROOT (Trend MM)")
+            render_chart(df_prices, df_trades, "INTARIAN_PEPPER_ROOT", "#e74c3c", show_mean=False)
 
             st.markdown("### Raw Prices Preview")
             st.dataframe(df_prices.tail(10), width="stretch")
