@@ -124,15 +124,12 @@ Presets:
     backtester.print_results(stats)
 
     # Save results
-    results_dir = Path(root_dir) / "results"
-    results_dir.mkdir(exist_ok=True)
-    
     if args.output:
         output_file = args.output
     else:
-        output_file = results_dir / trader_path.name.replace('.py', '_mc_results.csv')
+        output_file = str(trader_path).replace('.py', '_mc_results.csv')
 
-    backtester.save_results(str(output_file))
+    backtester.save_results(output_file)
 
     # Additional interpretation
     print("\n" + "="*60)
