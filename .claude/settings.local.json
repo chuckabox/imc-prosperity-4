@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import ast; ast.parse\\(open\\('trader_robust_peter_v10_safe.py'\\).read\\(\\)\\); print\\('OK'\\)\")"
+    ]
+  }
+}
