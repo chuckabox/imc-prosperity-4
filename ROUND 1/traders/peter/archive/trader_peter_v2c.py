@@ -27,15 +27,11 @@ logger = Logger()
 
 class Trader:
     """
-    Peter V4: The Sniper (Winrate Max)
-    ----------------------------------
-    Focus: Extremely selective entry to ensure each trade has high expectancy.
-    Target: 55%+ Winrate.
-    
-    1. Triple-Filter Entry: requires EMA Cross + OFI + Tape alignment.
-    2. Conservative Exit: Immediately closing positions if the micro-signal weakens.
-    3. Volatility Clamp: Disabling all trades if local volatility is in the top 10th percentile.
-    4. Adaptive Taking: Taker-logic focused since the robust suite is taker-centric.
+    Peter V2c: The Refined Sniper
+    -----------------------------
+    Fixed v2 "Stuck in Storm" bug by moving unwind before vol clamp.
+    Reduced Osmium tape threshold for better activation.
+    Added trailing-stop style exits to smooth the curve.
     """
 
     LIMIT_OSMIUM = 80
@@ -97,39 +93,53 @@ class Trader:
         ema_s = self._ema(hist, 24)
         vol = max(1.0, float(max(hist[-15:]) - min(hist[-15:])))
         
-        # Winrate Barrier: Stop if too volatile (Slightly relaxed to 35)
-        if vol > 35: return []
-        
         ofi = self._calculate_ofi(product, depth)
         ofi_acc = self.history.get("pp_o_acc", 0) * 0.4 + ofi * 0.6
         self.history["pp_o_acc"] = ofi_acc
         
         trend = (ema_f - ema_s) / (vol * 0.1 + 0.1)
-        # Triple alignment (Relaxed Trend to 1.0)
-        signal_buy = trend > 1.0 and ofi_acc > 5
-        signal_sell = trend < -1.0 and ofi_acc < -5
         
         orders = []
         rem_buy = 80 - pos
         rem_sell = 80 + pos
         
-        ba = min(depth.sell_orders.keys()) if depth.sell_orders else None
-        bb = max(depth.buy_orders.keys()) if depth.buy_orders else None
+        ba = min(depth.sell_orders.items())[0] if depth.sell_orders else None
+        bb = max(depth.buy_orders.items())[0] if depth.buy_orders else None
 
-        # Sniper Takes
+        # 1. EMERGENCY UNWIND (Moved BEFORE vol clamp)
+        # If trend reverses sharply, exit immediately regardless of volatility
+        if (pos > 0 and trend < -0.8) or (pos < 0 and trend > 0.8):
+            if pos > 0 and bb: 
+                q = min(pos, 30) # Aggressive exit
+                orders.append(Order(product, bb, int(-q)))
+                pos -= q
+                rem_sell += q
+            elif pos < 0 and ba: 
+                q = min(abs(pos), 30)
+                orders.append(Order(product, ba, int(q)))
+                pos += q
+                rem_buy += q
+
+        # 2. VOLATILITY CLAMP
+        if vol > 45: return orders # Adaptive: increased from 35
+        
+        # 3. ENTRY SIGNALS
+        signal_buy = trend > 1.2 and ofi_acc > 7
+        signal_sell = trend < -1.2 and ofi_acc < -7
+        
         if ba and signal_buy and rem_buy > 0:
             q = min(rem_buy, abs(depth.sell_orders.get(ba, 0)), 15)
             orders.append(Order(product, ba, int(q)))
-            rem_buy -= q
         elif bb and signal_sell and rem_sell > 0:
             q = min(rem_sell, depth.buy_orders.get(bb, 0), 15)
             orders.append(Order(product, bb, int(-q)))
-            rem_sell -= q
             
-        # Emergency Unwind if trend flips while we have pos
-        if (pos > 0 and trend < -0.5) or (pos < 0 and trend > 0.5):
-            if pos > 0 and bb: orders.append(Order(product, bb, -min(pos, 20)))
-            elif pos < 0 and ba: orders.append(Order(product, ba, min(abs(pos), 20)))
+        # 4. SOFT EXIT (Smooth the curve)
+        # If trend is neutral but we have position, scale out slowly
+        if pos > 0 and trend < 0.2:
+            if bb: orders.append(Order(product, bb, -min(pos, 10)))
+        elif pos < 0 and trend > -0.2:
+            if ba: orders.append(Order(product, ba, min(abs(pos), 10)))
 
         return orders
 
@@ -147,17 +157,18 @@ class Trader:
         if len(hist) < 30: return []
 
         anchor = self._ema(hist, 40)
-        vol = max(1.0, float(max(hist[-15:]) - min(hist[-15:])))
         
         tape_val = 0.0
         if product in state.market_trades:
             for t in state.market_trades[product]:
                 tape_val += t.quantity if t.price >= mid else -t.quantity
-        self.history["o_tape"] = self.history.get("o_tape", 0) * 0.5 + tape_val * 0.5
         
-        # High Conviction Entry (Relaxed tape from 15 to 10)
-        signal_buy = self.history["o_tape"] > 10 and mid > anchor
-        signal_sell = self.history["o_tape"] < -10 and mid < anchor
+        # Lower tape filter for activation (8 instead of 10)
+        self.history["o_tape"] = self.history.get("o_tape", 0) * 0.6 + tape_val * 0.4
+        
+        # High Conviction Entry
+        signal_buy = self.history["o_tape"] > 8 and mid > anchor
+        signal_sell = self.history["o_tape"] < -8 and mid < anchor
         
         orders = []
         rem_buy = 80 - pos
@@ -167,11 +178,11 @@ class Trader:
         bb = max(depth.buy_orders.keys()) if depth.buy_orders else None
 
         if ba and signal_buy and rem_buy > 0:
-            orders.append(Order(product, ba, min(rem_buy, 15)))
+            orders.append(Order(product, ba, min(rem_buy, 20)))
         elif bb and signal_sell and rem_sell > 0:
-            orders.append(Order(product, bb, -min(rem_sell, 15)))
+            orders.append(Order(product, bb, -min(rem_sell, 20)))
             
-        # Safe Passive Exit
+        # Safer Passive Exit (moved before we get stuck)
         if pos != 0:
             if pos > 0 and ba: orders.append(Order(product, ba, -min(pos, 5)))
             if pos < 0 and bb: orders.append(Order(product, bb, min(abs(pos), 5)))
