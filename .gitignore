@@ -1,5 +1,34 @@
-**.log
-**/__pycache__/
-ROUND 1/__pycache__/datamodel.cpython-311.pyc
-ROUND 1/__pycache__/traderv2.cpython-311.pyc
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
 .env
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project Specific
+.agent/
+.agents/
+.claude/
+graphify-out/
+.streamlit/
+results/
+logs/
+*.log
+
+# Backtester / Compiled
+backtester_rust/target/
+bin/
+obj/
+
+# OS/System
+.DS_Store
+Thumbs.db
