@@ -1,0 +1,34 @@
+Two critical errors. File assumes you execute at your limit price and ignores clearing price mechanics entirely.
+
+Error 1 — Dryland Flax: wrong clearing price analysis
+
+File assumes: bid 28, buy at 28, profit 2/unit × 30k = 60k.
+
+Reality: Without your order, clearing price is already 28 (existing bids 47k > asks 40k at that price). 
+You're last in queue. Fill priority:
+
+30k@30 existing → 30k filled
+5k@29 existing → 35k filled
+5k of 12k@28 existing → 40k done
+You get 0 fills. 40k asks exhausted before reaching you.
+
+Error 2 — Ember Mushroom: clearing price is NOT 13
+
+File assumes bid 43k@13 sweeps asks at 12 and 13 at those prices.
+
+Reality: Auction sets one clearing price. Without your order, vol at each price:
+
+@15: min(86k bids, 86k asks) = 86k ← max
+@13: min(103k, 45k) = 45k
+Clearing = 15. Your limit 13 < 15 → you don't participate. 0 fills.
+
+Correct profit from file's submitted orders: ~0 XIRECs
+
+Path to ~88k (rough):
+
+EM: bid 43k@18 → changes clearing to 18 (101k vol, up from 91k) → you fill 35k units → 35k × 1.90 = 66.5k
+
+DF: bid 4k@29 (careful — bidding 5k+ shifts clearing from 28 to 29, killing profitability) → 4k fills @ clearing 28 → 4k × 2 = 8k
+
+Total ≈ 74.5k. Not exactly 88k but much closer to reality.
+ The file's 376.7k is fundamentally wrong — it treats a batch auction as a continuous-trading crossing.
