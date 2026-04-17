@@ -4,39 +4,24 @@ from typing import Dict, List, Any
 
 from datamodel import Order, OrderDepth, TradingState, Symbol
 
-
 class Logger:
     def __init__(self) -> None:
         self.logs = ""
-
     def print(self, *objects: Any, sep: str = " ", end: str = "\n") -> None:
         self.logs += sep.join(map(str, objects)) + end
-
-    def flush(
-        self,
-        state: TradingState,
-        orders: Dict[Symbol, List[Order]],
-        conversions: int,
-        trader_data: str,
-    ) -> None:
+    def flush(self, state: TradingState, orders: Dict[Symbol, List[Order]], conversions: int, trader_data: str) -> None:
         pass
-
 
 logger = Logger()
 
-
 class Trader:
     """
-    Peter V3: Balanced & Active
-    --------------------------
-    A robust version of Peter V2 designed to survive all market regimes.
-    1. Lowered position limits (30) for better DD management.
-    2. Active taking on small edges (0.5 ticks) to maintain PnL velocity.
-    3. Sigmoid-based inventory management.
+    Peter V2f:
+    - Pepper: Robust MM (mid +/- 2, 0.1 skew)
+    - Osmium: Bollinger BB (2.0 std dev) + Passive Exit
     """
-
-    LIMIT_OSMIUM = 30
-    LIMIT_PEPPER = 30
+    LIMIT_OSMIUM = 80
+    LIMIT_PEPPER = 80
 
     def __init__(self):
         self.history = {}
@@ -45,16 +30,8 @@ class Trader:
         if trader_data:
             try:
                 self.history = json.loads(trader_data)
-            except Exception:
+            except:
                 self.history = {}
-
-    def _ema(self, prices: list, span: int) -> float:
-        if not prices: return 0.0
-        alpha = 2.0 / (span + 1)
-        val = prices[0]
-        for p in prices[1:]:
-            val = alpha * p + (1 - alpha) * val
-        return val
 
     def _get_mid(self, depth: OrderDepth) -> float:
         bb = max(depth.buy_orders.keys()) if depth.buy_orders else None
@@ -69,29 +46,21 @@ class Trader:
         pos = state.position.get(product, 0)
         mid = self._get_mid(depth)
         
-        hist = self.history.get("pp", [])
-        hist.append(mid)
-        if len(hist) > 100: hist.pop(0)
-        self.history["pp"] = hist
+        # Robust MM: Stronger skew, wider base spread
+        skew = pos * 0.1 
+        bid = math.floor(mid - 2.0 - skew)
+        ask = math.ceil(mid + 2.0 - skew)
         
-        if len(hist) < 10: return []
-
-        fair = self._ema(hist, 8)
         bb = max(depth.buy_orders.keys()) if depth.buy_orders else None
         ba = min(depth.sell_orders.keys()) if depth.sell_orders else None
+        if bb: bid = min(bid, bb + 1)
+        if ba: ask = max(ask, ba - 1)
+        if bid >= ask: bid = ask - 1
+
         orders = []
-
-        rem_buy = self.LIMIT_PEPPER - pos
-        rem_sell = self.LIMIT_PEPPER + pos
-
-        # High-Winrate Takes: Tiny clips on tiny edges
-        if ba and ba <= fair + 0.5 and rem_buy > 0:
-            q = min(rem_buy, 1)
-            orders.append(Order(product, ba, int(q)))
-        elif bb and bb >= fair - 0.5 and rem_sell > 0:
-            q = min(rem_sell, 1)
-            orders.append(Order(product, bb, int(-q)))
-
+        rb, rs = self.LIMIT_PEPPER - pos, self.LIMIT_PEPPER + pos
+        if rb > 0: orders.append(Order(product, int(bid), int(rb)))
+        if rs > 0: orders.append(Order(product, int(ask), int(-rs)))
         return orders
 
     def _osmium_logic(self, state: TradingState) -> List[Order]:
@@ -103,34 +72,50 @@ class Trader:
         
         hist = self.history.get("op", [])
         hist.append(mid)
-        if len(hist) > 100: hist.pop(0)
+        if len(hist) > 30: hist.pop(0)
         self.history["op"] = hist
         
+        orders = []
         if len(hist) < 20: return []
 
-        fair = self._ema(hist, 40)
-        bb = max(depth.buy_orders.keys()) if depth.buy_orders else None
+        mean = sum(hist) / len(hist)
+        var = sum((x - mean) ** 2 for x in hist) / len(hist)
+        std = math.sqrt(max(var, 0.01))
+        
+        ub, lb = mean + 2.0 * std, mean - 2.0 * std
         ba = min(depth.sell_orders.keys()) if depth.sell_orders else None
-        orders = []
+        bb = max(depth.buy_orders.keys()) if depth.buy_orders else None
 
-        rem_buy = self.LIMIT_OSMIUM - pos
-        rem_sell = self.LIMIT_OSMIUM + pos
-
-        if ba and ba <= fair + 0.1 and rem_buy > 0:
-            q = min(rem_buy, 1)
+        # 1. ENTRY (Take if deep deviation)
+        rb, rs = self.LIMIT_OSMIUM - pos, self.LIMIT_OSMIUM + pos
+        if ba and ba <= lb and rb > 0:
+            q = min(rb, abs(depth.sell_orders[ba]), 20)
             orders.append(Order(product, ba, int(q)))
-        elif bb and bb >= fair - 0.1 and rem_sell > 0:
-            q = min(rem_sell, 1)
+            pos += q
+        elif bb and bb >= ub and rs > 0:
+            q = min(rs, depth.buy_orders[bb], 20)
             orders.append(Order(product, bb, int(-q)))
+            pos -= q
+
+        # 2. EXIT & MM (Passive limit at mean)
+        rb, rs = self.LIMIT_OSMIUM - pos, self.LIMIT_OSMIUM + pos
+        exit_bid = math.floor(mean - 1)
+        exit_ask = math.ceil(mean + 1)
+        
+        if pos > 0: # Long -> Sell at mean
+            orders.append(Order(product, int(exit_ask), int(-min(pos, 40))))
+        elif pos < 0: # Short -> Buy at mean
+            orders.append(Order(product, int(exit_bid), int(min(abs(pos), 40))))
 
         return orders
 
     def run(self, state: TradingState):
         self._load_state(state.traderData)
-        result = {}
+        res = {}
         pep = self._pepper_logic(state)
-        if pep: result["INTARIAN_PEPPER_ROOT"] = pep
+        if pep: res["INTARIAN_PEPPER_ROOT"] = pep
         osm = self._osmium_logic(state)
-        if osm: result["ASH_COATED_OSMIUM"] = osm
-        trader_data = json.dumps(self.history)
-        return result, 0, trader_data
+        if osm: res["ASH_COATED_OSMIUM"] = osm
+        data = json.dumps(self.history)
+        logger.flush(state, res, 0, data)
+        return res, 0, data

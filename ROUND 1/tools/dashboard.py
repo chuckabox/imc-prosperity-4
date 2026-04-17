@@ -1,4 +1,5 @@
 import streamlit as st
+import math
 import json
 import os
 import sys
@@ -143,6 +144,85 @@ def execute_backtest_headless(day, trader_path, config_override=None):
         pnl_history.append(mtm)
 
     return pnl_history[-1] if pnl_history else 0
+
+def run_stress_backtest(trader_path, prices_dict, products, limits=80):
+    """Runs a backtest on multiple price series synchronously."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("trader_stress", trader_path)
+    trader_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(trader_mod)
+    trader = trader_mod.Trader()
+
+    listings = {p: Listing(p, p, "XIRECS") for p in products}
+    positions = {p: 0 for p in products}
+    cash = 0.0
+    pnl_history = []
+    current_trader_data = ""
+    
+    length = len(next(iter(prices_dict.values())))
+
+    for ts in range(length):
+        order_depths = {}
+        mids = {}
+        for p in products:
+            mid = prices_dict[p][ts]
+            mids[p] = mid
+            spread = 6 if "PEPPER" in p else 2
+            depth = OrderDepth()
+            bid = math.floor(mid - spread/2.0)
+            ask = math.ceil(mid + spread/2.0)
+            depth.buy_orders = {bid: 15}
+            depth.sell_orders = {ask: -15}
+            order_depths[p] = depth
+        
+        state = TradingState(
+            traderData=current_trader_data,
+            timestamp=ts * 100,
+            listings=listings,
+            order_depths=order_depths,
+            own_trades={},
+            market_trades={},
+            position=positions,
+            observations=Observation({}, {})
+        )
+        
+        try:
+            orders, _, new_trader_data = trader.run(state)
+            current_trader_data = new_trader_data
+        except:
+            mtm = cash + sum(positions[p] * mids[p] for p in products)
+            pnl_history.append(mtm)
+            continue
+
+        for p, order_list in orders.items():
+            if p not in order_depths: continue
+            curr_ask = math.ceil(mids[p] + (6 if "PEPPER" in p else 2)/2.0)
+            curr_bid = math.floor(mids[p] - (6 if "PEPPER" in p else 2)/2.0)
+            
+            p_limits = getattr(trader, 'limits', {})
+            p_limit = p_limits.get(p, limits)
+            for order in order_list:
+                qty, price = order.quantity, order.price
+                if qty > 0 and price >= curr_ask:
+                    fill = min(qty, p_limit - positions[p])
+                    if fill > 0:
+                        positions[p] += fill
+                        cash -= fill * curr_ask
+                elif qty < 0 and price <= curr_bid:
+                    fill = min(-qty, p_limit + positions[p])
+                    if fill > 0:
+                        positions[p] -= fill
+                        cash += fill * curr_bid
+
+        mtm = cash + sum(positions[p] * mids[p] for p in products)
+        pnl_history.append(mtm)
+
+    return {
+        "pnl_curve": pnl_history,
+        "final_pnl": pnl_history[-1],
+        "max_dd": max([peak - val for peak, val in zip(np.maximum.accumulate(pnl_history), pnl_history)]),
+        "final_pos": sum(abs(v) for v in positions.values())
+    }
 
 def run_backtest_simulation(day):
     st.toast(f"Running simulation against Day {day}...")
@@ -796,7 +876,7 @@ def main():
             p_col_map = {"All": "final_pnl", "Osmium": "pnl_osmium", "Root": "pnl_pepper"}
             target_col = p_col_map[p_filter]
 
-            tab_lead, tab_inspect = st.tabs(["🏆 Leaderboard & Comparison", "📊 Individual Inspection"])
+            tab_lead, tab_inspect, tab_stress = st.tabs(["🏆 Leaderboard & Comparison", "📊 Individual Inspection", "🔬 Anti-Overfit Stress Lab"])
 
             # Pre-load all data for leaderboard and comparison
             all_leaderboard_data = []
@@ -951,6 +1031,153 @@ def main():
                         tooltip=["name", "target_pnl", "max_drawdown", "category"],
                     ).properties(height=400, title="PnL vs Drawdown (bottom-right = best)")
                     st.altair_chart(scatter, use_container_width=True)
+
+            with tab_stress:
+                st.subheader("🔬 Extreme Multi-Variant Stress Test")
+                st.markdown("""
+                Apply **destructive mutations** to price series to see if your bot relies on 
+                genuine signals or just "got lucky" with a specific trend.
+                """)
+
+                # 1. SETUP
+                trader_search = []
+                trader_base = os.path.join(os.path.dirname(__file__), "..", "traders")
+                for root, _, files in os.walk(trader_base):
+                    for f in files:
+                        if f.endswith(".py") and not f.startswith("__"):
+                            trader_search.append(os.path.relpath(os.path.join(root, f), os.getcwd()))
+                
+                col_s1, col_s2, col_s3 = st.columns(3)
+                with col_s1:
+                    sel_trader = st.selectbox("Target Trader", trader_search, key="stress_trader", index=next((i for i, x in enumerate(trader_search) if "v2d" in x), 0))
+                with col_s2:
+                    sel_prod = st.selectbox("Market Asset", ["ASH_COATED_OSMIUM", "INTARIAN_PEPPER_ROOT", "TOTAL (Both Assets)"], index=2)
+                with col_s3:
+                    sel_source = st.selectbox("Base Dataset", ["All (Round 1 Data)", -1, -2, 0], index=0)
+
+                if st.button("☣️ Run Destructive Mutation Suite", type="primary", use_container_width=True):
+                    source_key = "All" if sel_source == "All (Round 1 Data)" else sel_source
+                    df_p, _ = load_and_process_data(source_key)
+                    if df_p is None:
+                        st.error("Base data not found!")
+                    else:
+                        active_prods = ["ASH_COATED_OSMIUM", "INTARIAN_PEPPER_ROOT"] if "TOTAL" in sel_prod else [sel_prod]
+                        
+                        base_prices = {}
+                        for p in active_prods:
+                            p_vals = df_p[df_p["product"] == p]["mid_price"].values
+                            if len(p_vals) > 5000:
+                                p_vals = p_vals[::len(p_vals)//3000] # Dynamic downsample
+                            base_prices[p] = p_vals
+                        
+                        # Verify lengths match
+                        min_len = min(len(v) for v in base_prices.values())
+                        for p in base_prices: base_prices[p] = base_prices[p][:min_len]
+
+                        np.random.seed(42)
+                        
+                        # 2. VARIANTS (Dict of Dicts: variant_name -> product -> prices)
+                        variants = {}
+                        v_names = ["Original", "Inverted Returns", "Flat + Noise", "Trend Amplified (1.8x)", "Trend Dampened (0.4x)", "Shuffled Segments"]
+                        for v in v_names: variants[v] = {}
+
+                        for p in active_prods:
+                            价格 = base_prices[p]
+                            variants["Original"][p] = 价格.copy()
+                            
+                            rets = np.diff(价格)
+                            variants["Inverted Returns"][p] = 价格[0] + np.cumsum(-rets)
+                            variants["Flat + Noise"][p] = 价格[0] + np.random.normal(0, 5, len(价格))
+                            variants["Trend Amplified (1.8x)"][p] = 价格[0] + np.cumsum(rets * 1.8)
+                            variants["Trend Dampened (0.4x)"][p] = 价格[0] + np.cumsum(rets * 0.4)
+                            
+                            # Shuffled (litera chunks of 50)
+                            chunks = [价格[i:i + 50] for i in range(0, len(价格), 50)]
+                            shuf_idx = np.random.permutation(len(chunks))
+                            variants["Shuffled Segments"][p] = np.concatenate([chunks[i] for i in shuf_idx])
+
+                        # 3. RUN BOT
+                        stress_results = []
+                        pbar = st.progress(0)
+                        for i, vname in enumerate(v_names):
+                            res = run_stress_backtest(os.path.abspath(sel_trader), variants[vname], active_prods)
+                            res["Variant"] = vname
+                            stress_results.append(res)
+                            pbar.progress((i+1)/len(v_names))
+                        
+                        df_stress = pd.DataFrame(stress_results)
+                        
+                        # 4. ROBUSTNESS SCORE
+                        # Logic: Mean PnL / (Std PnL + 1) * Penalty for Sign Flips
+                        mean_p = df_stress["final_pnl"].mean()
+                        std_p = df_stress["final_pnl"].std()
+                        flips = sum(1 for p in df_stress["final_pnl"] if p < 0)
+                        score = (mean_p / (std_p + 1)) * (1.0 - (flips / len(variants)))
+                        
+                        # Normalize score 0-100
+                        norm_score = max(0, min(100, score * 10))
+                        
+                        st.divider()
+                        c_score, c_stats = st.columns([1, 2])
+                        with c_score:
+                            st.metric("Overall Robustness Score", f"{norm_score:.1f}/100", 
+                                      help="High score = bot makes money regardless of how the price chart is warped.")
+                        with c_stats:
+                            st.markdown(f"**Detected Failures**: {flips} / {len(variants)} regimes showed losses.")
+
+                        # 5. UI TABLE & FLAGS
+                        def flag_row(row, base_pnl, base_dd):
+                            flags = []
+                            if row["final_pnl"] < 0: flags.append("🚩 LOSS")
+                            if row["final_pnl"] * base_pnl < 0: flags.append("🔄 SIGN FLIP")
+                            if row["max_dd"] > base_dd * 2: flags.append("⚠️ DD SPIKE")
+                            if abs(row["final_pos"]) > 40: flags.append("📉 DIRECTIONAL")
+                            return ", ".join(flags) if flags else "✅ ROBUST"
+
+                        base_pnl = df_stress[df_stress["Variant"] == "Original"]["final_pnl"].values[0]
+                        base_dd = df_stress[df_stress["Variant"] == "Original"]["max_dd"].values[0]
+                        df_stress["Analysis"] = df_stress.apply(lambda r: flag_row(r, base_pnl, base_dd), axis=1)
+
+                        st.dataframe(df_stress[["Variant", "final_pnl", "max_dd", "final_pos", "Analysis"]].style.format({
+                            "final_pnl": "${:,.0f}",
+                            "max_dd": "${:,.0f}"
+                        }), use_container_width=True)
+
+                        # 6. VISUALIZATION
+                        st.subheader("Variant PnL Trajectories")
+                        line_data = []
+                        for res in stress_results:
+                            for t, val in enumerate(res["pnl_curve"]):
+                                if t % 20 == 0: # Downsample
+                                    line_data.append({"Tick": t, "PnL": val, "Variant": res["Variant"]})
+                        
+                        df_chart = pd.DataFrame(line_data)
+                        chart = alt.Chart(df_chart).mark_line().encode(
+                            x="Tick:Q",
+                            y="PnL:Q",
+                            color="Variant:N",
+                            tooltip=["Tick", "PnL", "Variant"]
+                        ).properties(height=400).interactive()
+                        st.altair_chart(chart, use_container_width=True)
+
+                        col_sc1, col_sc2 = st.columns(2)
+                        with col_sc1:
+                            st.markdown("**Mean PnL vs Drawdown**")
+                            scatter = alt.Chart(df_stress).mark_circle(size=100).encode(
+                                x=alt.X("final_pnl:Q", title="Final PnL ($)"),
+                                y=alt.Y("max_dd:Q", title="Max Drawdown ($)"),
+                                color="Variant:N",
+                                tooltip=["Variant", "final_pnl", "max_dd"]
+                            ).properties(height=400).interactive()
+                            st.altair_chart(scatter, use_container_width=True)
+                        with col_sc2:
+                            st.info("""
+                            **Variant Interpretration:**
+                            - **Inverted**: Tests if your bot actually finds alpha or just follows a trend.
+                            - **Shuffled**: Tests if trade timing/order matters.
+                            - **Flat+Noise**: Tests if the bot over-trades (chops) in dead markets.
+                            - **Amplified**: Tests if the bot can handle high volatility.
+                            """)
 
         else:
             st.warning("No robust results found. Run the robust backtester first:")
