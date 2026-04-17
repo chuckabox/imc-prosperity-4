@@ -6,5 +6,5 @@ This repo stores strategies as `trader_*.py`, so we re-export the robust
 strategy as a default "template" implementation.
 """
 
-from ken.trader_robust_ken_v2 import Trader, logger
+from peter.trader_robust_peter_v12_baseline import Trader, logger
 
