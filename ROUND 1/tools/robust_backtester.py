@@ -46,6 +46,9 @@ class BacktestResult:
     pnl_osmium: float
     pnl_pepper: float
     max_drawdown: float
+    sharpe_ratio: float = 0.0
+    sortino_ratio: float = 0.0
+    calmar_ratio: float = 0.0
     max_position: Dict[str, int] = field(default_factory=dict)
     trade_count: int = 0
     pnl_curve: List[float] = field(default_factory=list)
@@ -178,6 +181,18 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
     pnl_os = cash_per_product["ASH_COATED_OSMIUM"] + (positions["ASH_COATED_OSMIUM"] * mid_prices["ASH_COATED_OSMIUM"] if "ASH_COATED_OSMIUM" in mid_prices else 0)
     pnl_pp = cash_per_product["INTARIAN_PEPPER_ROOT"] + (positions["INTARIAN_PEPPER_ROOT"] * mid_prices["INTARIAN_PEPPER_ROOT"] if "INTARIAN_PEPPER_ROOT" in mid_prices else 0)
 
+    # Calculate local Sharpe/Sortino for this specific run
+    returns = np.diff(pnl_history)
+    if len(returns) > 1:
+        std = np.std(returns)
+        sharpe = (np.mean(returns) / std * np.sqrt(len(returns))) if std > 0 else 0
+        downside_returns = returns[returns < 0]
+        downside_std = np.std(downside_returns) if len(downside_returns) > 1 else std
+        sortino = (np.mean(returns) / downside_std * np.sqrt(len(returns))) if downside_std > 0 else 0
+        calmar = (pnl_history[-1] / max_dd) if max_dd > 0 else 0
+    else:
+        sharpe = sortino = calmar = 0
+
     return BacktestResult(
         name=name,
         category=category,
@@ -185,6 +200,9 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
         pnl_osmium=pnl_os,
         pnl_pepper=pnl_pp,
         max_drawdown=max_dd,
+        sharpe_ratio=sharpe,
+        sortino_ratio=sortino,
+        calmar_ratio=calmar,
         max_position=max_pos,
         trade_count=trade_count,
         pnl_curve=pnl_history,
@@ -267,6 +285,9 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], 
         "std_pnl": float(np.std(pnls)),
         "min_pnl": float(np.min(pnls)),
         "max_pnl": float(np.max(pnls)),
+        "mean_sharpe": float(np.mean([r.sharpe_ratio for r in results])),
+        "mean_sortino": float(np.mean([r.sortino_ratio for r in results])),
+        "mean_calmar": float(np.mean([r.calmar_ratio for r in results])),
         "p5_pnl": float(np.percentile(pnls, 5)),
         "p25_pnl": float(np.percentile(pnls, 25)),
         "p75_pnl": float(np.percentile(pnls, 75)),
@@ -280,6 +301,7 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], 
             "mean": float(np.mean(vals)),
             "min": float(np.min(vals)),
             "max": float(np.max(vals)),
+            "mean_sharpe": float(np.mean([r.sharpe_ratio for r in results if r.category == cat])),
         } for cat, vals in by_category.items()},
     }
 
@@ -290,9 +312,14 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], 
     print(f"Datasets tested: {stats['total_datasets']}")
     print()
     print("PnL Distribution:")
-    print(f"  Mean:          ${stats['mean_pnl']:>12,.2f}  <-- THE TARGET METRIC")
-    print(f"  Median:        ${stats['median_pnl']:>12,.2f}")
+    print(f"  Mean PnL:      ${stats['mean_pnl']:>12,.2f}  <-- THE TARGET METRIC")
+    print(f"  Median PnL:    ${stats['median_pnl']:>12,.2f}")
     print(f"  Std Dev:       ${stats['std_pnl']:>12,.2f}")
+    print()
+    print("Risk-Adjusted Metrics (Averaged):")
+    print(f"  Mean Sharpe:    {stats['mean_sharpe']:>12.4f}")
+    print(f"  Mean Sortino:   {stats['mean_sortino']:>12.4f}")
+    print(f"  Mean Calmar:    {stats['mean_calmar']:>12.4f}")
     print()
     print("Risk Metrics:")
     print(f"  Worst PnL:     ${stats['min_pnl']:>12,.2f}")
@@ -306,6 +333,7 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], 
     print("By Category:")
     for cat, cat_stats in stats["by_category"].items():
         print(f"  {cat:12s}: n={cat_stats['count']:>3d}  mean=${cat_stats['mean']:>10,.2f}  "
+              f"Sharpe={cat_stats['mean_sharpe']:>6.2f}  "
               f"range=[${cat_stats['min']:>10,.2f}, ${cat_stats['max']:>10,.2f}]")
     print("=" * 70)
 
@@ -325,6 +353,9 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], 
             "pnl_osmium": r.pnl_osmium,
             "pnl_pepper": r.pnl_pepper,
             "max_drawdown": r.max_drawdown,
+            "sharpe": r.sharpe_ratio,
+            "sortino": r.sortino_ratio,
+            "calmar": r.calmar_ratio,
             "trade_count": r.trade_count,
         })
     pd.DataFrame(rows).to_csv(out_path, index=False)

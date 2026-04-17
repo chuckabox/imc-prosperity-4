@@ -170,6 +170,38 @@ def _pepper_sawtooth(ticks: int = TICKS) -> np.ndarray:
     return base[:ticks] + noise
 
 
+def _pepper_black_swan(ticks: int = TICKS) -> np.ndarray:
+    """Sudden 50% drop and stay there - testing emergency liquidation."""
+    swan_tick = int(ticks * 0.6)
+    base = np.linspace(11000, 11500, ticks)
+    base[swan_tick:] = base[swan_tick:] * 0.5
+    noise = np.cumsum(np.random.normal(0, 1.0, ticks))
+    return base + noise
+
+
+def _pepper_flash_crash(ticks: int = TICKS) -> np.ndarray:
+    """Sudden -20% and immediate recovery within 50 ticks."""
+    crash_start = int(ticks * 0.4)
+    crash_duration = 50
+    base = np.linspace(11000, 11200, ticks)
+    dip = np.linspace(0, 2000, crash_duration // 2)
+    dip = np.concatenate([dip, dip[::-1]])
+    base[crash_start:crash_start + len(dip)] -= dip
+    noise = np.cumsum(np.random.normal(0, 1.5, ticks))
+    return base + noise
+
+
+def _pepper_fat_finger(ticks: int = TICKS) -> np.ndarray:
+    """Single tick outlier ±10% - testing outlier rejection."""
+    base = np.linspace(11000, 11100, ticks)
+    # Add scattered outliers
+    for _ in range(5):
+        idx = np.random.randint(100, ticks - 100)
+        base[idx] *= np.random.choice([0.9, 1.1])
+    noise = np.cumsum(np.random.normal(0, 1.0, ticks))
+    return base + noise
+
+
 # ---------------------------------------------------------------------------
 # Osmium regime generators
 # ---------------------------------------------------------------------------
@@ -219,6 +251,9 @@ PEPPER_REGIMES = {
     "high_vol":     _pepper_high_vol,
     "v_recovery":   _pepper_v_recovery,
     "sawtooth":     _pepper_sawtooth,
+    "black_swan":   _pepper_black_swan,
+    "flash_crash":  _pepper_flash_crash,
+    "fat_finger":   _pepper_fat_finger,
 }
 
 OSMIUM_REGIMES = {
@@ -241,6 +276,9 @@ SCENARIOS = {
     "v_recovery_drift":     ("v_recovery", "drift"),
     "sawtooth_normal":      ("sawtooth", "normal"),
     "sawtooth_volatile":    ("sawtooth", "volatile"),
+    "black_swan_normal":    ("black_swan", "normal"),
+    "flash_crash_volatile": ("flash_crash", "volatile"),
+    "fat_finger_volatile":  ("fat_finger", "volatile"),
 }
 
 
