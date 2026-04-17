@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python -c \"import ast; ast.parse\\(open\\('trader_robust_peter_v10_safe.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\('trader_robust_peter_v6d.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
-      "Bash(python -c \"import ast; ast.parse\\(open\\('trader_robust_peter_v11.py'\\).read\\(\\)\\); print\\('OK'\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\('trader_robust_peter_v11.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('trader_robust_peter_v12.py'\\).read\\(\\)\\); print\\('OK'\\)\")"
     ]
   }
 }
