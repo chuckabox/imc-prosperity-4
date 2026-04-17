@@ -965,7 +965,7 @@ def main():
 
 
     with tab_backtest:
-        st.success("**Mission Status:** Currently analyzing Round 1 Data. Goal: Maintain Osmium at ~10,000 and manage Pepper volatility.")
+
 
         col_day, col_btn = st.columns([1, 1])
         with col_day:
