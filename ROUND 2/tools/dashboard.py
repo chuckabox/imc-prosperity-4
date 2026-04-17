@@ -23,37 +23,7 @@ import numpy as np
 from scipy.interpolate import make_interp_spline
 
 
-CONFIG_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "config.json"))
-DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data_capsule"))
 
-def load_config():
-    defaults = {
-        "osmium_active": True,
-        "pepper_active": True,
-        "osmium_limit": 80,
-        "pepper_limit": 80,
-        "emerald_active": True, # For legacy compat
-        "tomato_active": True,
-        "emerald_limit": 80,
-        "tomato_limit": 80,
-        "target_spread": 2,
-        "mr_threshold": 2,
-        "edge": 1.5,
-        "skew": 0.2,
-        "selected_day": -1
-    }
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
-            try:
-                config = json.load(f)
-                return {**defaults, **config}
-            except:
-                pass
-    return defaults
-
-def save_config(config):
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=4)
 
 # Emergency stop removed per user request
 try:
@@ -297,50 +267,55 @@ def run_backtest_simulation(day):
             trader.traderData = trader_data
 
             # --- Optimized Fill Logic ---
+            limits = {"ASH_COATED_OSMIUM": 80, "INTARIAN_PEPPER_ROOT": 80}
+
             for product, order_list in orders.items():
                 if product not in ts_data: continue
                 _, curr_ask, curr_bid = ts_data[product]
+                mid_fill = (curr_ask + curr_bid) / 2.0
+                limit = limits.get(product, 80)
 
                 for order in order_list:
                     qty = order.quantity
                     price = order.price
-                    filled = False
+                    fill_info = None
 
                     if qty > 0 and price >= curr_ask:
-                        fill_qty = min(qty, 20 - positions[product])
+                        fill_qty = min(qty, limit - positions[product])
                         if fill_qty > 0:
                             positions[product] += fill_qty
                             cash -= fill_qty * curr_ask
-                            filled = True
-                            st.session_state.trades_log.append(f"TS {ts}: AGG BUY {fill_qty} {product} @ {curr_ask}")
+                            fill_info = {"ts": ts, "product": product, "qty": fill_qty, "price": curr_ask, "side": "BUY", "type": "AGG", "mid_fill": mid_fill}
                     elif qty < 0 and price <= curr_bid:
-                        fill_qty = min(-qty, positions[product] + 20)
+                        fill_qty = min(-qty, positions[product] + limit)
                         if fill_qty > 0:
                             positions[product] -= fill_qty
                             cash += fill_qty * curr_bid
-                            filled = True
-                            st.session_state.trades_log.append(f"TS {ts}: AGG SELL {fill_qty} {product} @ {curr_bid}")
+                            fill_info = {"ts": ts, "product": product, "qty": -fill_qty, "price": curr_bid, "side": "SELL", "type": "AGG", "mid_fill": mid_fill}
 
-                    if not filled and ts in trade_lookup:
+                    if fill_info is None and ts in trade_lookup:
                         mkt_trades = trade_lookup[ts].get(product, [])
                         for trade in mkt_trades:
                             trade_price = int(trade["price"])
                             trade_qty = 1
 
                             if qty > 0 and price >= trade_price:
-                                fill_qty = min(qty, 20 - positions[product], trade_qty)
+                                fill_qty = min(qty, limit - positions[product], trade_qty)
                                 if fill_qty > 0:
                                     positions[product] += fill_qty
-                                    cash -= fill_qty * price
-                                    st.session_state.trades_log.append(f"TS {ts}: PASSIVE BUY {fill_qty} {product} @ {price}")
+                                    cash -= fill_qty * trade_price
+                                    fill_info = {"ts": ts, "product": product, "qty": fill_qty, "price": trade_price, "side": "BUY", "type": "PASSIVE", "mid_fill": mid_fill}
                                     break
                             elif qty < 0 and price <= trade_price:
-                                fill_qty = min(-qty, positions[product] + 20, trade_qty)
+                                fill_qty = min(-qty, limit + positions[product], trade_qty)
                                 if fill_qty > 0:
                                     positions[product] -= fill_qty
-                                    cash += fill_qty * price
-                                    st.session_state.trades_log.append(f"TS {ts}: PASSIVE SELL {fill_qty} {product} @ {price}")
+                                    cash += fill_qty * trade_price
+                                    fill_info = {"ts": ts, "product": product, "qty": -fill_qty, "price": trade_price, "side": "SELL", "type": "PASSIVE", "mid_fill": mid_fill}
                                     break
+                    
+                    if fill_info:
+                        st.session_state.trades_log.append(fill_info)
 
             # Mark-to-market
             mtm_pnl = cash
@@ -362,13 +337,69 @@ def run_backtest_simulation(day):
     st.success(f"Simulation Complete! Final PnL: **{final_pnl:,.2f}**")
 
     if st.session_state.trades_log:
-        with st.expander("📝 View Trade History (Latest 50)", expanded=False):
-            for t in reversed(st.session_state.trades_log[-50:]):
-                st.text(t)
+        st.divider()
+        st.subheader("☣️ Adverse Selection (Toxic Flow) Audit")
+        
+        # --- Toxicity Calculation ---
+        trades_df = pd.DataFrame(st.session_state.trades_log)
+        
+        # Fast lookup for future prices (T+10)
+        DELAY = 1000 # 1000ms = 10 ticks (if 100ms per tick) - Prosperity timestamps are in increments.
+        # Let's use 10 * steps. If timestamp is 0, 100, 200, then T+10 is T + 1000.
+        
+        price_lookup = df_prices.set_index(["timestamp", "product"])["mid_price"].to_dict()
+        
+        def get_toxic_delta(row):
+            future_ts = row["ts"] + DELAY
+            future_mid = price_lookup.get((future_ts, row["product"]))
+            if future_mid is None: return None
+            
+            delta = future_mid - row["mid_fill"]
+            # BUY: toxic if price drops (delta < 0)
+            # SELL: toxic if price rises (delta > 0)
+            if row["side"] == "BUY":
+                return -delta # Positive value = bad for us
+            else:
+                return delta # Positive value = bad for us
+
+        trades_df["adverse_delta"] = trades_df.apply(get_toxic_delta, axis=1)
+        trades_df["is_toxic"] = trades_df["adverse_delta"] > 0
+        
+        col_t1, col_t2, col_t3 = st.columns(3)
+        valid_trades = trades_df.dropna(subset=["adverse_delta"])
+        
+        if not valid_trades.empty:
+            toxic_rate = valid_trades["is_toxic"].mean() * 100
+            mean_adv = valid_trades[valid_trades["is_toxic"]]["adverse_delta"].mean()
+            
+            col_t1.metric("Overall Toxicity Score", f"{toxic_rate:.1f}%", help="Percentage of fills where the market moved against you within 10 ticks.")
+            col_t2.metric("Mean Adverse Move", f"{mean_adv:.2f}", help="Average price move against you on toxic fills.")
+            col_t3.metric("Trade Count", len(trades_df))
+            
+            # --- Per-Product Breakdown ---
+            st.markdown("#### Per-Product Signal Quality")
+            prod_stats = valid_trades.groupby(["product", "side"]).agg(
+                toxicity=("is_toxic", "mean"),
+                avg_adverse=("adverse_delta", "mean"),
+                count=("ts", "count")
+            ).reset_index()
+            prod_stats["toxicity"] = (prod_stats["toxicity"] * 100).map("{:.1f}%".format)
+            st.table(prod_stats)
+            
+            # --- Histograms ---
+            st.markdown("#### Adverse Delta Distribution")
+            hist = alt.Chart(valid_trades).mark_bar().encode(
+                x=alt.X("adverse_delta:Q", bin=alt.Bin(maxbins=30), title="Adverse Move (Positive = Bad)"),
+                y="count()",
+                color=alt.Color("side:N", scale=alt.Scale(domain=["BUY", "SELL"], range=["#2ecc71", "#e74c3c"]))
+            ).properties(height=250).interactive()
+            st.altair_chart(hist, use_container_width=True)
+
+        with st.expander("📝 Detailed Trade Log", expanded=False):
+            st.dataframe(trades_df.sort_values("ts", ascending=False), use_container_width=True)
 
     if pnl_history:
         pnl_df = pd.DataFrame({"Timestamp": range(len(pnl_history)), "PnL": pnl_history})
-        # Downsample PnL chart for performance
         if len(pnl_df) > 1000:
             pnl_df = pnl_df.iloc[::len(pnl_df)//1000]
         st.line_chart(pnl_df.set_index("Timestamp"), width="stretch")
@@ -564,289 +595,22 @@ def render_reversal_chart(df, product, start_idx=0, window=1000):
     plt.tight_layout()
     st.pyplot(fig, use_container_width=True)
 
-def forge_trader():
-    TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "..", "traders", "trader.py")
-    if not os.path.exists(TRADER_TEMPLATE):
-        st.error(f"Template not found at {TRADER_TEMPLATE}")
-        return
-
-    with open(TRADER_TEMPLATE, "r") as f:
-        text = f.read()
-
-    derived_spread = max(1, int(st.session_state.analysis["pep_std"] / 2.0))
-    derived_fv = int(st.session_state.analysis["os_mean"])
-
-    config_rendered = {
-        "osmium_active": st.session_state.config["osmium_active"],
-        "pepper_active": st.session_state.config["pepper_active"],
-        "osmium_limit": st.session_state.config["osmium_limit"],
-        "pepper_limit": st.session_state.config["pepper_limit"],
-        "target_spread": derived_spread,
-        "mr_threshold": st.session_state.config["mr_threshold"]
-    }
-
-    # Use json.dumps but fix the capitalization for Python
-    replacement_config = "self.config = " + json.dumps(config_rendered, indent=8).replace("true", "True").replace("false", "False")
-
-    text = re.sub(r"self\.config\s*=\s*\{.*?\}", replacement_config, text, flags=re.DOTALL)
-
-    text = re.sub(r"def load_config\(self\):.*?def send_sell_order", "def load_config(self):\n        pass\n\n    def send_sell_order", text, flags=re.DOTALL)
-    text = text.replace("fair_value = 10000", f"fair_value = {derived_fv}")
-
-    # Validation Step: Dummy Check for Python Syntax
-    import ast
-    try:
-        ast.parse(text)
-        st.session_state.forged_code = text
-        st.toast("Trader.py beautifully forged and validated.")
-    except SyntaxError as e:
-        st.error(f"Forge failed! Generated code has a syntax error: {e}")
-
-def perform_auto_analysis():
-    df1, _ = load_and_process_data(-1)
-    df2, _ = load_and_process_data(-2)
-    df0, _ = load_and_process_data(0)
-
-    if df1 is None or df2 is None:
-        st.error("Cannot run analysis! Ensure day_-1 and day_-2 CSVs are in data_capsule.")
-        return
-
-    df = pd.concat([d for d in [df1, df2, df0] if d is not None])
-    os_mean = df[df["product"] == "ASH_COATED_OSMIUM"]["mid_price"].mean()
-    pep_std = df[df["product"] == "INTARIAN_PEPPER_ROOT"]["mid_price"].std()
-
-    st.session_state.analysis = {"os_mean": os_mean, "pep_std": pep_std}
-    st.toast("Analysis Successful!")
 
 def main():
-    # --- PRE-RENDER STATE SYNC (CRITICAL FOR WIDGET UPDATES) ---
-    if st.session_state.get("pending_apply"):
-        for k, v in st.session_state.best_params.items():
-            st.session_state.config[k] = v
-            # Initialize or Update the widget key BEFORE it renders
-            st.session_state[k] = v
-        save_config(st.session_state.config)
-        del st.session_state["pending_apply"]
-        st.toast("✅ Optimization parameters applied to configuration!")
-        # No rerun here to keep tab state if possible, or use a small toast
     st.set_page_config(
         page_title="P4 Control Center",
         layout="wide"
     )
 
-    if "config" not in st.session_state:
-        st.session_state.config = load_config()
-
-    def on_change_callback():
-        for key in ["osmium_active", "pepper_active", "osmium_limit", "pepper_limit", "target_spread", "mr_threshold", "edge", "skew"]:
-             if key in st.session_state:
-                 st.session_state.config[key] = st.session_state[key]
-        save_config(st.session_state.config)
-
     # --- MAIN CONTENT ---
     st.title("📈 Prosperity 4: Operations Console")
 
-    with st.expander("⚙️ Strategy Configuration", expanded=False):
-        col_act, col_lim, col_prc = st.columns(3)
-        with col_act:
-            st.subheader("Activation")
-            st.toggle("🟩 OSMIUM (MR)", key="osmium_active", value=st.session_state.config["osmium_active"], on_change=on_change_callback)
-            st.toggle("🟥 PEPPER (Trend)", key="pepper_active", value=st.session_state.config["pepper_active"], on_change=on_change_callback)
-        with col_lim:
-            st.subheader("Limits")
-            st.slider("💎 Osmium", 0, 80, key="osmium_limit", value=st.session_state.config["osmium_limit"], on_change=on_change_callback)
-            st.slider("🌶️ Pepper", 0, 80, key="pepper_limit", value=st.session_state.config["pepper_limit"], on_change=on_change_callback)
-        with col_prc:
-            st.subheader("Parameters")
-            st.slider("🎯 Spread", 1.0, 15.0, key="target_spread", value=float(st.session_state.config["target_spread"]), on_change=on_change_callback)
-            st.slider("📏 MR Thresh", 1.0, 20.0, key="mr_threshold", value=float(st.session_state.config["mr_threshold"]), on_change=on_change_callback)
-            col_s1, col_s2 = st.columns(2)
-            with col_s1:
-                st.slider("⚔️ Edge", 0.0, 10.0, key="edge", value=float(st.session_state.config.get("edge", 1.5)), on_change=on_change_callback)
-            with col_s2:
-                st.slider("⚖️ Skew", 0.0, 2.0, key="skew", value=float(st.session_state.config.get("skew", 0.2)), on_change=on_change_callback)
-
     # Final tab layout
-
-    tab_backtest, tab_robust, tab_archive = st.tabs([
+    tab_backtest, tab_robust = st.tabs([
         "📉 Visual Backtester",
-        "🛡️ Robust Analysis",
-        "🕰️ Archive",
+        "🛡️ Robust Analysis"
     ])
 
-    # Content for the remaining tabs
-    # (tab_ai and tab_market are now moved inside tab_archive below)
-
-
-
-    with tab_archive:
-        st.header("🕰️ Legacy & Experimental Tools")
-
-        with st.expander("🧠 AI Optimizer (Bayesian)", expanded=False):
-            if not OPTUNA_AVAILABLE:
-                st.error("📉 AI Optimizer is currently unavailable.")
-            else:
-                col_info, col_setup = st.columns([1, 1])
-                with col_info:
-                    st.markdown("""
-                    Utilizing a **Tree-structured Parzen Estimator (TPE)** algorithm.
-                    """)
-                    if "best_params" in st.session_state:
-                        st.success(f"Best: **${st.session_state.get('best_pnl', 0):,.2f}**")
-                        if st.button("✅ Apply to Config", type="primary"):
-                            st.session_state.pending_apply = True
-                            st.rerun()
-                        st.table(pd.DataFrame([st.session_state.best_params]).T.rename(columns={0: "Value"}))
-                with col_setup:
-                    trader_search = []
-                    trader_base = os.path.join(os.path.dirname(__file__), "..", "traders")
-                    for root, _, files in os.walk(trader_base):
-                        for f in files:
-                            if f.endswith(".py") and not f.startswith("__"):
-                                trader_search.append(os.path.relpath(os.path.join(root, f), os.getcwd()))
-                    
-                    sel_trader = st.selectbox("Target File", trader_search, key="opt_trader")
-                    n_tri = st.number_input("Iterations", 10, 200, 30, key="opt_n")
-                    t_day = st.selectbox("Style", ["All Days (Robust)", -1, -2, 0], index=0, key="opt_day")
-
-                    if st.button("🚀 Start Search", type="primary", use_container_width=True):
-                        pbar = st.progress(0)
-                        def obj(trial):
-                            cfg = {
-                                "osmium_limit": trial.suggest_int("osmium_limit", 5, 80),
-                                "pepper_limit": trial.suggest_int("pepper_limit", 5, 80),
-                                "edge": trial.suggest_float("edge", 0.5, 5.0),
-                                "skew": trial.suggest_float("skew", 0.1, 1.0)
-                            }
-                            f_path = os.path.abspath(sel_trader)
-                            d_test = [-1, -2, 0] if t_day == "All Days (Robust)" else [t_day]
-                            t_res = sum(execute_backtest_headless(d, f_path, cfg) for d in d_test)
-                            r = t_res / len(d_test)
-                            pbar.progress((trial.number + 1) / n_tri)
-                            return r
-                        study = optuna.create_study(direction="maximize")
-                        study.optimize(obj, n_trials=n_tri)
-                        st.session_state.best_params = study.best_params
-                        st.session_state.best_pnl = study.best_value
-                        st.rerun()
-
-        with st.expander("🌐 Market Data Terminal", expanded=False):
-            ext_path = 'ROUND 1/data/external/processed/SPY.csv'
-            if os.path.exists(ext_path):
-                df_ext = pd.read_csv(ext_path)
-                st.altair_chart(alt.Chart(df_ext).mark_line().encode(
-                    x='timestamp:T', y=alt.Y('close:Q', scale=alt.Scale(zero=False))
-                ).properties(height=300).interactive(), use_container_width=True)
-            else:
-                st.warning("No external data found.")
-        
-        with st.expander("🛠️ One-Click Forge", expanded=False):
-            st.markdown("Generate a `trader.py` based on current analysis and config.")
-            col_f1, col_f2 = st.columns(2)
-            with col_f1:
-                if st.button("🔍 Run Auto-Analysis", use_container_width=True):
-                    perform_auto_analysis()
-            with col_f2:
-                if st.button("🔨 Forge Trader.py", type="primary", use_container_width=True):
-                    if "analysis" not in st.session_state:
-                         st.error("Please run Auto-Analysis first!")
-                    else:
-                        forge_trader()
-            
-            if "forged_code" in st.session_state:
-                st.code(st.session_state.forged_code, language="python")
-
-        st.divider()
-        st.subheader("📊 Performance Matrix (Scatter)")
-        st.markdown("""
-        Comparative audit of all strategy variations.
-        - **Actual (Historical)**: PnL summed across all Round 1 CSV files (`data_capsule`).
-        - **Monte Carlo**: Expected PnL / Variance over synthetic synthetic paths.
-        - **Note**: Data is actual, sourced from `ROUND 1/results/` logs.
-        """)
-
-        trader_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "traders"))
-        results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))
-        results = []
-
-        if os.path.exists(trader_dir):
-            trader_files = [f for f in os.listdir(trader_dir) if f.endswith(".py")]
-            for trader_file in trader_files:
-                trader_id = trader_file.replace(".py", "")
-                csv_path = os.path.join(results_dir, f"{trader_id}_mc_results.csv")
-                hist_path = os.path.join(results_dir, f"{trader_id}_historical_results.json")
-                
-                if os.path.exists(csv_path):
-                    try:
-                        df_mc = pd.read_csv(csv_path)
-                        avg_pnl = df_mc['final_pnl'].mean()
-                        var_pnl = df_mc['final_pnl'].var()
-                        if pd.isna(var_pnl): var_pnl = 0
-                        
-                        # Load Actual Historical Value
-                        hist_pnl = "N/A"
-                        if os.path.exists(hist_path):
-                            with open(hist_path, "r") as hf:
-                                hist_pnl = json.load(hf).get("total_pnl", 0)
-
-                        robust_file = os.path.join(results_dir, f"{trader_id}_robustness_results.json")
-                        external_stability = "N/A"
-                        if os.path.exists(robust_file):
-                            with open(robust_file, "r") as rf:
-                                robust_data = json.load(rf)
-                                external_stability = np.mean([r['final_pnl'] for r in robust_data])
-
-                            results.append({
-                                "trader_id": trader_id,
-                                "actual_historical": hist_pnl,
-                                "avg_mc_pnl": avg_pnl,
-                                "variance": var_pnl,
-                                "external_robustness": external_stability,
-                                "sharpe_proxy": avg_pnl / (np.sqrt(var_pnl) + 1e-6)
-                            })
-                    except Exception as e:
-                        st.error(f"Error loading results for {trader_id}: {e}")
-
-        if results:
-            df_perf = pd.DataFrame(results)
-
-            # Renaming columns for better UX with directional hints
-            df_perf_display = df_perf.rename(columns={
-                "trader_id": "Trader ID",
-                "actual_historical": "Actual (Historical PnL) ↑",
-                "avg_mc_pnl": "Expected (MC PnL) ↑",
-                "variance": "Risk (MC Variance) ↓",
-                "external_robustness": "Ext Robustness (yFinance) ↑",
-                "sharpe_proxy": "Stability Score ↑",
-            })
-
-            # Highlight top 10%
-            threshold = df_perf['avg_mc_pnl'].quantile(0.9)
-            df_perf['highlight'] = df_perf['avg_mc_pnl'] >= threshold
-
-            scatter = alt.Chart(df_perf).mark_circle(size=100).encode(
-                x=alt.X('variance:Q', title='PnL Variance (Risk - Lower is Better)'),
-                y=alt.Y('avg_mc_pnl:Q', title='Average MC PnL (Performance - Higher is Better)'),
-                color=alt.Color('highlight:N', scale=alt.Scale(domain=[True, False], range=['#FF4B4B', '#1F77B4']), legend=None),
-                tooltip=['trader_id', 'actual_historical', 'avg_mc_pnl', 'variance', 'sharpe_proxy', 'external_robustness']
-            ).properties(
-                width=700,
-                height=500
-            ).interactive()
-
-            # Add labels
-            labels = scatter.mark_text(
-                align='left',
-                baseline='middle',
-                dx=7
-            ).encode(
-                text='trader_id'
-            )
-
-            st.altair_chart(scatter + labels, use_container_width=True)
-            st.dataframe(df_perf_display.sort_values("Expected (MC PnL) ↑", ascending=False))
-        else:
-            st.info("No simulation results found in `results/`. Run Historical Audit to generate data.")
 
 
     with tab_robust:
@@ -1163,18 +927,12 @@ def main():
         col_day, col_btn = st.columns([1, 1])
         with col_day:
             def on_day_change():
-                st.session_state.config["selected_day"] = st.session_state.day_radio
-                save_config(st.session_state.config)
                 run_backtest_simulation(st.session_state.day_radio)
 
             day_options = ["All", -1, -2, 0]
-            current_day = st.session_state.config.get("selected_day", -1)
-            if current_day not in day_options:
-                current_day = -1
-
             selected_day = st.radio("Select Historical Data Day:", day_options,
                                      key="day_radio",
-                                     index=day_options.index(current_day),
+                                     index=0,
                                      horizontal=True,
                                      on_change=on_day_change)
         with col_btn:
