@@ -1,24 +1,24 @@
-# Quantiative Trading Pipeline
+# Quantitative Trading Pipeline
 
-## Goal 
-Create the trader which can generate the most PNL while minimizing overfitting as much as possible.
+## Phase I: High-Fidelity Signal Processing
+- **Log-Geometric Differencing:** Implementation of $r(t) = \ln(p(t)/p(t-1))$ for invariant scaling and time-additive properties.
+- **Non-Parametric Normality Profiling:** Utilizing Jarque-Bera (Third/Fourth Moment Analysis) and Lilliefors to identify "Fat-Tail" (Leptokurtic) risk, moving beyond the limitations of Gaussian models.
+- **CUSUM Regime Detection:** Detecting cumulative sum deviations to identify structural breaks in market volatility before they contaminate unit-root tests.
 
-## Before looking at the phases
-When you test, I want you to create an analysis.md of the statistical values and evaluate if that implementation is necessary 
+## Phase II: Order Identification & Stationarity
+- **Manual VECM Solver:** Implementing Vector Error Correction via the Normal Equation and Singular Value Decomposition (SVD) using NumPy, bypassing high-level library overhead for low-latency signal generation.
+- **Johansen Equilibrium Logic:** Identifying cointegrating vectors through Eigen-decomposition of the long-run covariance matrix to define the stable "Hedge Ratio" ($\beta$).
 
-## Phase 1-2: Feature Engineering & Normality Diagnostics
-- Logarithmic Differencing: Implementation of $r(t) = \ln(p(t)/p(t-1))$ to ensure time-series stationarity, additivity across horizons, and mitigation of price-level bias.
-- Distributional Analytics (JB & Lilliefors): Advanced detection of skewness and kurtosis. Proficiency in identifying "Fat Tails," signaling the shift from Gaussian assumptions to Student’s t-distributions for robust risk modeling.
+## Phase III: Statistical Arbitrage Execution
+- **Z-Score Execution Logic:** Developing high-speed triggers based on VECM residual extremes, targeting entries and exits at 95% and 99% confidence intervals for mean-reversion strategies.
+- **Dynamic Risk Scaling:** Implementing GARCH-inspired position sizing, where capital allocation is scaled inversely to rolling conditional variance $\sigma^2(t)$, ensuring survival during "Order Flow Toxicity" events.
+- **MBIC-Penalized Optimization:** Utilizing the Bayesian Information Criterion (BIC) to strictly penalize over-parameterization, ensuring that model complexity (lags) is justified by predictive power.
 
-## Phase 3-4: Order Identification & Stationarity
-- Regime Shift Detection (CUSUM): Expertise in identifying structural breaks to prevent "Parameter Drift." Running CUSUM prior to stationarity tests ensures unit root readings aren't contaminated by sudden market shifts.
-- Information Criterion Optimization: Utilizing BIC to enforce a high penalty for complexity, minimizing the "Degrees of Freedom" problem and preventing the over-parameterization of the mean equation.
+## Phase IV: Walk-Forward PnL Loop Tester
+- **Recursive Walk-Forward Loops:** Design and implementation of an Autonomous Meta-Optimizer that continuously iterates through hyperparameter space (Thresholds, Lags, Hedge Ratios) to hunt for maximum PnL targets. 
+- **Persistent State Serialization:** Expertise in managing model state and champion configurations using `jsonpickle`, ensuring consistent performance tracking and recovery across long-running, asynchronous market ticks.
+- **Automated Statistical Auditing:** Engineering a "Self-Reporting" system that generates `analysis.md` logs, evaluating convergence speeds and stationarity scores at every iteration to provide a transparent audit trail of the model's evolution.
 
-## Phase 5: Volatility Modeling & Tail Risk
-- Heteroskedasticity Management (GARCH): Expertise in modeling conditional variance $\sigma^2(t)$. Applying ARCH-LM tests to identify volatility clustering and dynamic position sizing.
-- Risk Quantization (VaR): Developing Value-at-Risk frameworks to define maximum permissible drawdown and protect capital during "Flash Crashes."
-
-## Phase 6-7: Multivariate Dynamics
-- Johansen Cointegration: Identifying the long-term equilibrium (the "leash") between non-stationary assets.
-- VECM (Vector Error Correction Model): Distinguishing between short-term momentum and long-term mean reversion using Alpha (adjustment speed) and Beta (hedge ratio).
-
+## Phase V: Performance-Driven NumPy Engineering
+- **Vectorized Backtesting Pipelines:** Expertise in building high-performance, $O(1)$ time-complexity backtesting engines using NumPy broadcasting, bypassing iterative loops for extreme-speed parameter search.
+- **Manual Convergence Estimation:** Implementation of OLS-based Error Correction logic to manually derive Alpha (speed of adjustment), ensuring exits are perfectly timed to the half-life of the mean reversion.
