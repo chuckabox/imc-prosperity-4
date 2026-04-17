@@ -27,13 +27,9 @@ logger = Logger()
 
 class Trader:
     """
-    Peter V2: Technical Analysis Enhanced
-    -------------------------------------
-    Improvements:
-    1. Weighted Mid-Price (L1 Imbalance awareness)
-    2. Volatility-based Dynamic Spreads (Bollinger-style)
-    3. Balanced Momentum (Normalized Trend)
-    4. Non-linear Inventory Skew
+    Peter V1b: 
+    - Linear Regression Fair Value for Pepper
+    - Price Velocity Drift defense for Osmium
     """
 
     LIMIT_OSMIUM = 80
@@ -70,6 +66,17 @@ class Trader:
         variance = sum((x - mu) ** 2 for x in prices) / len(prices)
         return max(math.sqrt(variance), 0.5)
 
+    def _linreg_slope(self, y: list) -> float:
+        n = len(y)
+        if n < 2: return 0.0
+        sum_x = n * (n - 1) / 2.0
+        sum_y = sum(y)
+        sum_xx = n * (n - 1) * (2 * n - 1) / 6.0
+        sum_xy = sum(i * y[i] for i in range(n))
+        denominator = n * sum_xx - sum_x**2
+        if denominator == 0: return 0.0
+        return (n * sum_xy - sum_x * sum_y) / denominator
+
     def _get_wmid(self, depth: OrderDepth) -> float:
         best_bid = max(depth.buy_orders.keys()) if depth.buy_orders else None
         best_ask = min(depth.sell_orders.keys()) if depth.sell_orders else None
@@ -104,13 +111,16 @@ class Trader:
         momentum = (ema_f - ema_s) / volat
         momentum_skew = max(-2.5, min(2.5, momentum * 1.2))
 
+        slope = self._linreg_slope(hist)
+
         # Dynamic inventory skew
         inv_ratio = pos / limit
         inv_skew = (inv_ratio * 4.0) + math.copysign((inv_ratio ** 2) * 3.0, inv_ratio)
 
-        fair = ema_f + momentum_skew
+        # Adjust fair by trend slope (projecting slow-growing trend)
+        fair = ema_f + momentum_skew + (slope * 20.0)
         
-        # Dynamic Spread based on Volatility - tightened from 0.8 to 0.65
+        # Dynamic Spread based on Volatility
         spread_half = max(1.0, volat * 0.65)
         
         bid_price = math.floor(fair - spread_half - inv_skew)
@@ -165,6 +175,9 @@ class Trader:
 
         if len(hist) < self.WARMUP: return []
 
+        # Price Velocity (absolute change over time)
+        velocity = abs(hist[-1] - hist[0]) / len(hist) if len(hist) > 1 else 0.0
+
         # Tape Reading (Market Trades)
         tape_val = 0.0
         if product in state.market_trades:
@@ -174,15 +187,18 @@ class Trader:
         self.history["tape"] = self.history.get("tape", 0) * 0.6 + tape_val * 0.4
         tape_signal = max(-1.5, min(1.5, self.history["tape"] * 0.08))
 
-        # Anchoring to long-term mean (faster anchor: 40)
+        # Anchoring to long-term mean
         anchor = self._ema(hist, 40)
         volat = self._std_dev(hist[-20:])
         
         fair = anchor + tape_signal
         
-        # Scaling spread by volatility
-        spread_base = max(0.5, volat * 0.4)
-        inv_skew = pos * 0.06
+        # Widen spread if velocity is high
+        spread_base = max(0.5, volat * 0.4) + (velocity * 20.0)
+
+        # Increase inventory leaning strength if velocity is high
+        inv_skew_factor = 0.06 + (velocity * 1.5)
+        inv_skew = pos * inv_skew_factor
         
         bid_price = math.floor(fair - spread_base - inv_skew)
         ask_price = math.ceil(fair + spread_base - inv_skew)
@@ -196,8 +212,8 @@ class Trader:
         rem_buy = limit - pos
         rem_sell = limit + pos
 
-        # Aggressive Take
-        take_threshold = max(2.0, volat * 1.2)
+        # Aggressive Take (also penalized by velocity to avoid bad fills in drift)
+        take_threshold = max(2.0, volat * 1.2) + (velocity * 10.0)
         if best_ask is not None and best_ask <= fair - take_threshold and rem_buy > 0:
             q = min(rem_buy, -depth.sell_orders.get(best_ask, 0))
             orders.append(Order(product, best_ask, q))
