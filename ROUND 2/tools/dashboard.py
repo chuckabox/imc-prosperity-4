@@ -268,6 +268,7 @@ def run_backtest_simulation(day):
 
             # --- Optimized Fill Logic ---
             limits = {"ASH_COATED_OSMIUM": 80, "INTARIAN_PEPPER_ROOT": 80}
+            full_tick_data = [] # To store metrics for every single tick
 
             for product, order_list in orders.items():
                 if product not in ts_data: continue
@@ -325,6 +326,22 @@ def run_backtest_simulation(day):
                     mtm_pnl += pos * mid
 
             pnl_history.append(mtm_pnl)
+            
+            # Record tick-level metrics for Pattern/Inventory analysis
+            tick_metrics = {"ts": ts, "mtm": mtm_pnl}
+            for p, pos in positions.items():
+                tick_metrics[f"pos_{p}"] = pos
+                if p in ts_data:
+                    tick_metrics[f"mid_{p}"] = (ts_data[p][1] + ts_data[p][2]) / 2.0
+            
+            # Signal Extraction (from traderData if possible)
+            if trader_data:
+                try:
+                    h = json.loads(trader_data)
+                    tick_metrics["pp_slope"] = h.get("pp_measured_slope", 0)
+                except:
+                    pass
+            full_tick_data.append(tick_metrics)
 
     except Exception as e:
         st.error(f"Error during simulation: {str(e)}")
@@ -333,7 +350,12 @@ def run_backtest_simulation(day):
         return
 
     final_pnl = pnl_history[-1] if pnl_history else 0
-    st.session_state.sim_result = {"pnl": final_pnl, "day": day}
+    st.session_state.sim_result = {
+        "pnl": final_pnl, 
+        "day": day, 
+        "trades": st.session_state.trades_log,
+        "ticks": full_tick_data
+    }
     st.success(f"Simulation Complete! Final PnL: **{final_pnl:,.2f}**")
 
     if st.session_state.trades_log:
@@ -397,6 +419,25 @@ def run_backtest_simulation(day):
 
         with st.expander("📝 Detailed Trade Log", expanded=False):
             st.dataframe(trades_df.sort_values("ts", ascending=False), use_container_width=True)
+
+        # --- NEW: Edge Efficiency Curve ---
+        st.subheader("🎯 Edge Efficiency Curve")
+        st.markdown("> **What it's for:** Finding the 'Sweet Spot' for your quoting distance. If your edge is too small, you get toxic fills; if it's too large, you never trade.  \n> **How to use:** Look for the peak in the PnL/Trade line. That's your optimal required edge for this asset.")
+        
+        trades_df["edge"] = (trades_df["price"] - trades_df["mid_fill"]).abs()
+        edge_stats = trades_df.groupby(["product", "edge"]).agg(
+            count=("ts", "count"),
+            toxic_count=("is_toxic", "sum"),
+            avg_adv=("adverse_delta", "mean")
+        ).reset_index()
+        
+        edge_chart = alt.Chart(edge_stats).mark_line(point=True).encode(
+            x=alt.X("edge:Q", title="Offered Edge (Distance from Mid)"),
+            y=alt.Y("count:Q", title="Fill Count"),
+            color="product:N",
+            tooltip=["edge", "count", "toxic_count", "avg_adv"]
+        ).properties(height=300).interactive()
+        st.altair_chart(edge_chart, use_container_width=True)
 
     if pnl_history:
         pnl_df = pd.DataFrame({"Timestamp": range(len(pnl_history)), "PnL": pnl_history})
@@ -606,9 +647,11 @@ def main():
     st.title("📈 Prosperity 4: Operations Console")
 
     # Final tab layout
-    tab_backtest, tab_robust = st.tabs([
+    tab_backtest, tab_robust, tab_signals, tab_matrix = st.tabs([
         "📉 Visual Backtester",
-        "🛡️ Robust Analysis"
+        "🛡️ Robust Analysis",
+        "📡 Signal Analytics",
+        "📅 Continuity Matrix"
     ])
 
 
@@ -941,7 +984,18 @@ def main():
                 run_backtest_simulation(selected_day)
 
         if "sim_result" in st.session_state and st.session_state.sim_result["day"] == selected_day:
-            st.metric("Simulated PnL", f"${st.session_state.sim_result['pnl']:,.2f}", "+12%")
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                st.metric("Simulated PnL", f"${st.session_state.sim_result['pnl']:,.2f}")
+            with col_m2:
+                # --- Inventory Pressure Monitor ---
+                ticks_df = pd.DataFrame(st.session_state.sim_result["ticks"])
+                if not ticks_df.empty and "pos_ASH_COATED_OSMIUM" in ticks_df.columns:
+                    # Calculate Correlation between Position and MTM Drawdown
+                    ticks_df["peak"] = ticks_df["mtm"].cummax()
+                    ticks_df["drawdown"] = ticks_df["peak"] - ticks_df["mtm"]
+                    corr_os = ticks_df["pos_ASH_COATED_OSMIUM"].abs().corr(ticks_df["drawdown"])
+                    st.metric("Inventory Pressure (Osmium)", f"{corr_os:.2f}", help="Correlation between Position Magnitude and PnL Drawdown. >0.4 indicates your inventory leaning is too weak.")
 
         st.markdown("---")
 
@@ -961,12 +1015,63 @@ def main():
             st.markdown("#### 🌶️ INTARIAN PEPPER ROOT (Trend MM)")
             render_chart(df_prices, df_trades, "INTARIAN_PEPPER_ROOT", "#e74c3c", show_mean=False)
 
-            st.markdown("#### 🌎 Total Market Reconstruction")
-            render_total_chart(df_prices, df_trades)
 
+    with tab_signals:
+        st.header("📡 Signal Analytics & Regime Detection")
+        st.markdown("> **What it's for:** Auditing how fast your signals react to market shifts and finding hidden correlations in trade volume.  \n> **How to use:** Check the 'Regime Lag' chart after a Pepper run to see if your model 'flips' too late after a trend reversal.")
+        
+        if "sim_result" in st.session_state and "ticks" in st.session_state.sim_result:
+            ticks_df = pd.DataFrame(st.session_state.sim_result["ticks"])
+            
+            if "pp_slope" in ticks_df.columns and "mid_INTARIAN_PEPPER_ROOT" in ticks_df.columns:
+                st.subheader("⏱️ Pepper Regime Lag Visualizer")
+                # Normalize for overlay
+                ticks_df["price_norm"] = (ticks_df["mid_INTARIAN_PEPPER_ROOT"] - ticks_df["mid_INTARIAN_PEPPER_ROOT"].mean()) / ticks_df["mid_INTARIAN_PEPPER_ROOT"].std()
+                ticks_df["slope_norm"] = (ticks_df["pp_slope"] - ticks_df["pp_slope"].mean()) / (ticks_df["pp_slope"].std() + 1e-6)
+                
+                lag_chart = alt.Chart(ticks_df.iloc[::20]).mark_line(opacity=0.8).encode(
+                    x="ts:Q",
+                    y=alt.Y("price_norm:Q", title="Normalized Signal/Price"),
+                    color=alt.value("#e74c3c"),
+                    tooltip=["ts", "pp_slope", "mid_INTARIAN_PEPPER_ROOT"]
+                )
+                signal_line = alt.Chart(ticks_df.iloc[::20]).mark_line(color="#3498db").encode(
+                    x="ts:Q",
+                    y="slope_norm:Q"
+                )
+                st.altair_chart((lag_chart + signal_line).properties(height=400).interactive(), use_container_width=True)
+                st.info("🔴 Price (Normalized) | 🔵 Model Signal (Slope). If the blue line crosses zero significantly after the red line turns, your model is lagging.")
+            else:
+                st.info("Run a simulation with Pepper active to see Signal Lag diagnostics.")
         else:
-            st.warning(f"Could not locate data for Day {selected_day} at: {DATA_DIR}")
-            st.code(f"Looking for: prices_round_1_day_{selected_day}.csv")
+            st.info("Run a Visual Backtest simulation first to populate Signal Analytics.")
+
+    with tab_matrix:
+        st.header("📅 Multi-Day Continuity Matrix")
+        st.markdown("> **What it's for:** Ensuring your success isn't a fluke on a single day.  \n> **How to use:** Aim for green across all cells. A 'Red' day with high toxicity indicates your strategy isn't general enough.")
+        
+        # This scans the results/robust directory to build a grid of Day performance
+        robust_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "robust"))
+        if not os.path.exists(robust_results_dir):
+             robust_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ROUND 1", "results", "robust"))
+        
+        if os.path.exists(robust_results_dir):
+            all_files = [f for f in os.listdir(robust_results_dir) if f.endswith("_robust_results.csv")]
+            if all_files:
+                selected_trader = st.selectbox("Select Trader to Audit", all_files, format_func=lambda x: x.replace("_robust_results.csv", ""))
+                df_m = pd.read_csv(os.path.join(robust_results_dir, selected_trader))
+                
+                if "category" in df_m.columns and "final_pnl" in df_m.columns:
+                    # Filter for 'real' historical days if possible
+                    real_days = df_m[df_m["category"] == "real"]
+                    if not real_days.empty:
+                        st.dataframe(real_days[["name", "final_pnl", "max_drawdown", "trade_count"]].style.background_gradient(subset=["final_pnl"], cmap="RdYlGn"), use_container_width=True)
+                    else:
+                        st.dataframe(df_m[["name", "final_pnl", "category"]].iloc[:10], use_container_width=True)
+            else:
+                st.info("No robust results found.")
+        else:
+            st.info("Robust results directory not found.")
 
 if __name__ == "__main__":
     main()
