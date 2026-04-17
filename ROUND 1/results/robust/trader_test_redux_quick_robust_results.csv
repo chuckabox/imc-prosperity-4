@@ -1,0 +1,4 @@
+name,category,final_pnl,pnl_osmium,pnl_pepper,max_drawdown,sharpe,sortino,calmar,trade_count
+imc_day_-2,imc,0.0,0.0,0.0,0.0,0,0,0,0
+imc_day_-1,imc,0.0,0.0,0.0,0.0,0,0,0,0
+imc_day_0,imc,0.0,0.0,0.0,0.0,0,0,0,0
