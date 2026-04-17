@@ -89,6 +89,7 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
 
     grouped = df.groupby("timestamp")
 
+    last_known_prices = {}
     for ts, group in grouped:
         order_depths = {}
         mid_prices = {}
@@ -108,7 +109,9 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
                 except (ValueError, TypeError):
                     pass
             order_depths[product] = depth
-            mid_prices[product] = (int(row["bid_price_1"]) + int(row["ask_price_1"])) / 2.0
+            mid = (int(row["bid_price_1"]) + int(row["ask_price_1"])) / 2.0
+            mid_prices[product] = mid
+            last_known_prices[product] = mid
 
         state = TradingState(
             traderData=trader_data,
@@ -162,8 +165,8 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
 
         mtm = sum(cash_per_product.values())
         for product, pos in positions.items():
-            if product in mid_prices:
-                mtm += pos * mid_prices[product]
+            if product in last_known_prices:
+                mtm += pos * last_known_prices[product]
         pnl_history.append(mtm)
 
     if not pnl_history:
@@ -178,8 +181,8 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
         if dd > max_dd:
             max_dd = dd
 
-    pnl_os = cash_per_product["ASH_COATED_OSMIUM"] + (positions["ASH_COATED_OSMIUM"] * mid_prices["ASH_COATED_OSMIUM"] if "ASH_COATED_OSMIUM" in mid_prices else 0)
-    pnl_pp = cash_per_product["INTARIAN_PEPPER_ROOT"] + (positions["INTARIAN_PEPPER_ROOT"] * mid_prices["INTARIAN_PEPPER_ROOT"] if "INTARIAN_PEPPER_ROOT" in mid_prices else 0)
+    pnl_os = cash_per_product["ASH_COATED_OSMIUM"] + (positions["ASH_COATED_OSMIUM"] * last_known_prices["ASH_COATED_OSMIUM"] if "ASH_COATED_OSMIUM" in last_known_prices else 0)
+    pnl_pp = cash_per_product["INTARIAN_PEPPER_ROOT"] + (positions["INTARIAN_PEPPER_ROOT"] * last_known_prices["INTARIAN_PEPPER_ROOT"] if "INTARIAN_PEPPER_ROOT" in last_known_prices else 0)
 
     # Calculate local Sharpe/Sortino for this specific run
     returns = np.diff(pnl_history)
