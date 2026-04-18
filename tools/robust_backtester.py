@@ -1,18 +1,20 @@
 """
 Unified Robust Multi-Scenario Backtester for IMC Prosperity 4
 ============================================================
-Combined backtester that runs against data from ALL rounds:
-  1. IMC historical days from Round 1, Round 2, and beyond
-  2. Real-world normalized days (from Round 1 data capsule)
-  3. Synthetic regime scenarios (from Round 1 data capsule)
+Combined backtester across selected ``ROUND N/data_capsule`` folders.
+
+Default: **IMC historical days only** (``prices_round_*_day_*.csv``). Synthetic scenarios and
+normalized real-world CSVs are opt-in (``--with-scenarios``, ``--with-real-world``, or ``--full-legacy``).
 
 Usage:
     python tools/robust_backtester.py <trader_file>
+    python tools/robust_backtester.py <trader_file> --with-scenarios
+    python tools/robust_backtester.py <trader_file> --full-legacy
     python tools/robust_backtester.py <trader_file> --quick
     python tools/robust_backtester.py <trader_file> --rounds 1 2
-    python tools/robust_backtester.py <trader_file> --r1 --imc   # Round 1 IMC days only
-    python tools/robust_backtester.py <trader_file> --r2         # Round 2 capsule (+ real + scen for R2)
-    python tools/robust_backtester.py <trader_file> --imc        # IMC days for all --rounds
+    python tools/robust_backtester.py <trader_file> --r1 --imc
+    python tools/robust_backtester.py <trader_file> --r2
+    python tools/robust_backtester.py <trader_file> --imc
 """
 
 import sys
@@ -266,7 +268,12 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
         pnl_curve=pnl_history,
     )
 
-def discover_datasets(rounds: List[int], quick: bool = False) -> List[Tuple[str, str, str]]:
+def discover_datasets(
+    rounds: List[int],
+    quick: bool = False,
+    with_scenarios: bool = False,
+    with_real_world: bool = False,
+) -> List[Tuple[str, str, str]]:
     datasets = []
     
     # 1. IMC Historical Data
@@ -287,7 +294,7 @@ def discover_datasets(rounds: List[int], quick: bool = False) -> List[Tuple[str,
                 name = p.stem.replace("prices_", f"imc_r{r}_")
                 datasets.append((name, str(p), f"round_{r}"))
 
-    # 2. Real World and Scenarios
+    # 2. Real World and Scenarios (opt-in; keeps default runs IMC-only)
     processed_files = set()
     for r in rounds:
         round_dir = REPO_ROOT / f"ROUND {r}"
@@ -296,37 +303,36 @@ def discover_datasets(rounds: List[int], quick: bool = False) -> List[Tuple[str,
         
         round_capsule = round_dir / "data_capsule"
         if round_capsule.exists():
-            # Real World
-            real_dir = round_capsule / "real_world" / "normalized"
-            if real_dir.exists():
-                real_files = sorted(real_dir.glob("prices_*.csv"))
-                if quick:
-                    real_files = real_files[::5]
-                for f in real_files:
-                    path_str = str(f)
-                    if path_str not in processed_files:
-                        datasets.append((f.stem.replace("prices_", "real_"), path_str, "real_world"))
-                        processed_files.add(path_str)
-            
-            # Scenarios
-            scen_dir = round_capsule / "scenarios"
-            if scen_dir.exists():
-                scen_files = sorted(scen_dir.glob("prices_*.csv"))
-                if quick:
-                    # One per regime
-                    seen_regimes = set()
-                    filtered = []
+            if with_real_world:
+                real_dir = round_capsule / "real_world" / "normalized"
+                if real_dir.exists():
+                    real_files = sorted(real_dir.glob("prices_*.csv"))
+                    if quick:
+                        real_files = real_files[::5]
+                    for f in real_files:
+                        path_str = str(f)
+                        if path_str not in processed_files:
+                            datasets.append((f.stem.replace("prices_", "real_"), path_str, "real_world"))
+                            processed_files.add(path_str)
+
+            if with_scenarios:
+                scen_dir = round_capsule / "scenarios"
+                if scen_dir.exists():
+                    scen_files = sorted(scen_dir.glob("prices_*.csv"))
+                    if quick:
+                        seen_regimes = set()
+                        filtered = []
+                        for f in scen_files:
+                            regime = "_".join(f.stem.replace("prices_", "").split("_")[:-1])
+                            if regime not in seen_regimes:
+                                seen_regimes.add(regime)
+                                filtered.append(f)
+                        scen_files = filtered
                     for f in scen_files:
-                        regime = "_".join(f.stem.replace("prices_", "").split("_")[:-1])
-                        if regime not in seen_regimes:
-                            seen_regimes.add(regime)
-                            filtered.append(f)
-                    scen_files = filtered
-                for f in scen_files:
-                    path_str = str(f)
-                    if path_str not in processed_files:
-                        datasets.append((f.stem.replace("prices_", "scen_"), path_str, "scenario"))
-                        processed_files.add(path_str)
+                        path_str = str(f)
+                        if path_str not in processed_files:
+                            datasets.append((f.stem.replace("prices_", "scen_"), path_str, "scenario"))
+                            processed_files.add(path_str)
 
     return datasets
 
@@ -427,6 +433,21 @@ if __name__ == "__main__":
     parser.add_argument("--imc", action="store_true", help="Only run IMC historical days")
     parser.add_argument("--real", action="store_true", help="Only run real-world normalized data")
     parser.add_argument("--scen", action="store_true", help="Only run synthetic scenarios")
+    parser.add_argument(
+        "--with-scenarios",
+        action="store_true",
+        help="Include scenario CSVs alongside IMC (default is IMC-only)",
+    )
+    parser.add_argument(
+        "--with-real-world",
+        action="store_true",
+        help="Include real_world/normalized CSVs alongside IMC",
+    )
+    parser.add_argument(
+        "--full-legacy",
+        action="store_true",
+        help="IMC + scenarios + real-world (previous default)",
+    )
     args = parser.parse_args()
 
     if args.r1 or args.r2:
@@ -438,7 +459,14 @@ if __name__ == "__main__":
     else:
         rounds_list = list(args.rounds)
 
-    datasets = discover_datasets(rounds_list, quick=args.quick)
+    with_scenarios = args.scen or args.with_scenarios or args.full_legacy
+    with_real_world = args.real or args.with_real_world or args.full_legacy
+    datasets = discover_datasets(
+        rounds_list,
+        quick=args.quick,
+        with_scenarios=with_scenarios,
+        with_real_world=with_real_world,
+    )
     
     # Filter by category if requested
     if args.imc or args.real or args.scen:
@@ -459,7 +487,11 @@ if __name__ == "__main__":
         run_tag = "imc"
     elif args.quick:
         run_tag = "quick"
+    elif args.full_legacy:
+        run_tag = "full_legacy"
+    elif with_scenarios or with_real_world:
+        run_tag = "imc_plus"
     else:
-        run_tag = "robust"
+        run_tag = "imc"
 
     run_unified_backtest(args.trader, datasets, tag=run_tag)

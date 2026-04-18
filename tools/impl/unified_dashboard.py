@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import glob
+from pathlib import Path
 
 # Resolve absolute paths for relative imports (datamodel in ../../ROUND 2/config, trader in ../../ROUND 2/traders)
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,6 +39,29 @@ DEFAULT_ROUND = "ROUND 2"
 
 # Round 2 datamodel uses 80; dashboard fills must match or simulation is meaningless.
 DEFAULT_SIM_POSITION_LIMIT = 80
+
+
+def robust_csv_trader_label(filename: str) -> str:
+    """Strip known robust-result suffixes (ROUND 2 uses ``*_robust_results.csv``; unified tool uses ``*_results.csv``)."""
+    for suf in ("_robust_results.csv", "_results.csv"):
+        if filename.endswith(suf):
+            return filename[: -len(suf)]
+    return filename
+
+
+def robust_results_csv_filenames(results_dir: str) -> list[str]:
+    """List robust-style CSVs (exclude Monte Carlo / stress outputs)."""
+    if not os.path.isdir(results_dir):
+        return []
+    out: list[str] = []
+    for f in sorted(os.listdir(results_dir)):
+        if not f.endswith(".csv"):
+            continue
+        if f.endswith("_robust_results.csv"):
+            out.append(f)
+        elif f.endswith("_results.csv") and not f.endswith("_mc_results.csv") and not f.endswith("_stress_results.csv"):
+            out.append(f)
+    return out
 
 
 def _sim_position_limit(trader) -> int:
@@ -614,15 +638,15 @@ def _build_comparison_table(
     for filename in selected_files:
         path = os.path.join(robust_results_dir, filename)
         df = pd.read_csv(path)
-        trader_name = filename.replace("_results.csv", "")
+        trader_name = robust_csv_trader_label(filename)
         pnls, data_missing = _resolve_target_pnls(df, target_col, p_filter)
         df = df.copy()
         df["target_pnl"] = pnls
 
         # Allow both robust labels (imc, real) and standard labels (round_1, round_2, real_world)
-        imc = df[df["category"].isin(["imc", "round_1", "round_2"])]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
-        real = df[df["category"].isin(["real", "real_world"])]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
-        scen = df[df["category"] == "scenario"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+        imc = df.loc[df["category"].isin(["imc", "round_1", "round_2"]), "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+        real = df.loc[df["category"].isin(["real", "real_world"]), "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+        scen = df.loc[df["category"] == "scenario", "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
         allp = df["target_pnl"]
 
         row = {
@@ -645,20 +669,27 @@ def _build_comparison_table(
     if comp.empty:
         return comp
 
+    for c in ("Real Mean", "Real Win%", "Scen Mean", "Scen Worst"):
+        if c in comp.columns and comp[c].notna().sum() == 0:
+            comp = comp.drop(columns=[c])
+
     # Auto-rank score: emphasize IMC + overall robustness (higher is better).
     rank_frame = comp.copy()
-    for c in ["IMC Mean", "Real Mean", "Scen Mean", "Full Mean", "Win%"]:
+    higher_better = [c for c in ["IMC Mean", "Real Mean", "Scen Mean", "Full Mean", "Win%"] if c in rank_frame.columns]
+    for c in higher_better:
         rank_frame[c] = rank_frame[c].rank(pct=True, ascending=True)
-    for c in ["IMC Worst", "Scen Worst", "Worst Day"]:
+    lower_better = [c for c in ["IMC Worst", "Scen Worst", "Worst Day"] if c in rank_frame.columns]
+    for c in lower_better:
         rank_frame[c] = rank_frame[c].rank(pct=True, ascending=True)
     rank_frame["Blow-up%"] = rank_frame["Blow-up%"].rank(pct=True, ascending=False)
 
+    scen_rank = rank_frame["Scen Mean"] if "Scen Mean" in rank_frame.columns else pd.Series(0.5, index=rank_frame.index)
     comp["AutoScore"] = (
         weights["imc_mean"] * rank_frame["IMC Mean"]
         + weights["full_mean"] * rank_frame["Full Mean"]
         + weights["win_rate"] * rank_frame["Win%"]
         + weights["worst_day"] * rank_frame["Worst Day"]
-        + weights["scen_mean"] * rank_frame["Scen Mean"]
+        + weights["scen_mean"] * scen_rank
         + weights["blowup"] * rank_frame["Blow-up%"]
     ) * 100
     # NaN-safe ranking: files with missing score components are pushed to bottom.
@@ -669,8 +700,7 @@ def _build_comparison_table(
 
 def _algo_key_from_filename(filename: str) -> str:
     """Create a loose comparable key across rounds from robust CSV filename."""
-    name = filename.replace("_results.csv", "")
-    return name
+    return robust_csv_trader_label(filename)
 
 
 def _build_cross_round_comparison(
@@ -686,15 +716,15 @@ def _build_cross_round_comparison(
         robust_dir = r_paths["results_robust_dir"]
         fallback_dir = r_paths["tools_dir"]
 
-        round_files = []
+        round_files: list[str] = []
         source_dir = None
         if os.path.isdir(robust_dir):
-            candidates = [f for f in os.listdir(robust_dir) if f.endswith("_results.csv")]
+            candidates = robust_results_csv_filenames(robust_dir)
             if candidates:
                 round_files = candidates
                 source_dir = robust_dir
         if not round_files and os.path.isdir(fallback_dir):
-            candidates = [f for f in os.listdir(fallback_dir) if f.endswith("_results.csv")]
+            candidates = robust_results_csv_filenames(fallback_dir)
             if candidates:
                 round_files = candidates
                 source_dir = fallback_dir
@@ -707,15 +737,15 @@ def _build_cross_round_comparison(
             except Exception:
                 continue
 
-            trader_name = filename.replace("_results.csv", "")
+            trader_name = robust_csv_trader_label(filename)
             pnls, data_missing = _resolve_target_pnls(df, target_col, p_filter)
             df = df.copy()
             df["target_pnl"] = pnls
 
             # Allow both robust labels (imc, real) and standard labels (round_1, round_2, real_world)
-            imc = df[df["category"].isin(["imc", "round_1", "round_2"])]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
-            real = df[df["category"].isin(["real", "real_world"])]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
-            scen = df[df["category"] == "scenario"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+            imc = df.loc[df["category"].isin(["imc", "round_1", "round_2"]), "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+            real = df.loc[df["category"].isin(["real", "real_world"]), "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+            scen = df.loc[df["category"] == "scenario", "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
             allp = df["target_pnl"]
 
             rows.append({
@@ -739,19 +769,26 @@ def _build_cross_round_comparison(
     if comp.empty:
         return comp
 
+    for c in ("Real Mean", "Real Win%", "Scen Mean", "Scen Worst"):
+        if c in comp.columns and comp[c].notna().sum() == 0:
+            comp = comp.drop(columns=[c])
+
     rank_frame = comp.copy()
-    for c in ["IMC Mean", "Real Mean", "Scen Mean", "Full Mean", "Win%"]:
+    higher_better = [c for c in ["IMC Mean", "Real Mean", "Scen Mean", "Full Mean", "Win%"] if c in rank_frame.columns]
+    for c in higher_better:
         rank_frame[c] = rank_frame[c].rank(pct=True, ascending=True)
-    for c in ["IMC Worst", "Scen Worst", "Worst Day"]:
+    lower_better = [c for c in ["IMC Worst", "Scen Worst", "Worst Day"] if c in rank_frame.columns]
+    for c in lower_better:
         rank_frame[c] = rank_frame[c].rank(pct=True, ascending=True)
     rank_frame["Blow-up%"] = rank_frame["Blow-up%"].rank(pct=True, ascending=False)
 
+    scen_rank = rank_frame["Scen Mean"] if "Scen Mean" in rank_frame.columns else pd.Series(0.5, index=rank_frame.index)
     comp["AutoScore"] = (
         weights["imc_mean"] * rank_frame["IMC Mean"]
         + weights["full_mean"] * rank_frame["Full Mean"]
         + weights["win_rate"] * rank_frame["Win%"]
         + weights["worst_day"] * rank_frame["Worst Day"]
-        + weights["scen_mean"] * rank_frame["Scen Mean"]
+        + weights["scen_mean"] * scen_rank
         + weights["blowup"] * rank_frame["Blow-up%"]
     ) * 100
     rank_series = comp["AutoScore"].rank(method="min", ascending=False, na_option="bottom")
@@ -1082,21 +1119,34 @@ def main():
     with tab_robust:
         st.header("🛡️ Robust Multi-Scenario Analysis")
         st.markdown("""
-        Test traders against **real-world market data** and **synthetic regime scenarios** to prevent overfitting.
-        The goal: **best average PnL across ANY situation**, not peak PnL on known data.
+        Compare **IMC Prosperity** backtest CSVs (per-session PnL). Default workflows use **IMC capsule days only**;
+        scenario or real-world rows appear only if you generated those runs (e.g. ``--with-scenarios`` / ``--full-legacy`` on the backtester).
+        Leaderboard metrics emphasize **IMC days** and worst-case behavior, not peak PnL on a single session.
         """)
+
+        with st.expander("Optional: Rust backtester (external clone)", expanded=False):
+            st.markdown(
+                "See `external/README_IMC_PROSPERITY.md`. Example once `rust_backtester` is on your PATH (often via WSL); "
+                "paths use POSIX form for copy-paste into a Linux shell."
+            )
+            _caps = (Path(REPO_ROOT) / "ROUND 2" / "data_capsule").resolve()
+            _tr = (Path(REPO_ROOT) / "ROUND 2" / "traders" / "ken" / "trader_ken_v6.py").resolve()
+            st.code(
+                f'rust_backtester --trader "{_tr.as_posix()}" --dataset "{_caps.as_posix()}"',
+                language="bash",
+            )
 
         # Robust backtester outputs are now saved under ROUND 2/results/robust.
         # Keep a fallback to ROUND 2/tools for older runs.
         robust_results_dir = get_paths()["results_robust_dir"]
         fallback_tools_dir = get_paths()["tools_dir"]
 
-        robust_csvs = []
+        robust_csvs: list[str] = []
         if os.path.isdir(robust_results_dir):
-            robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_results.csv")]
+            robust_csvs = robust_results_csv_filenames(robust_results_dir)
         if not robust_csvs and os.path.isdir(fallback_tools_dir):
             robust_results_dir = fallback_tools_dir
-            robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_results.csv")]
+            robust_csvs = robust_results_csv_filenames(robust_results_dir)
 
         if robust_csvs:
             col_f, col_spacer = st.columns([1, 2])
@@ -1113,7 +1163,7 @@ def main():
             all_dfs = []
             for f in robust_csvs:
                 df = pd.read_csv(os.path.join(robust_results_dir, f))
-                name = f.replace("_robust_results.csv", "")
+                name = robust_csv_trader_label(f)
                 
                 # Dynamic column selection with strict fallback for products
                 data_missing = False
@@ -1150,7 +1200,7 @@ def main():
                     "Backtest Result Files",
                     options=sorted(robust_csvs),
                     default=default_selection,
-                    format_func=lambda x: x.replace("_results.csv", ""),
+                    format_func=robust_csv_trader_label,
                     key="comparison_files_multi",
                 )
                 cutoff_col, _ = st.columns([1, 3])
@@ -1377,7 +1427,11 @@ def main():
                 st.altair_chart(heatmap, use_container_width=True)
 
             with tab_inspect:
-                selected_result = st.selectbox("Select Results File for Deep Dive", robust_csvs, format_func=lambda x: x.replace("_results.csv", ""))
+                selected_result = st.selectbox(
+                    "Select Results File for Deep Dive",
+                    robust_csvs,
+                    format_func=robust_csv_trader_label,
+                )
                 df_robust = pd.read_csv(os.path.join(robust_results_dir, selected_result))
                 
                 # Dynamic column selection with strict fallback for products
@@ -1588,8 +1642,9 @@ def main():
                             """)
 
         else:
-            st.warning("No robust results found. Run the robust backtester first:")
-            st.code("python \"ROUND 2/tools/robust_backtester.py\" \"ROUND 2/traders/trader_robust.py\" --quick")
+            st.warning("No robust results found. Run the Round 2 robust backtester (IMC days by default):")
+            st.code("python \"ROUND 2/tools/robust_backtester.py\" \"ROUND 2/traders/your_trader.py\" --quick")
+            st.caption("Add ``--with-scenarios`` or ``--full-legacy`` only if you want synthetic / cached real-world CSVs in the same run.")
 
 
     with tab_backtest:

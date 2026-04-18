@@ -1,21 +1,27 @@
 """
 Robust Multi-Scenario Backtester for IMC Prosperity 4
 ======================================================
-Runs a trader against ALL available data:
-  1. IMC historical days (-2, -1, 0)
-  2. Real-world normalized days (from real_data_fetcher.py)
-  3. Synthetic regime scenarios (from scenario_generator.py)
+Runs a trader against available CSV sessions.
+
+Default (no extra flags): **IMC historical days only** (``prices_round_*_day_*.csv`` in ``data_capsule``).
+
+Optional:
+  - ``--with-scenarios`` — synthetic regime scenarios
+  - ``--with-real-world`` — normalized real-world cache under ``data_capsule/real_world/normalized`` (offline; no network)
+  - ``--full-legacy`` — same as enabling both (old default mix)
 
 Reports average, median, worst-case PNL and robustness metrics.
 
 Usage:
     python robust_backtester.py <trader_file>
+    python robust_backtester.py <trader_file> --with-scenarios
+    python robust_backtester.py <trader_file> --full-legacy
     python robust_backtester.py <trader_file> --imc-only
     python robust_backtester.py <trader_file> --scenarios-only
     python robust_backtester.py <trader_file> --quick
-    python robust_backtester.py <trader_file> --r2              # IMC: round 2 days only (+ real + scenarios)
-    python robust_backtester.py <trader_file> --r1 --imc-only  # IMC: round 1 days only (3 CSVs)
-    python robust_backtester.py <trader_file> --r1 --r2 --imc-only  # both rounds' IMC days (6 CSVs)
+    python robust_backtester.py <trader_file> --r2
+    python robust_backtester.py <trader_file> --r1 --imc-only
+    python robust_backtester.py <trader_file> --r1 --r2 --imc-only
 """
 
 import sys
@@ -316,8 +322,14 @@ def discover_datasets(
     scenarios_only: bool = False,
     quick: bool = False,
     imc_rounds: Optional[Set[int]] = None,
+    with_scenarios: bool = False,
+    with_real_world: bool = False,
 ) -> List[Tuple[str, str, str]]:
-    """Discover CSV paths. ``imc_rounds`` if set (e.g. {1}, {2}, {1,2}) filters IMC files by round number."""
+    """Discover CSV paths. ``imc_rounds`` filters IMC files by round number when set.
+
+    By default only **IMC** historical capsule files are included. Synthetic scenarios and
+    normalized real-world CSVs are opt-in via ``with_scenarios`` / ``with_real_world``.
+    """
     datasets = []
 
     if not scenarios_only:
@@ -332,11 +344,10 @@ def discover_datasets(
             name = p.stem.replace("prices_", "imc_")
             datasets.append((name, str(p), "imc"))
 
-
-    if imc_only:
+    if imc_only and not scenarios_only:
         return datasets
 
-    if not scenarios_only:
+    if not scenarios_only and with_real_world:
         if REAL_DIR.exists():
             real_files = sorted(REAL_DIR.glob("prices_*.csv"))
             if quick:
@@ -344,7 +355,7 @@ def discover_datasets(
             for f in real_files:
                 datasets.append((f.stem.replace("prices_", ""), str(f), "real"))
 
-    if SCENARIO_DIR.exists():
+    if SCENARIO_DIR.exists() and (scenarios_only or with_scenarios):
         scen_files = sorted(SCENARIO_DIR.glob("prices_*.csv"))
         if quick:
             seen_regimes = set()
@@ -534,14 +545,24 @@ if __name__ == "__main__":
     parser.add_argument(
         "--imc-only",
         action="store_true",
-        help="Only test IMC historical CSVs (this is the default; flag kept for scripts).",
-    )
-    parser.add_argument(
-        "--with-real-scenarios",
-        action="store_true",
-        help="Also include real_world/normalized + synthetic scenarios (slow; off by default).",
+        help="Only test IMC historical data (default already; kept for scripts)",
     )
     parser.add_argument("--scenarios-only", action="store_true", help="Only test synthetic scenarios")
+    parser.add_argument(
+        "--with-scenarios",
+        action="store_true",
+        help="Include synthetic scenario CSVs in addition to IMC days",
+    )
+    parser.add_argument(
+        "--with-real-world",
+        action="store_true",
+        help="Include normalized real_world CSVs (local cache only; no network)",
+    )
+    parser.add_argument(
+        "--full-legacy",
+        action="store_true",
+        help="IMC + scenarios + real-world (previous default dataset mix)",
+    )
     parser.add_argument("--quick", action="store_true", help="Subset for speed (1 per regime)")
     parser.add_argument(
         "--r1",
@@ -564,19 +585,16 @@ if __name__ == "__main__":
         if args.r2:
             imc_rounds.add(2)
 
-    # Default: IMC days only. Opt in to real+scenario CSVs with --with-real-scenarios.
-    imc_only = (args.imc_only or not args.with_real_scenarios) and not args.scenarios_only
-
     # Determine automatic tag if none provided
     if args.tag:
         run_tag = args.tag
     elif args.quick:
         run_tag = "quick"
-    elif imc_only and imc_rounds == {1}:
+    elif args.imc_only and imc_rounds == {1}:
         run_tag = "imc_r1"
-    elif imc_only and imc_rounds == {2}:
+    elif args.imc_only and imc_rounds == {2}:
         run_tag = "imc_r2"
-    elif imc_only and imc_rounds == {1, 2}:
+    elif args.imc_only and imc_rounds == {1, 2}:
         run_tag = "imc_r1_r2"
     elif imc_rounds == {1}:
         run_tag = "r1"
@@ -584,18 +602,29 @@ if __name__ == "__main__":
         run_tag = "r2"
     elif imc_rounds == {1, 2}:
         run_tag = "r1_r2"
-    elif imc_only:
+    elif args.imc_only:
         run_tag = "imc"
     elif args.scenarios_only:
         run_tag = "scenarios"
+    elif args.full_legacy or (args.with_scenarios and args.with_real_world):
+        run_tag = "full_legacy"
+    elif args.with_scenarios:
+        run_tag = "imc_scen"
+    elif args.with_real_world:
+        run_tag = "imc_real"
     else:
-        run_tag = "default"
+        run_tag = "imc"
+
+    with_scenarios = args.scenarios_only or args.with_scenarios or args.full_legacy
+    with_real_world = args.with_real_world or args.full_legacy
 
     datasets = discover_datasets(
-        imc_only=imc_only,
+        imc_only=args.imc_only,
         scenarios_only=args.scenarios_only,
         quick=args.quick,
         imc_rounds=imc_rounds,
+        with_scenarios=with_scenarios,
+        with_real_world=with_real_world,
     )
     if imc_rounds is not None:
         n_imc = sum(1 for _, _, c in datasets if c == "imc")
