@@ -572,6 +572,99 @@ def _build_comparison_table(
     return comp.sort_values(["Rank", "AutoScore", "IMC Mean"], ascending=[True, False, False]).reset_index(drop=True)
 
 
+def _algo_key_from_filename(filename: str) -> str:
+    """Create a loose comparable key across rounds from robust CSV filename."""
+    name = filename.replace("_robust_results.csv", "")
+    name = re.sub(r"_quick$", "", name)
+    name = re.sub(r"_imc$", "", name)
+    return name
+
+
+def _build_cross_round_comparison(
+    selected_rounds: list[str],
+    target_col: str,
+    p_filter: str,
+    blowup_cutoff: float,
+    weights: dict,
+) -> pd.DataFrame:
+    rows = []
+    for round_name in selected_rounds:
+        r_paths = get_paths(round_name)
+        robust_dir = r_paths["results_robust_dir"]
+        fallback_dir = r_paths["tools_dir"]
+
+        round_files = []
+        source_dir = None
+        if os.path.isdir(robust_dir):
+            candidates = [f for f in os.listdir(robust_dir) if f.endswith("_robust_results.csv")]
+            if candidates:
+                round_files = candidates
+                source_dir = robust_dir
+        if not round_files and os.path.isdir(fallback_dir):
+            candidates = [f for f in os.listdir(fallback_dir) if f.endswith("_robust_results.csv")]
+            if candidates:
+                round_files = candidates
+                source_dir = fallback_dir
+        if not round_files or source_dir is None:
+            continue
+        for filename in round_files:
+            path = os.path.join(source_dir, filename)
+            try:
+                df = pd.read_csv(path)
+            except Exception:
+                continue
+
+            trader_name = filename.replace("_robust_results.csv", "")
+            pnls, data_missing = _resolve_target_pnls(df, target_col, p_filter)
+            df = df.copy()
+            df["target_pnl"] = pnls
+
+            imc = df[df["category"] == "imc"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+            real = df[df["category"] == "real"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+            scen = df[df["category"] == "scenario"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+            allp = df["target_pnl"]
+
+            rows.append({
+                "Round": round_name,
+                "Trader": trader_name + (" (⚠️ RECALC)" if data_missing else ""),
+                "Algo Key": _algo_key_from_filename(filename),
+                "IMC Mean": imc.mean() if len(imc) else np.nan,
+                "IMC Worst": imc.min() if len(imc) else np.nan,
+                "Real Mean": real.mean() if len(real) else np.nan,
+                "Real Win%": (real > 0).mean() * 100 if len(real) else np.nan,
+                "Scen Mean": scen.mean() if len(scen) else np.nan,
+                "Scen Worst": scen.min() if len(scen) else np.nan,
+                "Full Mean": allp.mean() if len(allp) else np.nan,
+                "Worst Day": allp.min() if len(allp) else np.nan,
+                "Win%": (allp > 0).mean() * 100 if len(allp) else np.nan,
+                "Blow-up%": (allp <= -abs(blowup_cutoff)).mean() * 100 if len(allp) else np.nan,
+                "N": len(df),
+            })
+
+    comp = pd.DataFrame(rows)
+    if comp.empty:
+        return comp
+
+    rank_frame = comp.copy()
+    for c in ["IMC Mean", "Real Mean", "Scen Mean", "Full Mean", "Win%"]:
+        rank_frame[c] = rank_frame[c].rank(pct=True, ascending=True)
+    for c in ["IMC Worst", "Scen Worst", "Worst Day"]:
+        rank_frame[c] = rank_frame[c].rank(pct=True, ascending=True)
+    rank_frame["Blow-up%"] = rank_frame["Blow-up%"].rank(pct=True, ascending=False)
+
+    comp["AutoScore"] = (
+        weights["imc_mean"] * rank_frame["IMC Mean"]
+        + weights["full_mean"] * rank_frame["Full Mean"]
+        + weights["win_rate"] * rank_frame["Win%"]
+        + weights["worst_day"] * rank_frame["Worst Day"]
+        + weights["scen_mean"] * rank_frame["Scen Mean"]
+        + weights["blowup"] * rank_frame["Blow-up%"]
+    ) * 100
+    rank_series = comp["AutoScore"].rank(method="min", ascending=False, na_option="bottom")
+    comp["Rank"] = rank_series.fillna(len(comp) + 1).astype(int)
+    return comp.sort_values(["Rank", "AutoScore", "IMC Mean"], ascending=[True, False, False]).reset_index(drop=True)
+
+
 def _style_comparison_table(comp_df: pd.DataFrame) -> "pd.io.formats.style.Styler":
     money_cols = ["IMC Mean", "IMC Worst", "Real Mean", "Scen Mean", "Scen Worst", "Full Mean", "Worst Day"]
     pct_cols = ["Real Win%", "Win%", "Blow-up%", "AutoScore"]
@@ -1270,6 +1363,47 @@ def main():
                         st.info("No comparable rows found in selected files.")
                 else:
                     st.info("Select one or more result files to build the comparison matrix.")
+
+                st.divider()
+                st.subheader("🌐 Cross-Round Comparison")
+                st.caption("Compare robust results across multiple round folders in one table.")
+
+                selectable_rounds = ROUND_DIRS
+                cross_rounds = st.multiselect(
+                    "Rounds to include",
+                    options=selectable_rounds,
+                    default=[st.session_state.active_round] if st.session_state.active_round in selectable_rounds else selectable_rounds[:1],
+                    key="cross_round_selector",
+                )
+
+                if cross_rounds:
+                    cross_df = _build_cross_round_comparison(
+                        selected_rounds=cross_rounds,
+                        target_col=target_col,
+                        p_filter=p_filter,
+                        blowup_cutoff=float(blowup_cutoff),
+                        weights=weights,
+                    )
+                    if cross_df.empty:
+                        st.info("No robust CSV results found in selected rounds.")
+                    else:
+                        st.dataframe(
+                            _style_comparison_table(cross_df),
+                            use_container_width=True,
+                            hide_index=True,
+                            height=min(700, 120 + len(cross_df) * 35),
+                        )
+
+                        cross_chart = alt.Chart(cross_df).mark_circle(size=120, opacity=0.85).encode(
+                            x=alt.X("IMC Mean:Q", title="IMC Mean"),
+                            y=alt.Y("Full Mean:Q", title="Full Mean"),
+                            color=alt.Color("Round:N", title="Round"),
+                            shape=alt.Shape("Round:N", title="Round"),
+                            tooltip=["Rank", "Round", "Trader", "Algo Key", "AutoScore", "IMC Mean", "Full Mean", "Worst Day", "Win%", "Blow-up%"],
+                        ).properties(height=380, title="Cross-Round Frontier (IMC vs Full Mean)").interactive()
+                        st.altair_chart(cross_chart, use_container_width=True)
+                else:
+                    st.info("Select at least one round to compare.")
 
                 st.divider()
                 st.subheader("Global Leaderboard")
