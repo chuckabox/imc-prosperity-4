@@ -710,6 +710,113 @@ def render_edge_efficiency_tab(res):
     st.altair_chart(edge_chart, use_container_width=True)
 
 
+def render_manual_optimizer_tab():
+    st.subheader("♟️ Manual Challenge Optimizer")
+    st.markdown("Optimize your 50,000 XIRECs budget (100 points maximum) across Research, Scale, and Speed.")
+
+    # --- INPUTS ---
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        x = st.slider("Research (x)", min_value=0, max_value=100, value=19)
+    with col2:
+        y = st.slider("Scale (y)", min_value=0, max_value=100, value=61)
+    with col3:
+        z = st.slider("Speed (z)", min_value=0, max_value=100, value=20)
+
+    total_used = x + y + z
+    max_budget = 100
+
+    if total_used > max_budget:
+        st.error(f"⚠️ Over Budget! Total used: {total_used}/{max_budget} (Reduce allocations)")
+    else:
+        st.info(f"🟢 Budget OK: {total_used}/{max_budget} used. ({(total_used/max_budget)*50000:,.0f} / 50,000 XIRECs)")
+
+    st.markdown("---")
+    st.markdown("#### Market Competitiveness (Speed Simulation)")
+    avg_comp_speed = st.slider("Average Competitor Speed Points", min_value=0, max_value=100, value=50, help="Simulates how much other teams invest in Speed. If they invest more than you, your rank and multiplier drop.")
+    
+    if total_used <= max_budget:
+        # --- MATH LOGIC ---
+        # 1. Research
+        base_research = 200_000 * np.log(1 + x) / np.log(101)
+        
+        # 2. Scale
+        base_scale = 0.07 * y
+        
+        # 3. Speed (Rank)
+        np.random.seed(42) # Deterministic for UI stability
+        comp_speeds = np.random.normal(avg_comp_speed, 15, 100)
+        comp_speeds = np.clip(comp_speeds, 0, 100)
+        
+        rank = np.sum(comp_speeds > z) + 1
+        total_players = 101
+        
+        # Multiplier scales linearly from 0.9 (rank 1) to 0.1 (rank N)
+        speed_mult = 0.9 - (0.8 * (rank - 1) / (total_players - 1))
+        
+        gross_pnl = base_research * base_scale * speed_mult
+        budget_cost = total_used * 500  # 500 XIRECs per point
+        net_pnl = gross_pnl - budget_cost
+
+        # --- LIVE METRICS ---
+        st.markdown("---")
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Research Value", f"{base_research:,.0f}")
+        m2.metric("Scale Value", f"{base_scale:.3f}")
+        m3.metric("Simulated Rank", f"{rank} / {total_players}")
+        m4.metric("Speed Multiplier", f"{speed_mult:.3f}x")
+        m5.metric("Net Projected PnL", f"{net_pnl:,.0f} XIRECs")
+
+        # --- VISUALIZATIONS ---
+        col_chart1, col_chart2 = st.columns(2)
+        
+        with col_chart1:
+            st.markdown("**Research Diminishing Returns**")
+            x_vals = np.linspace(0, 100, 100)
+            r_vals = 200_000 * np.log(1 + x_vals) / np.log(101)
+            line_df = pd.DataFrame({"Investment": x_vals, "Research Value": r_vals})
+            chart = alt.Chart(line_df).mark_line().encode(
+                x=alt.X("Investment:Q", title="Research Points invested"),
+                y=alt.Y("Research Value:Q", title="Value Provided")
+            )
+            # Active point
+            current_x = pd.DataFrame({"Investment": [x], "Research Value": [base_research]})
+            point = alt.Chart(current_x).mark_point(color="#e74c3c", size=100, filled=True).encode(x="Investment:Q", y="Research Value:Q")
+            st.altair_chart(chart + point, use_container_width=True)
+
+        with col_chart2:
+            st.markdown(f"**Allocation Efficiency Heatmap (Assuming {z} Speed)**")
+            
+            # Simple grid evaluation for heatmap
+            grid_res = []
+            for rx in range(0, 101):
+                for sy in range(0, 101):
+                    if rx + sy + z <= 100:
+                        R = 200_000 * np.log(1 + rx) / np.log(101)
+                        S = 0.07 * sy
+                        G = R * S * speed_mult
+                        N = G - (rx + sy + z) * 500
+                        grid_res.append({"Research": rx, "Scale": sy, "Net_PnL": N})
+            
+            heat_df = pd.DataFrame(grid_res)
+            if not heat_df.empty:
+                heat = alt.Chart(heat_df).mark_circle(size=60).encode(
+                    x=alt.X("Research:Q", title="Research Pts"),
+                    y=alt.Y("Scale:Q", title="Scale Pts"),
+                    color=alt.Color("Net_PnL:Q", scale=alt.Scale(scheme="redyellowgreen", domainMid=0), title="Net PnL"),
+                    tooltip=["Research", "Scale", "Net_PnL"]
+                ).properties(height=350).interactive()
+                
+                # Active setup point
+                current_point = pd.DataFrame({"Research": [x], "Scale": [y], "Net_PnL": [net_pnl]})
+                curr_mark = alt.Chart(current_point).mark_circle(size=120, color="black", stroke="white", strokeWidth=2).encode(
+                    x="Research:Q", y="Scale:Q", tooltip=["Research", "Scale", "Net_PnL"]
+                )
+                
+                st.altair_chart(heat + curr_mark, use_container_width=True)
+            else:
+                st.warning("Insufficient budget remaining to plot heatmap.")
+
 def main():
     st.set_page_config(
         page_title="P4 Control Center",
@@ -720,12 +827,13 @@ def main():
     st.title("📈 Prosperity 4: Operations Console")
 
     # Final tab layout
-    tab_backtest, tab_robust, tab_signals, tab_toxic, tab_edge = st.tabs([
+    tab_backtest, tab_robust, tab_signals, tab_toxic, tab_edge, tab_manual = st.tabs([
         "📉 Visual Backtester",
         "🛡️ Robust Analysis",
         "📡 Signal Analytics",
         "☣️ Toxic Flow Audit",
-        "🎯 Edge Efficiency"
+        "🎯 Edge Efficiency",
+        "♟️ Manual Optimizer"
     ])
 
 
@@ -1154,6 +1262,9 @@ def main():
     with tab_edge:
         render_edge_efficiency_tab(st.session_state.get("sim_result"))
 
+
+    with tab_manual:
+        render_manual_optimizer_tab()
 
 if __name__ == "__main__":
     main()
