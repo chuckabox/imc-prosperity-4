@@ -531,7 +531,16 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Robust multi-scenario backtester")
     parser.add_argument("trader", help="Path to trader .py file")
-    parser.add_argument("--imc-only", action="store_true", help="Only test IMC historical data")
+    parser.add_argument(
+        "--imc-only",
+        action="store_true",
+        help="Only test IMC historical CSVs (this is the default; flag kept for scripts).",
+    )
+    parser.add_argument(
+        "--with-real-scenarios",
+        action="store_true",
+        help="Also include real_world/normalized + synthetic scenarios (slow; off by default).",
+    )
     parser.add_argument("--scenarios-only", action="store_true", help="Only test synthetic scenarios")
     parser.add_argument("--quick", action="store_true", help="Subset for speed (1 per regime)")
     parser.add_argument(
@@ -555,16 +564,19 @@ if __name__ == "__main__":
         if args.r2:
             imc_rounds.add(2)
 
+    # Default: IMC days only. Opt in to real+scenario CSVs with --with-real-scenarios.
+    imc_only = (args.imc_only or not args.with_real_scenarios) and not args.scenarios_only
+
     # Determine automatic tag if none provided
     if args.tag:
         run_tag = args.tag
     elif args.quick:
         run_tag = "quick"
-    elif args.imc_only and imc_rounds == {1}:
+    elif imc_only and imc_rounds == {1}:
         run_tag = "imc_r1"
-    elif args.imc_only and imc_rounds == {2}:
+    elif imc_only and imc_rounds == {2}:
         run_tag = "imc_r2"
-    elif args.imc_only and imc_rounds == {1, 2}:
+    elif imc_only and imc_rounds == {1, 2}:
         run_tag = "imc_r1_r2"
     elif imc_rounds == {1}:
         run_tag = "r1"
@@ -572,7 +584,7 @@ if __name__ == "__main__":
         run_tag = "r2"
     elif imc_rounds == {1, 2}:
         run_tag = "r1_r2"
-    elif args.imc_only:
+    elif imc_only:
         run_tag = "imc"
     elif args.scenarios_only:
         run_tag = "scenarios"
@@ -580,7 +592,7 @@ if __name__ == "__main__":
         run_tag = "default"
 
     datasets = discover_datasets(
-        imc_only=args.imc_only,
+        imc_only=imc_only,
         scenarios_only=args.scenarios_only,
         quick=args.quick,
         imc_rounds=imc_rounds,
