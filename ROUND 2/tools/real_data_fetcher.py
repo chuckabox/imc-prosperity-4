@@ -419,11 +419,24 @@ def list_cached():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fetch real-world market data for IMC training")
     parser.add_argument("--list", action="store_true", help="List cached datasets")
+    parser.add_argument(
+        "--fetch",
+        action="store_true",
+        help="Actually call yfinance / Alpha Vantage (network). Without this flag the script does nothing.",
+    )
     parser.add_argument("--source", choices=["both", "yf", "av"], default="both",
                         help="Data source: yf=yfinance, av=AlphaVantage, both=all")
     args = parser.parse_args()
 
     if args.list:
         list_cached()
-    else:
+    elif args.fetch:
         fetch_all(sources=args.source)
+    else:
+        print(
+            "real_data_fetcher: no network fetch performed.\n"
+            "  List cache:  python real_data_fetcher.py --list\n"
+            "  Fetch data:  python real_data_fetcher.py --fetch [--source yf|av|both]\n"
+            "IMC Prosperity workflows use bundled prices_round_*_day_*.csv only; "
+            "this tool is optional."
+        )
