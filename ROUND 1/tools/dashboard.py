@@ -490,8 +490,10 @@ def _build_comparison_table(
         + weights["scen_mean"] * rank_frame["Scen Mean"]
         + weights["blowup"] * rank_frame["Blow-up%"]
     ) * 100
-    comp["Rank"] = comp["AutoScore"].rank(method="min", ascending=False).astype(int)
-    return comp.sort_values(["Rank", "IMC Mean"], ascending=[True, False]).reset_index(drop=True)
+    # NaN-safe ranking: files with missing score components are pushed to bottom.
+    rank_series = comp["AutoScore"].rank(method="min", ascending=False, na_option="bottom")
+    comp["Rank"] = rank_series.fillna(len(comp) + 1).astype(int)
+    return comp.sort_values(["Rank", "AutoScore", "IMC Mean"], ascending=[True, False, False]).reset_index(drop=True)
 
 
 def _style_comparison_table(comp_df: pd.DataFrame) -> "pd.io.formats.style.Styler":
