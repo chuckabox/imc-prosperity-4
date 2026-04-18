@@ -31,7 +31,7 @@ REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 _ROOT_TOOLS = os.path.join(REPO_ROOT, "tools")
 if _ROOT_TOOLS not in sys.path:
     sys.path.insert(0, _ROOT_TOOLS)
-ROUND_DIRS = sorted(
+ROUND_DIRS = ["Root"] + sorted(
     d for d in os.listdir(REPO_ROOT)
     if d.startswith("ROUND ") and os.path.isdir(os.path.join(REPO_ROOT, d))
 )
@@ -40,7 +40,7 @@ DEFAULT_ROUND = os.path.basename(os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 
 def get_paths(round_name: str | None = None) -> dict:
     rn = round_name or st.session_state.get("active_round", DEFAULT_ROUND)
-    base_dir = os.path.join(REPO_ROOT, rn)
+    base_dir = REPO_ROOT if rn == "Root" else os.path.join(REPO_ROOT, rn)
     return {
         "round": rn,
         "base_dir": base_dir,
@@ -525,7 +525,7 @@ def _build_comparison_table(
     for filename in selected_files:
         path = os.path.join(robust_results_dir, filename)
         df = pd.read_csv(path)
-        trader_name = filename.replace("_robust_results.csv", "")
+        trader_name = filename.replace("_results.csv", "")
         pnls, data_missing = _resolve_target_pnls(df, target_col, p_filter)
         df = df.copy()
         df["target_pnl"] = pnls
@@ -579,9 +579,7 @@ def _build_comparison_table(
 
 def _algo_key_from_filename(filename: str) -> str:
     """Create a loose comparable key across rounds from robust CSV filename."""
-    name = filename.replace("_robust_results.csv", "")
-    name = re.sub(r"_quick$", "", name)
-    name = re.sub(r"_imc$", "", name)
+    name = filename.replace("_results.csv", "")
     return name
 
 
@@ -619,7 +617,7 @@ def _build_cross_round_comparison(
             except Exception:
                 continue
 
-            trader_name = filename.replace("_robust_results.csv", "")
+            trader_name = filename.replace("_results.csv", "")
             pnls, data_missing = _resolve_target_pnls(df, target_col, p_filter)
             df = df.copy()
             df["target_pnl"] = pnls
@@ -999,10 +997,10 @@ def main():
 
         robust_csvs = []
         if os.path.isdir(robust_results_dir):
-            robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_robust_results.csv")]
+            robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_results.csv")]
         if not robust_csvs and os.path.isdir(fallback_tools_dir):
             robust_results_dir = fallback_tools_dir
-            robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_robust_results.csv")]
+            robust_csvs = [f for f in os.listdir(robust_results_dir) if f.endswith("_results.csv")]
 
         if robust_csvs:
             col_f, col_spacer = st.columns([1, 2])
@@ -1060,7 +1058,7 @@ def main():
                     "Backtest Result Files",
                     options=sorted(robust_csvs),
                     default=default_selection,
-                    format_func=lambda x: x.replace("_robust_results.csv", ""),
+                    format_func=lambda x: x.replace("_results.csv", ""),
                     key="comparison_files_multi",
                 )
                 cutoff_col, _ = st.columns([1, 3])
@@ -1287,7 +1285,7 @@ def main():
                 st.altair_chart(heatmap, use_container_width=True)
 
             with tab_inspect:
-                selected_result = st.selectbox("Select Results File for Deep Dive", robust_csvs, format_func=lambda x: x.replace("_robust_results.csv", ""))
+                selected_result = st.selectbox("Select Results File for Deep Dive", robust_csvs, format_func=lambda x: x.replace("_results.csv", ""))
                 df_robust = pd.read_csv(os.path.join(robust_results_dir, selected_result))
                 
                 # Dynamic column selection with strict fallback for products
