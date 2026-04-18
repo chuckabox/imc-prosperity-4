@@ -20,9 +20,7 @@ import pandas as pd
 import altair as alt
 import re
 from datamodel import Listing, OrderDepth, TradingState, Observation, Order
-import matplotlib.pyplot as plt
 import numpy as np
-from scipy.interpolate import make_interp_spline
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,6 +35,19 @@ ROUND_DIRS = ["Root"] + sorted(
     if d.startswith("ROUND ") and os.path.isdir(os.path.join(REPO_ROOT, d))
 )
 DEFAULT_ROUND = "ROUND 2"
+
+
+def _gaussian_smooth_1d(y: np.ndarray, sigma: float = 15.0) -> np.ndarray:
+    """1D Gaussian smoothing without scipy (convolution with normalized Gaussian kernel)."""
+    y = np.asarray(y, dtype=float)
+    n = len(y)
+    if n < 2:
+        return y
+    half = min(int(4 * sigma) + 1, max(1, n // 2))
+    xs = np.arange(-half, half + 1, dtype=float)
+    kernel = np.exp(-(xs**2) / (2.0 * sigma * sigma))
+    kernel /= kernel.sum()
+    return np.convolve(y, kernel, mode="same")
 
 
 def get_paths(round_name: str | None = None) -> dict:
@@ -817,48 +828,53 @@ def render_reversal_chart(df, product, start_idx=0, window=1000):
         y_raw = y_true + np.random.normal(0, 15, 1000)
         y_price = y_true # Smooth line
 
-    # Compute Smooth Line (True FV)
-    from scipy.ndimage import gaussian_filter1d
-    y_smooth = gaussian_filter1d(y_raw, sigma=15)
-    
-    # Estimated Slope
+    # Compute Smooth Line (True FV) — numpy-only (no matplotlib/scipy)
+    y_smooth = _gaussian_smooth_1d(y_raw, sigma=15)
     slope = np.gradient(y_smooth)
+    crash_idx = int(np.argmax(y_smooth))
 
-    # Plot
-    plt.style.use('default')
-    fig, ax1 = plt.subplots(figsize=(12, 5.5), facecolor=BG_COLOR)
-    ax1.set_facecolor(BG_COLOR)
+    df_plot = pd.DataFrame(
+        {"tick": x.astype(float), "y_smooth": y_smooth, "y_raw": y_raw, "slope": slope}
+    )
 
-    # Plot Lines
-    ax1.plot(x, y_smooth, color=TRUE_FV_COLOR, linewidth=3, label="True FV", zorder=5)
-    ax1.plot(x, y_raw, color=INFERRED_FV_COLOR, linewidth=1, alpha=0.6, label="Trader inferred FV", zorder=4)
-    
-    # Secondary Axis
-    ax2 = ax1.twinx()
-    ax2.plot(x, slope, color=INFERRED_FV_COLOR, linewidth=0.8, alpha=0.4, label="Estimated slope / tick")
-    ax2.axhline(0, color="grey", linestyle=":", linewidth=0.8)
-    
-    # Crash Interaction (approx middle or detect peak)
-    crash_idx = np.argmax(y_smooth)
-    ax1.axvline(crash_idx, color=CRASH_COLOR, linestyle="--", linewidth=1.5, label="Crash tick")
-    
-    # Annotation
-    ax1.annotate(f"detect @ tick {start_idx + crash_idx}\nlag = 2", 
-                 xy=(crash_idx, y_smooth[crash_idx]), xytext=(crash_idx + 50, y_smooth[crash_idx] + 20),
-                 arrowprops=dict(arrowstyle="->", color="#D4A373"),
-                 bbox=dict(boxstyle="round,pad=0.3", fc="#FEF9E7", ec="#D4A373", alpha=0.8),
-                 fontsize=10)
+    base_x = alt.X("tick:Q", title="Tick")
 
-    # Labels
-    ax1.set_xlabel("Tick", fontsize=10)
-    ax1.set_ylabel("Fair value", fontsize=10)
-    ax2.set_ylabel("Estimated slope / tick", fontsize=10)
-    
-    ax1.grid(True, which='both', color=GRID_COLOR, linestyle='-', linewidth=0.5)
-    ax1.legend(loc="upper right", frameon=True, fontsize=9)
-    
-    plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)
+    c_smooth = (
+        alt.Chart(df_plot)
+        .mark_line(strokeWidth=3, color=TRUE_FV_COLOR)
+        .encode(base_x, y=alt.Y("y_smooth:Q", title="Fair value", scale=alt.Scale(zero=False)))
+    )
+    c_raw = (
+        alt.Chart(df_plot)
+        .mark_line(strokeWidth=1, opacity=0.6, color=INFERRED_FV_COLOR)
+        .encode(base_x, y="y_raw:Q")
+    )
+    c_slope = (
+        alt.Chart(df_plot)
+        .mark_line(strokeWidth=1, opacity=0.45, color=INFERRED_FV_COLOR)
+        .encode(
+            base_x,
+            y=alt.Y(
+                "slope:Q",
+                title="Estimated slope / tick",
+                axis=alt.Axis(orient="right"),
+            ),
+        )
+    )
+    crash_df = pd.DataFrame({"crash_x": [float(crash_idx)]})
+    crash_line = (
+        alt.Chart(crash_df)
+        .mark_rule(color=CRASH_COLOR, strokeWidth=1.5, strokeDash=[6, 4])
+        .encode(x=alt.X("crash_x:Q", title="Tick"))
+    )
+
+    chart = (
+        alt.layer(c_smooth, c_raw, c_slope, crash_line)
+        .resolve_scale(y="independent")
+        .properties(width="container", height=320, title="Reversal / crash view (Altair)")
+    )
+    st.altair_chart(chart, use_container_width=True)
+    st.caption(f"Crash marker @ local tick {crash_idx} (session offset {start_idx}).")
 
 def forge_trader():
     TRADER_TEMPLATE = os.path.join(get_paths()["traders_dir"], "trader.py")

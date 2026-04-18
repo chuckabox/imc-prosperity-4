@@ -10,6 +10,8 @@ A unified repository for strategy development, backtesting, and analysis, curren
 - **`ROUND 1/`**: Legacy data and strategies for reference.
 - **`tools/dashboard.py`**: The main entry point for the visual console.
 - **`tools/impl/`**: Core implementation of the Unified Dashboard.
+- **`requirements-dashboard.txt`**: Python dependencies for the Streamlit dashboard (install once from the repo root).
+- **`ROUND 2/tools/robust_backtester.py`**: Round 2 multi-scenario backtester (IMC + real-world + scenarios under `ROUND 2/data_capsule/`).
 - **`tools/manual_optimiser/`**: Advanced multi-scenario optimization for Round 2 manual challenges.
 - **`archive/`**: Retired rounds, legacy backtesters, and secondary tools.
 - **`assets/`**: Visual assets and documentation images.
@@ -19,6 +21,12 @@ A unified repository for strategy development, backtesting, and analysis, curren
 ## 🚀 Getting Started
 
 ### 1. Launch the Operations Console
+
+Install dashboard dependencies once (Streamlit, Altair, Pandas, NumPy; no Matplotlib required):
+
+```bash
+pip install -r requirements-dashboard.txt
+```
 
 Run the unified dashboard to visualize prices, execute backtests, and run the manual optimizer:
 
@@ -36,12 +44,46 @@ _Note: The dashboard now defaults to **Round 2** but allows switching rounds via
 
 ### 2. Run Robust Backtests (CLI)
 
-Test your traders against all available historical days, real-world data, and synthetic scenarios:
+You can use either the **Round 2 capsule backtester** (single `data_capsule` tree) or the **unified repo-level backtester** (multiple `ROUND N` folders).
+
+#### Round 2 backtester (`ROUND 2/tools/robust_backtester.py`)
+
+Runs CSVs under `ROUND 2/data_capsule/` (IMC days, `real_world/normalized`, `scenarios`). Results are written to `ROUND 2/results/robust/`.
 
 ```bash
-# Using the unified backtester (Consolidated results go to ROUND 2/results/robust)
-python tools/robust_backtester.py "ROUND 2/traders/your_trader.py" --quick
+# Full run (all IMC days in the capsule + real-world + scenarios)
+python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/your_trader.py"
+
+# Only Round 2 IMC historical files (three days: day -1, 0, 1)
+python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/your_trader.py" --r2 --imc-only
+
+# Only Round 1 IMC files in this capsule (if present), still with real + scenarios unless --imc-only
+python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/your_trader.py" --r1
+
+# Both rounds’ IMC filenames, IMC only
+python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/your_trader.py" --r1 --r2 --imc-only
+
+# Faster smoke test (subset of real-world + one scenario per regime)
+python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/your_trader.py" --quick
 ```
+
+Flags: `--imc-only`, `--scenarios-only`, `--quick`, `--r1`, `--r2`, `--tag NAME`. With no `--r1`/`--r2`, every `prices_round_*_day_*.csv` in the capsule is included. `--r1` / `--r2` filter **only** those IMC files by round number in the filename.
+
+#### Unified backtester (`tools/robust_backtester.py`)
+
+Aggregates datasets from `ROUND 1`, `ROUND 2`, etc. Results go to `ROUND 2/results/robust/`.
+
+```bash
+python tools/robust_backtester.py "ROUND 2/traders/your_trader.py" --quick
+
+# Shorthand for rounds (same as --rounds 1 or --rounds 2)
+python tools/robust_backtester.py "ROUND 2/traders/your_trader.py" --r2 --imc
+
+# Explicit rounds
+python tools/robust_backtester.py "ROUND 2/traders/your_trader.py" --rounds 1 2 --imc
+```
+
+Unified flags: `--rounds`, `--r1`, `--r2`, `--quick`, `--imc`, `--real`, `--scen`, `--tag`.
 
 ---
 
