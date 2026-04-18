@@ -1,23 +1,19 @@
-# 🏆 IMC Prosperity 4: Round 1 Archive
+# IMC Prosperity 4: Round 1
 
-This directory contains all code, data, and research for Round 1.
+Round 1 workspace for strategy iterations, data analysis, and robust validation.
 
-## 📈 Performance Summary
-- **Evaluation Period:** Day -2 to Day 0
-- **Primary Products:** 
-  - `INTARIAN_PEPPER_ROOT`: Market Making
-  - `ASH_COATED_OSMIUM`: Trend Following / Volatility
-- **Best Strategy:** `trader_robust_ken_v2.py`
-- **Result:** $272,000 Backtest PnL
+## Notes
 
-## 📂 Structure
-- `/traders`: Iterations of trading bots.
-- `/results`: Backtest results and CSV logs.
-- `/data`: Historical market data for the round.
-- `/tools`: Backtesting infrastructure used during Round 1.
-- `/manual_trade`: Analysis and logic for the manual trading challenge.
+- This folder is now consumed by the unified dashboard at repo root.
+- Prefer launching dashboard from:
+  - `streamlit run "tools/dashboard.py"`
+- In the dashboard, choose `ROUND 1` via the **Round Folder** selector.
 
-## ⏱️ Evaluation Context
-- **Submission:** 1,000 timestamps.
-- **Final:** 10,000 timestamps.
-- **Robustness Target:** 30,000 timestamps.
+## Structure
+
+- `traders/`: strategy versions
+- `results/`: backtest outputs and robust CSVs
+- `data_capsule/`: round price/trade datasets
+- `tools/`: round-local backtest scripts and utilities
+- `docs/`: analysis notes and findings
+- `archive/`: historical experiments
