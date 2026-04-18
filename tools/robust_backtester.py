@@ -56,6 +56,12 @@ class BacktestResult:
 
 def load_trader(trader_file: str):
     trader_path = Path(trader_file).resolve()
+    
+    if not trader_path.exists():
+        print(f"ERROR: Trader file not found: {trader_path}")
+        print(f"HINT: If the path contains spaces (like 'ROUND 2'), wrap it in quotes: \"{trader_file}\"")
+        sys.exit(1)
+        
     trader_dir = str(trader_path.parent)
     
     if trader_dir not in sys.path:
@@ -63,12 +69,15 @@ def load_trader(trader_file: str):
         
     module_name = f"trader_{trader_path.stem}_{id(trader_file)}"
     spec = importlib.util.spec_from_file_location(module_name, str(trader_path))
+    if spec is None:
+        print(f"ERROR: Could not load spec for {trader_path}")
+        sys.exit(1)
+        
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     trader = module.Trader()
     
-    # We leave sys.path as is to support nested imports during trader run
     return trader
 
 def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: str) -> Optional[BacktestResult]:
@@ -151,16 +160,24 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
             # st.error(f"Trader failed at ts {ts}")
             continue
 
-        for product, order_list in orders.items():
+        # --- PRODUCT MAPPING (Round 1 Compatibility) ---
+        mapped_orders = {}
+        for p, order_list in orders.items():
+            mapped_p = p
+            if p == "EMERALDS": mapped_p = "INTARIAN_PEPPER_ROOT"
+            elif p == "TOMATOES": mapped_p = "ASH_COATED_OSMIUM"
+            mapped_orders[mapped_p] = order_list
+
+        for product, order_list in mapped_orders.items():
             if product not in order_depths:
                 continue
             depth = order_depths[product]
-            limit = getattr(trader, "LIMIT", 80) # Use trader's limit if defined, else 80
+            limit = getattr(trader, "LIMIT", 80)
+            bb = max(depth.buy_orders.keys()) if depth.buy_orders else None
+            ba = min(depth.sell_orders.keys()) if depth.sell_orders else None
 
             for order in order_list:
-                qty = order.quantity
-                price = order.price
-
+                qty, price = order.quantity, order.price
                 if qty > 0: # BUY
                     for ask in sorted(depth.sell_orders.keys()):
                         if price >= ask and qty > 0:
@@ -171,6 +188,13 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
                                 cash_per_product[product] -= fill * ask
                                 qty -= fill
                                 trade_count += 1
+                    if qty > 0 and bb is not None and price >= bb: # Passive fill proxy
+                        fill = min(qty, 2, limit - positions[product])
+                        if fill > 0:
+                            positions[product] += fill
+                            cash_per_product[product] -= fill * price
+                            qty -= fill
+                            trade_count += 1
                 elif qty < 0: # SELL
                     for bid in sorted(depth.buy_orders.keys(), reverse=True):
                         if price <= bid and qty < 0:
@@ -181,6 +205,13 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
                                 cash_per_product[product] += fill * bid
                                 qty += fill
                                 trade_count += 1
+                    if qty < 0 and ba is not None and price <= ba: # Passive fill proxy
+                        fill = min(-qty, 2, limit + positions[product])
+                        if fill > 0:
+                            positions[product] -= fill
+                            cash_per_product[product] += fill * price
+                            qty -= fill
+                            trade_count += 1
 
             max_pos[product] = max(max_pos[product], abs(positions[product]))
 
