@@ -228,6 +228,7 @@ def run_backtest_simulation(day, round_filter="All"):
         return
 
     trader = Trader()
+    trader.traderData = ""
     # Mock symbols and listings
     listings = {
         "ASH_COATED_OSMIUM": Listing("ASH_COATED_OSMIUM", "ASH_COATED_OSMIUM", "XIRECS"),
@@ -701,11 +702,10 @@ def main():
     st.title("📈 Prosperity 4: Operations Console")
 
     # Final tab layout
-    tab_backtest, tab_robust, tab_signals, tab_matrix = st.tabs([
+    tab_backtest, tab_robust, tab_signals = st.tabs([
         "📉 Visual Backtester",
         "🛡️ Robust Analysis",
-        "📡 Signal Analytics",
-        "📅 Continuity Matrix"
+        "📡 Signal Analytics"
     ])
 
 
@@ -836,6 +836,21 @@ def main():
                     cat_stats = df_robust.groupby("category")["target_pnl"].agg(["mean", "min", "max", "count"])
                     cat_stats.columns = ["Mean PnL", "Worst PnL", "Best PnL", "Count"]
                     st.dataframe(cat_stats.style.format("${:,.0f}", subset=["Mean PnL", "Worst PnL", "Best PnL"]))
+                
+                # --- INTEGRATED CONTINUITY MATRIX ---
+                if "category" in df_robust.columns and "target_pnl" in df_robust.columns:
+                    real_days = df_robust[df_robust["category"] == "real"]
+                    if not real_days.empty:
+                        st.subheader("📅 Multi-Day Continuity (Real Data)")
+                        cols_to_show = ["name", "target_pnl", "max_drawdown"]
+                        if "trade_count" in real_days.columns:
+                            cols_to_show.append("trade_count")
+                        
+                        st.dataframe(
+                            real_days[cols_to_show].style.background_gradient(subset=["target_pnl"], cmap="RdYlGn"),
+                            use_container_width=True,
+                            hide_index=True
+                        )
 
                 st.subheader("PnL by Scenario")
                 bar_data = df_robust[["name", "target_pnl", "category"]].copy()
@@ -1113,34 +1128,6 @@ def main():
         else:
             st.info("Run a Visual Backtest simulation first to populate Signal Analytics.")
 
-    with tab_matrix:
-        st.header("📅 Multi-Day Continuity Matrix")
-        st.markdown("> **What it's for:** Ensuring your success isn't a fluke on a single day.  \n> **How to use:** Aim for green across all cells. A 'Red' day with high toxicity indicates your strategy isn't general enough.")
-        
-        # This scans the results/robust directory to build a grid of Day performance
-        robust_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "robust"))
-        if not os.path.exists(robust_results_dir):
-             # Try to find any results directory in the parent if the standard one is missing
-             robust_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "ROUND 1", "results", "robust"))
-
-        
-        if os.path.exists(robust_results_dir):
-            all_files = [f for f in os.listdir(robust_results_dir) if f.endswith("_robust_results.csv")]
-            if all_files:
-                selected_trader = st.selectbox("Select Trader to Audit", all_files, format_func=lambda x: x.replace("_robust_results.csv", ""))
-                df_m = pd.read_csv(os.path.join(robust_results_dir, selected_trader))
-                
-                if "category" in df_m.columns and "final_pnl" in df_m.columns:
-                    # Filter for 'real' historical days if possible
-                    real_days = df_m[df_m["category"] == "real"]
-                    if not real_days.empty:
-                        st.dataframe(real_days[["name", "final_pnl", "max_drawdown", "trade_count"]].style.background_gradient(subset=["final_pnl"], cmap="RdYlGn"), use_container_width=True)
-                    else:
-                        st.dataframe(df_m[["name", "final_pnl", "category"]].iloc[:10], use_container_width=True)
-            else:
-                st.info("No robust results found.")
-        else:
-            st.info("Robust results directory not found.")
 
 if __name__ == "__main__":
     main()
