@@ -32,7 +32,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 DATA_DIR = PROJECT_ROOT / "data_capsule"
 SCENARIO_DIR = DATA_DIR / "scenarios"
 REAL_DIR = DATA_DIR / "real_world" / "normalized"
-RESULTS_DIR = PROJECT_ROOT / "results" / "robust"
+RESULTS_DIR = PROJECT_ROOT.parent / "ROUND 2" / "results" / "robust"
 
 sys.path.insert(0, str(PROJECT_ROOT / "config"))
 from datamodel import Listing, OrderDepth, TradingState, Observation, Order

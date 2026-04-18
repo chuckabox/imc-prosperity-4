@@ -35,7 +35,7 @@ ROUND_DIRS = ["Root"] + sorted(
     d for d in os.listdir(REPO_ROOT)
     if d.startswith("ROUND ") and os.path.isdir(os.path.join(REPO_ROOT, d))
 )
-DEFAULT_ROUND = os.path.basename(os.path.abspath(os.path.join(SCRIPT_DIR, "..")))
+DEFAULT_ROUND = "ROUND 2"
 
 
 def get_paths(round_name: str | None = None) -> dict:
@@ -1000,8 +1000,8 @@ def main():
         The goal: **best average PnL across ANY situation**, not peak PnL on known data.
         """)
 
-        # Robust backtester outputs are now saved under ROUND 1/results/robust.
-        # Keep a fallback to ROUND 1/tools for older runs.
+        # Robust backtester outputs are now saved under ROUND 2/results/robust.
+        # Keep a fallback to ROUND 2/tools for older runs.
         robust_results_dir = get_paths()["results_robust_dir"]
         fallback_tools_dir = get_paths()["tools_dir"]
 
@@ -1507,7 +1507,7 @@ def main():
 
         else:
             st.warning("No robust results found. Run the robust backtester first:")
-            st.code("python ROUND 1/tools/robust_backtester.py ROUND 1/traders/trader_robust.py --quick")
+            st.code("python \"ROUND 2/tools/robust_backtester.py\" \"ROUND 2/traders/trader_robust.py\" --quick")
 
 
     with tab_backtest:
