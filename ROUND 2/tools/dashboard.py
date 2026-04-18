@@ -360,13 +360,6 @@ def run_backtest_simulation(day, round_filter="All"):
                 if p in ts_data:
                     tick_metrics[f"mid_{p}"] = (ts_data[p][1] + ts_data[p][2]) / 2.0
             
-            # Signal Extraction (from traderData if possible)
-            if trader_data:
-                try:
-                    h = json.loads(trader_data)
-                    tick_metrics["pp_slope"] = h.get("pp_measured_slope", 0)
-                except:
-                    pass
             full_tick_data.append(tick_metrics)
 
     except Exception as e:
@@ -385,32 +378,6 @@ def run_backtest_simulation(day, round_filter="All"):
     }
     st.success(f"Simulation Complete! Final PnL: **{final_pnl:,.2f}**")
 
-    # --- Toxicity Enrichment & Storage ---
-    trades_df = pd.DataFrame(st.session_state.trades_log)
-    if not trades_df.empty:
-        # Fast lookup for future prices (T+10)
-        DELAY = 1000 
-        price_lookup = df_prices.set_index(["timestamp", "product"])["mid_price"].to_dict()
-        
-        def get_toxic_delta(row):
-            future_ts = row["ts"] + DELAY
-            future_mid = price_lookup.get((future_ts, row["product"]))
-            if future_mid is None: return None
-            delta = future_mid - row["mid_fill"]
-            return -delta if row["side"] == "BUY" else delta
-
-        trades_df["adverse_delta"] = trades_df.apply(get_toxic_delta, axis=1)
-        trades_df["is_toxic"] = trades_df["adverse_delta"] > 0
-        trades_df["edge"] = (trades_df["price"] - trades_df["mid_fill"]).abs()
-
-    final_pnl = pnl_history[-1] if pnl_history else 0
-    st.session_state.sim_result = {
-        "pnl": final_pnl, 
-        "day": day, 
-        "round": round_filter,
-        "trades": trades_df.to_dict('records') if not trades_df.empty else [],
-        "ticks": full_tick_data
-    }
     st.success(f"Simulation Complete! Final PnL: **{final_pnl:,.2f}**")
 
     if pnl_history:
@@ -571,251 +538,219 @@ def render_total_chart(df_prices, df_trades):
 
     st.altair_chart(chart, use_container_width=True)
 
-def render_reversal_chart(df, product, start_idx=0, window=1000):
-    # Aesthetic Palette (Match Image)
-    TRUE_FV_COLOR = "#2D6A4F"
-    INFERRED_FV_COLOR = "#6c757d"
-    CRASH_COLOR = "#8B4513"
-    BG_COLOR = "#ffffff" # High contrast white like image
-    GRID_COLOR = "#dddddd"
 
-    # Data Slicing
-    if df is not None and not df.empty and product in df['product'].values:
-        df_all = df[df["product"] == product].copy()
-        df_p = df_all.iloc[start_idx : start_idx + window].copy()
-        x = np.arange(len(df_p))
-        y_raw = df_p["mid_price"].values
-    else:
-        # Synthetic data matching the image's "Crash" pattern
-        x = np.linspace(0, 1000, 1000)
-        y_true = np.concatenate([
-            np.linspace(12000, 12050, 500),
-            np.linspace(12050, 11875, 500)
-        ])
-        y_raw = y_true + np.random.normal(0, 15, 1000)
-        y_price = y_true # Smooth line
-
-    # Compute Smooth Line (True FV)
-    from scipy.ndimage import gaussian_filter1d
-    y_smooth = gaussian_filter1d(y_raw, sigma=15)
-    
-    # Estimated Slope
-    slope = np.gradient(y_smooth)
-
-    # Plot
-    plt.style.use('default')
-    fig, ax1 = plt.subplots(figsize=(12, 5.5), facecolor=BG_COLOR)
-    ax1.set_facecolor(BG_COLOR)
-
-    # Plot Lines
-    ax1.plot(x, y_smooth, color=TRUE_FV_COLOR, linewidth=3, label="True FV", zorder=5)
-    ax1.plot(x, y_raw, color=INFERRED_FV_COLOR, linewidth=1, alpha=0.6, label="Trader inferred FV", zorder=4)
-    
-    # Secondary Axis
-    ax2 = ax1.twinx()
-    ax2.plot(x, slope, color=INFERRED_FV_COLOR, linewidth=0.8, alpha=0.4, label="Estimated slope / tick")
-    ax2.axhline(0, color="grey", linestyle=":", linewidth=0.8)
-    
-    # Crash Interaction (approx middle or detect peak)
-    crash_idx = np.argmax(y_smooth)
-    ax1.axvline(crash_idx, color=CRASH_COLOR, linestyle="--", linewidth=1.5, label="Crash tick")
-    
-    # Annotation
-    ax1.annotate(f"detect @ tick {start_idx + crash_idx}\nlag = 2", 
-                 xy=(crash_idx, y_smooth[crash_idx]), xytext=(crash_idx + 50, y_smooth[crash_idx] + 20),
-                 arrowprops=dict(arrowstyle="->", color="#D4A373"),
-                 bbox=dict(boxstyle="round,pad=0.3", fc="#FEF9E7", ec="#D4A373", alpha=0.8),
-                 fontsize=10)
-
-    # Labels
-    ax1.set_xlabel("Tick", fontsize=10)
-    ax1.set_ylabel("Fair value", fontsize=10)
-    ax2.set_ylabel("Estimated slope / tick", fontsize=10)
-    
-    ax1.grid(True, which='both', color=GRID_COLOR, linestyle='-', linewidth=0.5)
-    ax1.legend(loc="upper right", frameon=True, fontsize=9)
-    
-    plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)
-
-
-def render_toxic_audit_tab(res):
-    if not res or not res.get("trades"):
-        st.info("Run a Visual Backtest simulation first to see Toxic Flow data.")
-        return
-    
-    trades_df = pd.DataFrame(res["trades"])
-    if trades_df.empty:
-        st.warning("No trades recorded in the last simulation.")
-        return
-
-    st.subheader("☣️ Adverse Selection (Toxic Flow) Audit")
-    
-    col_t1, col_t2, col_t3 = st.columns(3)
-    valid_trades = trades_df.dropna(subset=["adverse_delta"])
-    
-    if not valid_trades.empty:
-        toxic_rate = valid_trades["is_toxic"].mean() * 100
-        mean_adv = valid_trades[valid_trades["is_toxic"]]["adverse_delta"].mean()
-        
-        col_t1.metric("Overall Toxicity Score", f"{toxic_rate:.1f}%", help="Percentage of fills where the market moved against you within 10 ticks.")
-        col_t2.metric("Mean Adverse Move", f"{mean_adv:.2f}", help="Average price move against you on toxic fills.")
-        col_t3.metric("Trade Count", len(trades_df))
-        
-        st.markdown("#### Per-Product Signal Quality")
-        prod_stats = valid_trades.groupby(["product", "side"]).agg(
-            toxicity=("is_toxic", "mean"),
-            avg_adverse=("adverse_delta", "mean"),
-            count=("ts", "count")
-        ).reset_index()
-        prod_stats["toxicity"] = (prod_stats["toxicity"] * 100).map("{:.1f}%".format)
-        st.table(prod_stats)
-        
-        st.markdown("#### Adverse Delta Distribution")
-        hist = alt.Chart(valid_trades).mark_bar().encode(
-            x=alt.X("adverse_delta:Q", bin=alt.Bin(maxbins=30), title="Adverse Move (Positive = Bad)"),
-            y="count()",
-            color=alt.Color("side:N", scale=alt.Scale(domain=["BUY", "SELL"], range=["#2ecc71", "#e74c3c"]))
-        ).properties(height=350).interactive()
-        st.altair_chart(hist, use_container_width=True)
-
-    with st.expander("📝 Detailed Trade Log", expanded=False):
-        st.dataframe(trades_df.sort_values("ts", ascending=False), use_container_width=True)
-
-def render_edge_efficiency_tab(res):
-    if not res or not res.get("trades"):
-        st.info("Run a Visual Backtest simulation first to see Edge Efficiency data.")
-        return
-    
-    trades_df = pd.DataFrame(res["trades"])
-    if trades_df.empty:
-        st.warning("No trades recorded in the last simulation.")
-        return
-
-    st.subheader("🎯 Edge Efficiency Curve")
-    st.markdown("> **What it's for:** Finding the 'Sweet Spot' for your quoting distance. If your edge is too small, you get toxic fills; if it's too large, you never trade.")
-    
-    edge_stats = trades_df.groupby(["product", "edge"]).agg(
-        count=("ts", "count"),
-        toxic_count=("is_toxic", "sum"),
-        avg_adv=("adverse_delta", "mean")
-    ).reset_index()
-    
-    edge_chart = alt.Chart(edge_stats).mark_line(point=True).encode(
-        x=alt.X("edge:Q", title="Offered Edge (Distance from Mid)"),
-        y=alt.Y("count:Q", title="Fill Count"),
-        color="product:N",
-        tooltip=["edge", "count", "toxic_count", "avg_adv"]
-    ).properties(height=400).interactive()
-    st.altair_chart(edge_chart, use_container_width=True)
 
 
 def render_manual_optimizer_tab():
     st.subheader("♟️ Manual Challenge Optimizer")
-    st.markdown("Optimize your 50,000 XIRECs budget (100 points maximum) across Research, Scale, and Speed.")
+    
+    with st.expander("📖 The Pillars (Official Documentation)", expanded=False):
+        st.markdown("""
+        **Research** determines how strong your trading edge is. It grows **logarithmically** from `0` (for `0` invested) to `200 000` (for `100` invested). The exact formula is `research(x) = 200_000 * np.log(1 + x) / np.log(1 + 100)`. Here, `np.log` is a python function from NumPy package for natural logarithm.
 
-    # --- INPUTS ---
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        x = st.slider("Research (x)", min_value=0, max_value=100, value=19)
-    with col2:
-        y = st.slider("Scale (y)", min_value=0, max_value=100, value=61)
-    with col3:
-        z = st.slider("Speed (z)", min_value=0, max_value=100, value=20)
+        **Scale** determines how broadly you deploy your strategy across markets. It grows **linearly** from `0` (for `0` invested) to `7` (for `100` invested).
 
-    total_used = x + y + z
-    max_budget = 100
+        **Speed** determines how often you win the trades you target. It is **rank-based** across all players:
 
-    if total_used > max_budget:
-        st.error(f"⚠️ Over Budget! Total used: {total_used}/{max_budget} (Reduce allocations)")
-    else:
-        st.info(f"🟢 Budget OK: {total_used}/{max_budget} used. ({(total_used/max_budget)*50000:,.0f} / 50,000 XIRECs)")
+        - Highest speed investment receives a `0.9` multiplier.
+        - Lowest receives `0.1`.
+        - Everyone in between is scaled linearly by rank, equal investments share the same rank.
+        - For example, if people invested `70, 70, 70, 50, 40, 40, 30`, they get the following ranks: `1, 1, 1, 4, 5, 5, 7`. First three players get `0.9` for hit rate multiplier, last player gets `0.1`, and everybody in between gets linearly scaled between top and bottom rank. Another example, if you have three players investing `95, 20, 10`, their ranks are `1, 2, 3`, and their hit rates are `0.9, 0.5, 0.1`.
+
+        Your Research, Scale, and Speed outcomes are multiplied together to form your gross PnL, after which the used part of your budget is deducted.
+
+        Every decision you make reflects a real trade-off faced by modern market makers: capital is finite, competition is relentless, and edge alone is never enough. Good luck!
+        """)
+
+    st.markdown("### 1. Advanced Competitiveness Modeler")
+    st.markdown("Define the exact strategic breakdown of the competitor population. You can add as many clusters as you want to try out complex game-theory scenarios. **Set Spread to 0** if you want players to pick the exact center value instead of a bell curve.")
+    
+    if "competitor_clusters" not in st.session_state:
+        st.session_state.competitor_clusters = pd.DataFrame([
+            {"Cluster Name": "The Zeroes", "Speed Center": 0, "Spread (Std Dev)": 0, "% of Population": 20},
+            {"Cluster Name": "The Herd", "Speed Center": 40, "Spread (Std Dev)": 5, "% of Population": 75},
+            {"Cluster Name": "The Maxers", "Speed Center": 100, "Spread (Std Dev)": 0, "% of Population": 5}
+        ])
+
+    edited_df = st.data_editor(
+        st.session_state.competitor_clusters,
+        num_rows="dynamic",
+        use_container_width=True,
+        column_config={
+            "Speed Center": st.column_config.NumberColumn("Speed Center", min_value=0, max_value=100),
+            "Spread (Std Dev)": st.column_config.NumberColumn("Spread (Std Dev)", min_value=0),
+            "% of Population": st.column_config.NumberColumn("% of Population", min_value=0)
+        }
+    )
+    
+    tot_pct = edited_df["% of Population"].sum()
+    if tot_pct != 100 and tot_pct > 0:
+        st.info(f"Percentages sum to {tot_pct}%. They will be mathematically normalized to 100% in the simulation.")
+
+    pop_size = st.number_input("Simulation Population Size", min_value=10, max_value=10000, value=1000, help="How many total opponents to simulate. Larger = smoother bell curves.")
+
+    # Generate population
+    np.random.seed(42)
+    pop = []
+    if tot_pct > 0:
+        for _, row in edited_df.iterrows():
+            n_players = int((row["% of Population"] / tot_pct) * pop_size)
+            if n_players > 0:
+                if row["Spread (Std Dev)"] <= 0:
+                    pop.extend(np.ones(n_players) * row["Speed Center"])
+                else:
+                    cluster = np.random.normal(row["Speed Center"], row["Spread (Std Dev)"], n_players)
+                    pop.extend(cluster)
+    
+    if len(pop) == 0:
+        pop = [40] * pop_size
+    
+    comp_speeds = np.array(pop)
+    comp_speeds = np.clip(np.round(comp_speeds), 0, 100).astype(int)
+    total_players = len(comp_speeds) + 1
+
+    with st.expander("📊 View Generated Opponent Distribution", expanded=False):
+        dist_df = pd.DataFrame({"Opponent Speed": comp_speeds})
+        dist_chart = alt.Chart(dist_df).mark_bar(color="#5dade2").encode(
+            x=alt.X("Opponent Speed:O", title="Speed Choice (0-100)"),
+            y=alt.Y("count()", title="Number of Players")
+        ).properties(height=250)
+        st.altair_chart(dist_chart, use_container_width=True)
+
+    def get_multiplier(z_val):
+        rank = np.sum(comp_speeds > z_val) + 1
+        return 0.9 - (0.8 * (rank - 1) / (total_players - 1))
+
+    # Pre-calculate Max PnL for every possible Z (0 to 100)
+    best_pnl_for_z = []
+    optimal_x_for_z = []
+    for test_z in range(101):
+        mult = get_multiplier(test_z)
+        max_n = -float('inf')
+        best_x = 0
+        rem = 100 - test_z
+        for test_x in range(rem + 1):
+            test_y = rem - test_x
+            r = 200_000 * np.log(1 + test_x) / np.log(101)
+            s = 0.07 * test_y
+            n = r * s * mult - 50000
+            if n > max_n:
+                max_n = n
+                best_x = test_x
+        best_pnl_for_z.append(max_n)
+        optimal_x_for_z.append(best_x)
+
+    best_overall_z = int(np.argmax(best_pnl_for_z))
+    best_overall_pnl = best_pnl_for_z[best_overall_z]
+    best_overall_x = optimal_x_for_z[best_overall_z]
+    best_overall_y = 100 - best_overall_z - best_overall_x
 
     st.markdown("---")
-    st.markdown("#### Market Competitiveness (Speed Simulation)")
-    avg_comp_speed = st.slider("Average Competitor Speed Points", min_value=0, max_value=100, value=50, help="Simulates how much other teams invest in Speed. If they invest more than you, your rank and multiplier drop.")
+    st.markdown("### 2. Projected Optimal Curve")
+    st.markdown("This curve shows the **Maximum possible Net PnL** for any chosen Speed (x-axis), assuming you optimally distribute the *remaining* budget between Research and Scale.")
+
+    curve_df = pd.DataFrame({
+        "Speed Investment": list(range(101)),
+        "Max Net PnL": best_pnl_for_z,
+        "Optimal Research": optimal_x_for_z
+    })
     
-    if total_used <= max_budget:
-        # --- MATH LOGIC ---
-        # 1. Research
-        base_research = 200_000 * np.log(1 + x) / np.log(101)
-        
-        # 2. Scale
-        base_scale = 0.07 * y
-        
-        # 3. Speed (Rank)
-        np.random.seed(42) # Deterministic for UI stability
-        comp_speeds = np.random.normal(avg_comp_speed, 15, 100)
-        comp_speeds = np.clip(comp_speeds, 0, 100)
-        
-        rank = np.sum(comp_speeds > z) + 1
-        total_players = 101
-        
-        # Multiplier scales linearly from 0.9 (rank 1) to 0.1 (rank N)
-        speed_mult = 0.9 - (0.8 * (rank - 1) / (total_players - 1))
-        
-        gross_pnl = base_research * base_scale * speed_mult
-        budget_cost = total_used * 500  # 500 XIRECs per point
-        net_pnl = gross_pnl - budget_cost
+    # Calculate a baseline y=0 line
+    zero_line = pd.DataFrame({"Speed Investment": list(range(101)), "Max Net PnL": [0]*101})
+    zero_chart = alt.Chart(zero_line).mark_line(color="orange", strokeDash=[5, 5]).encode(x="Speed Investment:Q", y="Max Net PnL:Q")
 
-        # --- LIVE METRICS ---
-        st.markdown("---")
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("Research Value", f"{base_research:,.0f}")
-        m2.metric("Scale Value", f"{base_scale:.3f}")
-        m3.metric("Simulated Rank", f"{rank} / {total_players}")
-        m4.metric("Speed Multiplier", f"{speed_mult:.3f}x")
-        m5.metric("Net Projected PnL", f"{net_pnl:,.0f} XIRECs")
+    chart = alt.Chart(curve_df).mark_line(color="#2ecc71").encode(
+        x="Speed Investment:Q",
+        y="Max Net PnL:Q",
+        tooltip=["Speed Investment", "Max Net PnL", "Optimal Research"]
+    ).properties(height=400, title="Optimal Net PnL vs Speed Investment")
+    
+    opt_pt = pd.DataFrame({"Speed Investment": [best_overall_z], "Max Net PnL": [best_overall_pnl]})
+    pt = alt.Chart(opt_pt).mark_point(color="white", size=100, filled=True, stroke="black", strokeWidth=2).encode(x="Speed Investment:Q", y="Max Net PnL:Q")
+    
+    st.altair_chart(zero_chart + chart + pt, use_container_width=True)
 
-        # --- VISUALIZATIONS ---
-        col_chart1, col_chart2 = st.columns(2)
+    
+    st.success(f"**Mathematical Peak:** With this competitor distribution, the max theoretical PnL is at **Speed {best_overall_z}**, with Research **{best_overall_x}** and Scale **{best_overall_y}**.")
+
+    st.markdown("---")
+    st.markdown("### 3. Your Allocation")
+    st.markdown("Select your Speed based on the curve above, then allocate the remainder.")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        z = st.slider("Step 1: Speed (z)", min_value=0, max_value=100, value=best_overall_z, step=1)
+    
+    remaining_budget = 100 - z
+    
+    with col2:
+        x = st.slider(f"Step 2: Research (x)", min_value=0, max_value=remaining_budget, value=min(best_overall_x, remaining_budget), step=1)
         
-        with col_chart1:
-            st.markdown("**Research Diminishing Returns**")
-            x_vals = np.linspace(0, 100, 100)
-            r_vals = 200_000 * np.log(1 + x_vals) / np.log(101)
-            line_df = pd.DataFrame({"Investment": x_vals, "Research Value": r_vals})
-            chart = alt.Chart(line_df).mark_line().encode(
-                x=alt.X("Investment:Q", title="Research Points invested"),
-                y=alt.Y("Research Value:Q", title="Value Provided")
+    y = remaining_budget - x
+    with col3:
+        st.metric(f"Step 3: Scale (y) [Auto-calculated]", f"{y} points")
+
+    # --- MATH LOGIC ---
+    base_research = 200_000 * np.log(1 + x) / np.log(101)
+    base_scale = 0.07 * y
+    speed_mult = get_multiplier(z)
+    rank = np.sum(comp_speeds > z) + 1
+    
+    gross_pnl = base_research * base_scale * speed_mult
+    budget_cost = 50000 
+    net_pnl = gross_pnl - budget_cost
+
+    # --- LIVE METRICS ---
+    st.markdown("---")
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Research Value", f"{base_research:,.0f}")
+    m2.metric("Scale Value", f"{base_scale:.3f}")
+    m3.metric("Simulated Rank", f"{rank} / {total_players}")
+    m4.metric("Speed Multiplier", f"{speed_mult:.3f}x")
+    m5.metric("Net Projected PnL", f"{net_pnl:,.0f} XIRECs", delta=f"{net_pnl - 173635:,.0f} vs Baseline")
+
+    col_chart1, col_chart2 = st.columns(2)
+    with col_chart1:
+        st.markdown(f"**Research vs Scale tradeoff given {z} Speed points**")
+        
+        # Simple grid evaluation for 1D line chart
+        grid_res = []
+        for rx in range(0, remaining_budget + 1):
+            sy = remaining_budget - rx
+            R = 200_000 * np.log(1 + rx) / np.log(101)
+            S = 0.07 * sy
+            G = R * S * speed_mult
+            N = G - 50000
+            grid_res.append({"Research": rx, "Scale": sy, "Net_PnL": N})
+            
+        heat_df = pd.DataFrame(grid_res)
+        if not heat_df.empty:
+            heat = alt.Chart(heat_df).mark_line(color="#3498db").encode(
+                x=alt.X("Research:Q", title=f"Research Points (out of {remaining_budget})"),
+                y=alt.Y("Net_PnL:Q", title="Net PnL"),
+                tooltip=["Research", "Scale", "Net_PnL"]
+            ).properties(height=350).interactive()
+            
+            # Active setup point
+            current_point = pd.DataFrame({"Research": [x], "Scale": [y], "Net_PnL": [net_pnl]})
+            curr_mark = alt.Chart(current_point).mark_point(size=150, color="orange", filled=True, stroke="black").encode(
+                x="Research:Q", y="Net_PnL:Q", tooltip=["Research", "Scale", "Net_PnL"]
             )
-            # Active point
-            current_x = pd.DataFrame({"Investment": [x], "Research Value": [base_research]})
-            point = alt.Chart(current_x).mark_point(color="#e74c3c", size=100, filled=True).encode(x="Investment:Q", y="Research Value:Q")
-            st.altair_chart(chart + point, use_container_width=True)
-
-        with col_chart2:
-            st.markdown(f"**Allocation Efficiency Heatmap (Assuming {z} Speed)**")
             
-            # Simple grid evaluation for heatmap
-            grid_res = []
-            for rx in range(0, 101):
-                for sy in range(0, 101):
-                    if rx + sy + z <= 100:
-                        R = 200_000 * np.log(1 + rx) / np.log(101)
-                        S = 0.07 * sy
-                        G = R * S * speed_mult
-                        N = G - (rx + sy + z) * 500
-                        grid_res.append({"Research": rx, "Scale": sy, "Net_PnL": N})
+            st.altair_chart(heat + curr_mark, use_container_width=True)
             
-            heat_df = pd.DataFrame(grid_res)
-            if not heat_df.empty:
-                heat = alt.Chart(heat_df).mark_circle(size=60).encode(
-                    x=alt.X("Research:Q", title="Research Pts"),
-                    y=alt.Y("Scale:Q", title="Scale Pts"),
-                    color=alt.Color("Net_PnL:Q", scale=alt.Scale(scheme="redyellowgreen", domainMid=0), title="Net PnL"),
-                    tooltip=["Research", "Scale", "Net_PnL"]
-                ).properties(height=350).interactive()
-                
-                # Active setup point
-                current_point = pd.DataFrame({"Research": [x], "Scale": [y], "Net_PnL": [net_pnl]})
-                curr_mark = alt.Chart(current_point).mark_circle(size=120, color="black", stroke="white", strokeWidth=2).encode(
-                    x="Research:Q", y="Scale:Q", tooltip=["Research", "Scale", "Net_PnL"]
-                )
-                
-                st.altair_chart(heat + curr_mark, use_container_width=True)
-            else:
-                st.warning("Insufficient budget remaining to plot heatmap.")
+    with col_chart2:
+        st.markdown("**Research Diminishing Returns**")
+        x_vals = np.linspace(0, 100, 100)
+        r_vals = 200_000 * np.log(1 + x_vals) / np.log(101)
+        line_df = pd.DataFrame({"Investment": x_vals, "Research Value": r_vals})
+        chart = alt.Chart(line_df).mark_line(color="#e67e22").encode(
+            x=alt.X("Investment:Q", title="Research Points invested"),
+            y=alt.Y("Research Value:Q", title="Value Provided")
+        ).properties(height=350)
+        current_x = pd.DataFrame({"Investment": [x], "Research Value": [base_research]})
+        point = alt.Chart(current_x).mark_point(color="red", size=150, filled=True, stroke="black").encode(x="Investment:Q", y="Research Value:Q")
+        st.altair_chart(chart + point, use_container_width=True)
 
 def main():
     st.set_page_config(
@@ -827,12 +762,9 @@ def main():
     st.title("📈 Prosperity 4: Operations Console")
 
     # Final tab layout
-    tab_backtest, tab_robust, tab_signals, tab_toxic, tab_edge, tab_manual = st.tabs([
+    tab_backtest, tab_robust, tab_manual = st.tabs([
         "📉 Visual Backtester",
         "🛡️ Robust Analysis",
-        "📡 Signal Analytics",
-        "☣️ Toxic Flow Audit",
-        "🎯 Edge Efficiency",
         "♟️ Manual Optimizer"
     ])
 
@@ -1226,41 +1158,7 @@ def main():
             render_total_chart(df_prices, df_trades)
 
 
-    with tab_signals:
-        st.header("📡 Signal Analytics & Regime Detection")
-        st.markdown("> **What it's for:** Auditing how fast your signals react to market shifts and finding hidden correlations in trade volume.  \n> **How to use:** Check the 'Regime Lag' chart after a Pepper run to see if your model 'flips' too late after a trend reversal.")
-        
-        if "sim_result" in st.session_state and "ticks" in st.session_state.sim_result:
-            ticks_df = pd.DataFrame(st.session_state.sim_result["ticks"])
-            
-            if "pp_slope" in ticks_df.columns and "mid_INTARIAN_PEPPER_ROOT" in ticks_df.columns:
-                st.subheader("⏱️ Pepper Regime Lag Visualizer")
-                # Normalize for overlay
-                ticks_df["price_norm"] = (ticks_df["mid_INTARIAN_PEPPER_ROOT"] - ticks_df["mid_INTARIAN_PEPPER_ROOT"].mean()) / ticks_df["mid_INTARIAN_PEPPER_ROOT"].std()
-                ticks_df["slope_norm"] = (ticks_df["pp_slope"] - ticks_df["pp_slope"].mean()) / (ticks_df["pp_slope"].std() + 1e-6)
-                
-                lag_chart = alt.Chart(ticks_df.iloc[::20]).mark_line(opacity=0.8).encode(
-                    x="ts:Q",
-                    y=alt.Y("price_norm:Q", title="Normalized Signal/Price"),
-                    color=alt.value("#e74c3c"),
-                    tooltip=["ts", "pp_slope", "mid_INTARIAN_PEPPER_ROOT"]
-                )
-                signal_line = alt.Chart(ticks_df.iloc[::20]).mark_line(color="#3498db").encode(
-                    x="ts:Q",
-                    y="slope_norm:Q"
-                )
-                st.altair_chart((lag_chart + signal_line).properties(height=400).interactive(), use_container_width=True)
-                st.info("🔴 Price (Normalized) | 🔵 Model Signal (Slope). If the blue line crosses zero significantly after the red line turns, your model is lagging.")
-            else:
-                st.info("Run a simulation with Pepper active to see Signal Lag diagnostics.")
-        else:
-            st.info("Run a Visual Backtest simulation first to populate Signal Analytics.")
 
-    with tab_toxic:
-        render_toxic_audit_tab(st.session_state.get("sim_result"))
-
-    with tab_edge:
-        render_edge_efficiency_tab(st.session_state.get("sim_result"))
 
 
     with tab_manual:
