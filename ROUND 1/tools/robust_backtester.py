@@ -212,7 +212,13 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
     )
 
 
-def discover_datasets(imc_only=False, scenarios_only=False, quick=False) -> List[Tuple[str, str, str]]:
+def discover_datasets(
+    imc_only=False,
+    scenarios_only=False,
+    quick=False,
+    with_scenarios=False,
+    with_real_world=False,
+) -> List[Tuple[str, str, str]]:
     datasets = []
 
     if not scenarios_only:
@@ -221,10 +227,10 @@ def discover_datasets(imc_only=False, scenarios_only=False, quick=False) -> List
             if p.exists():
                 datasets.append((f"imc_day_{day}", str(p), "imc"))
 
-    if imc_only:
+    if imc_only and not scenarios_only:
         return datasets
 
-    if not scenarios_only:
+    if not scenarios_only and with_real_world:
         if REAL_DIR.exists():
             real_files = sorted(REAL_DIR.glob("prices_*.csv"))
             if quick:
@@ -232,7 +238,7 @@ def discover_datasets(imc_only=False, scenarios_only=False, quick=False) -> List
             for f in real_files:
                 datasets.append((f.stem.replace("prices_", ""), str(f), "real"))
 
-    if SCENARIO_DIR.exists():
+    if SCENARIO_DIR.exists() and (scenarios_only or with_scenarios):
         scen_files = sorted(SCENARIO_DIR.glob("prices_*.csv"))
         if quick:
             seen_regimes = set()
@@ -370,8 +376,27 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Robust multi-scenario backtester")
     parser.add_argument("trader", help="Path to trader .py file")
-    parser.add_argument("--imc-only", action="store_true", help="Only test IMC historical data")
+    parser.add_argument(
+        "--imc-only",
+        action="store_true",
+        help="Only test IMC historical data (default already; kept for scripts)",
+    )
     parser.add_argument("--scenarios-only", action="store_true", help="Only test synthetic scenarios")
+    parser.add_argument(
+        "--with-scenarios",
+        action="store_true",
+        help="Include synthetic scenario CSVs in addition to IMC days",
+    )
+    parser.add_argument(
+        "--with-real-world",
+        action="store_true",
+        help="Include normalized real_world CSVs (local cache only)",
+    )
+    parser.add_argument(
+        "--full-legacy",
+        action="store_true",
+        help="IMC + scenarios + real-world (previous default mix)",
+    )
     parser.add_argument("--quick", action="store_true", help="Subset for speed (1 per regime)")
     parser.add_argument("--tag", type=str, default=None, help="Custom tag for this run (e.g. 'v4-beta')")
     args = parser.parse_args()
@@ -385,12 +410,23 @@ if __name__ == "__main__":
         run_tag = "imc"
     elif args.scenarios_only:
         run_tag = "scenarios"
+    elif args.full_legacy or (args.with_scenarios and args.with_real_world):
+        run_tag = "full_legacy"
+    elif args.with_scenarios:
+        run_tag = "imc_scen"
+    elif args.with_real_world:
+        run_tag = "imc_real"
     else:
-        run_tag = "default"
+        run_tag = "imc"
+
+    with_scenarios = args.scenarios_only or args.with_scenarios or args.full_legacy
+    with_real_world = args.with_real_world or args.full_legacy
 
     datasets = discover_datasets(
         imc_only=args.imc_only,
         scenarios_only=args.scenarios_only,
         quick=args.quick,
+        with_scenarios=with_scenarios,
+        with_real_world=with_real_world,
     )
     run_robust_backtest(args.trader, datasets, tag=run_tag)

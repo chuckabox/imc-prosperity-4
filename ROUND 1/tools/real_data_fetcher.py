@@ -5,10 +5,10 @@ Fetches real commodity/stock data from Alpha Vantage + yfinance,
 normalizes it into IMC-compatible tick format for robust backtesting.
 
 Usage:
-    python real_data_fetcher.py              # Fetch all sources
-    python real_data_fetcher.py --list       # List cached datasets
-    python real_data_fetcher.py --source av  # Alpha Vantage only
-    python real_data_fetcher.py --source yf  # yfinance only
+    IMC_PROSPERITY_ALLOW_REAL_FETCH=1 python real_data_fetcher.py
+    python real_data_fetcher.py --list
+    python real_data_fetcher.py --source av
+    python real_data_fetcher.py --source yf
 """
 
 import os
@@ -36,6 +36,12 @@ NORMALIZED_DIR.mkdir(parents=True, exist_ok=True)
 
 IMC_TICKS_PER_DAY = 10000
 IMC_TICK_INTERVAL = 100
+
+
+def _real_fetch_allowed() -> bool:
+    v = os.environ.get("IMC_PROSPERITY_ALLOW_REAL_FETCH", "").strip().lower()
+    return v in ("1", "true", "yes")
+
 
 PEPPER_ANALOGS = {
     "yf": {
@@ -319,6 +325,14 @@ def build_paired_days(
 
 def fetch_all(sources: str = "both") -> Dict:
     """Fetch from all configured sources."""
+    if not _real_fetch_allowed():
+        print(
+            "Real-world network fetch is disabled by default (no yfinance / Alpha Vantage calls).\n"
+            "Set IMC_PROSPERITY_ALLOW_REAL_FETCH=1 in the environment to enable fetching.\n"
+            "Use: python real_data_fetcher.py --list   (reads local cache only)"
+        )
+        return {}
+
     api_key = load_api_key()
     metadata = {"fetched_at": datetime.now().isoformat(), "datasets": {}}
 

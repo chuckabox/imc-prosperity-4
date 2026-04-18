@@ -5,10 +5,10 @@ Fetches real commodity/stock data from Alpha Vantage + yfinance,
 normalizes it into IMC-compatible tick format for robust backtesting.
 
 Usage:
-    python real_data_fetcher.py              # Fetch all sources
-    python real_data_fetcher.py --list       # List cached datasets
-    python real_data_fetcher.py --source av  # Alpha Vantage only
-    python real_data_fetcher.py --source yf  # yfinance only
+    IMC_PROSPERITY_ALLOW_REAL_FETCH=1 python real_data_fetcher.py   # Fetch (network)
+    python real_data_fetcher.py --list                             # List cache (no network)
+    python real_data_fetcher.py --source av
+    python real_data_fetcher.py --source yf
 """
 
 import os
@@ -36,6 +36,11 @@ NORMALIZED_DIR.mkdir(parents=True, exist_ok=True)
 
 IMC_TICKS_PER_DAY = 10000
 IMC_TICK_INTERVAL = 100
+
+
+def _real_fetch_allowed() -> bool:
+    v = os.environ.get("IMC_PROSPERITY_ALLOW_REAL_FETCH", "").strip().lower()
+    return v in ("1", "true", "yes")
 
 PEPPER_ANALOGS = {
     "yf": {
@@ -319,6 +324,14 @@ def build_paired_days(
 
 def fetch_all(sources: str = "both") -> Dict:
     """Fetch from all configured sources."""
+    if not _real_fetch_allowed():
+        print(
+            "Real-world network fetch is disabled by default (no yfinance / Alpha Vantage calls).\n"
+            "Set IMC_PROSPERITY_ALLOW_REAL_FETCH=1 in the environment to enable fetching.\n"
+            "Use: python real_data_fetcher.py --list   (reads local cache only)"
+        )
+        return {}
+
     api_key = load_api_key()
     metadata = {"fetched_at": datetime.now().isoformat(), "datasets": {}}
 
@@ -419,24 +432,11 @@ def list_cached():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fetch real-world market data for IMC training")
     parser.add_argument("--list", action="store_true", help="List cached datasets")
-    parser.add_argument(
-        "--fetch",
-        action="store_true",
-        help="Actually call yfinance / Alpha Vantage (network). Without this flag the script does nothing.",
-    )
     parser.add_argument("--source", choices=["both", "yf", "av"], default="both",
                         help="Data source: yf=yfinance, av=AlphaVantage, both=all")
     args = parser.parse_args()
 
     if args.list:
         list_cached()
-    elif args.fetch:
-        fetch_all(sources=args.source)
     else:
-        print(
-            "real_data_fetcher: no network fetch performed.\n"
-            "  List cache:  python real_data_fetcher.py --list\n"
-            "  Fetch data:  python real_data_fetcher.py --fetch [--source yf|av|both]\n"
-            "IMC Prosperity workflows use bundled prices_round_*_day_*.csv only; "
-            "this tool is optional."
-        )
+        fetch_all(sources=args.source)

@@ -17,3 +17,6 @@ env/
 # OS/System
 .DS_Store
 Thumbs.db
+
+# Real-world fetcher output (optional; not used for IMC-only workflows)
+**/data_capsule/real_world/
