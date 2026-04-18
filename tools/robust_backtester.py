@@ -284,7 +284,7 @@ def discover_datasets(rounds: List[int], quick: bool = False) -> List[Tuple[str,
 
     return datasets
 
-def run_unified_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], tag: str = "unified") -> Dict:
+def run_unified_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], tag: str = "robust") -> Dict:
     results: List[BacktestResult] = []
 
     print(f"\nUNIFIED ROBUST BACKTEST: {trader_file}")
@@ -366,8 +366,15 @@ if __name__ == "__main__":
     parser.add_argument("trader", help="Path to trader .py file")
     parser.add_argument("--rounds", type=int, nargs="+", default=[1, 2], help="Rounds to include (default: 1 2)")
     parser.add_argument("--quick", action="store_true", help="Subset for speed")
-    parser.add_argument("--tag", type=str, default="unified", help="Tag for results file")
+    parser.add_argument("--tag", type=str, default=None, help="Tag for results file")
     args = parser.parse_args()
 
+    # Automatic tagging logic
+    run_tag = "robust"
+    if args.tag:
+        run_tag = args.tag
+    elif args.quick:
+        run_tag = "quick"
+
     datasets = discover_datasets(args.rounds, quick=args.quick)
-    run_unified_backtest(args.trader, datasets, tag=args.tag)
+    run_unified_backtest(args.trader, datasets, tag=run_tag)
