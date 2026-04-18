@@ -219,10 +219,10 @@ def run_stress_backtest(trader_path, prices_dict, products, limits=80):
         "final_pos": sum(abs(v) for v in positions.values())
     }
 
-def run_backtest_simulation(day):
-    st.toast(f"Running simulation against Day {day}...")
+def run_backtest_simulation(day, round_filter="All"):
+    st.toast(f"Running simulation against {round_filter} Day {day}...")
 
-    df_prices, df_trades = load_and_process_data(day)
+    df_prices, df_trades = load_and_process_data(day, round_filter)
     if df_prices is None:
         st.error("Missing data for simulation!")
         return
@@ -378,6 +378,7 @@ def run_backtest_simulation(day):
     st.session_state.sim_result = {
         "pnl": final_pnl, 
         "day": day, 
+        "round": round_filter,
         "trades": st.session_state.trades_log,
         "ticks": full_tick_data
     }
@@ -472,18 +473,32 @@ def run_backtest_simulation(day):
 
 # Disable caching temporarily to ensure fresh data for every backtest
 # @st.cache_data
-def load_and_process_data(day):
+def load_and_process_data(day, round_filter="All"):
     all_prices = []
     all_trades = []
     
-    if day == "All":
-        # Discover all available day files in DATA_DIR
-        price_files = [f for f in os.listdir(DATA_DIR) if f.startswith("prices_round_") and f.endswith(".csv")]
-        days_to_load_files = [(f, f.replace("prices_", "trades_")) for f in price_files]
-    else:
-        # Look for the specific day in any round
-        price_files = [f for f in os.listdir(DATA_DIR) if f.startswith("prices_round_") and f.endswith(f"_day_{day}.csv")]
-        days_to_load_files = [(f, f.replace("prices_", "trades_")) for f in price_files]
+    # Map Round selection to numeric
+    r_target = None
+    if round_filter == "Round 1": r_target = 1
+    elif round_filter == "Round 2": r_target = 2
+
+    # Discovery logic
+    price_files = [f for f in os.listdir(DATA_DIR) if f.startswith("prices_round_") and f.endswith(".csv")]
+    
+    days_to_load_files = []
+    for f in price_files:
+        match = re.search(r"round_(\d+)_day_(-?\d+)", f)
+        if not match: continue
+        
+        r_num = int(match.group(1))
+        d_num = int(match.group(2))
+        
+        # Filter logic
+        round_matches = (r_target is None or r_num == r_target)
+        day_matches = (day == "All" or d_num == int(day))
+        
+        if round_matches and day_matches:
+            days_to_load_files.append((f, f.replace("prices_", "trades_")))
 
     for p_file, t_file in days_to_load_files:
         prices_full_path = os.path.join(DATA_DIR, p_file)
@@ -1006,25 +1021,33 @@ def main():
 
 
     with tab_backtest:
+        def on_selection_change():
+            run_backtest_simulation(st.session_state.day_radio, st.session_state.round_radio)
 
+        col_round, col_day, col_btn = st.columns([1.2, 2, 1])
+        
+        with col_round:
+            selected_round = st.radio("Select Round:", ["All", "Round 1", "Round 2"],
+                                       key="round_radio",
+                                       horizontal=True,
+                                       on_change=on_selection_change)
 
-        col_day, col_btn = st.columns([1, 1])
         with col_day:
-            def on_day_change():
-                run_backtest_simulation(st.session_state.day_radio)
-
             day_options = ["All", -2, -1, 0, 1]
-            selected_day = st.radio("Select Historical Data Day:", day_options,
+            selected_day = st.radio("Select Day:", day_options,
                                      key="day_radio",
                                      index=0,
                                      horizontal=True,
-                                     on_change=on_day_change)
+                                     on_change=on_selection_change)
+        
         with col_btn:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🔄 Run Simulation"):
-                run_backtest_simulation(selected_day)
+                run_backtest_simulation(selected_day, selected_round)
 
-        if "sim_result" in st.session_state and st.session_state.sim_result["day"] == selected_day:
+        if "sim_result" in st.session_state and \
+           st.session_state.sim_result["day"] == selected_day and \
+           st.session_state.sim_result.get("round") == selected_round:
             col_m1, col_m2 = st.columns(2)
             with col_m1:
                 st.metric("Simulated PnL", f"${st.session_state.sim_result['pnl']:,.2f}")
@@ -1040,10 +1063,10 @@ def main():
 
         st.markdown("---")
 
-        df_prices, df_trades = load_and_process_data(selected_day)
+        df_prices, df_trades = load_and_process_data(selected_day, selected_round)
 
         if df_prices is not None:
-            st.subheader(f"📊 Market Reconstruction (Day {selected_day})")
+            st.subheader(f"📊 Market Reconstruction ({selected_round} - Day {selected_day})")
 
             st.markdown("#### 💎 ASH COATED OSMIUM (Mean Reversion)")
             df_os = render_chart(df_prices, df_trades, "ASH_COATED_OSMIUM", "#2ecc71", show_mean=True)
