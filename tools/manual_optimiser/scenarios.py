@@ -54,6 +54,13 @@ def aggressive_market(pop_size: int = POP_SIZE, mu: float = 70.0, sigma: float =
     return _s
 
 
+def normal_distribution(pop_size: int = POP_SIZE, mu: float = 50.0, sigma: float = 20.0):
+    """Standard normal distribution — symmetrical around center."""
+    def _s(rng):
+        return _clip(rng.normal(mu, sigma, pop_size))
+    return _s
+
+
 def truncated_exponential(pop_size: int = POP_SIZE, scale: float = 15.0):
     """Heavy tail: many near 0, long tail up to 100."""
     def _s(rng):
@@ -78,6 +85,7 @@ ALL_SCENARIOS = {
     "Beta(2,5) - lazy market":        beta_2_5(),
     "Uniform(0,100) - chaos":         uniform(),
     "Bimodal lazy+herd@40":           bimodal_lazy_and_herd(),
+    "Normal (mu=50, sigma=20)":       normal_distribution(),
     "Herd at midrange (mu=50)":       herd_midrange(),
     "Aggressive market (mu=70)":      aggressive_market(),
     "Exponential (scale=15)":         truncated_exponential(),

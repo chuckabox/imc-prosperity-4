@@ -312,6 +312,10 @@ def run_backtest_simulation(day):
 
     TraderClass = load_default_trader_class()
     trader = TraderClass()
+    # Initialize trader data if not present
+    if not hasattr(trader, 'traderData') or trader.traderData is None:
+        trader.traderData = ""
+
     # Mock symbols and listings
     listings = {
         "ASH_COATED_OSMIUM": Listing("ASH_COATED_OSMIUM", "ASH_COATED_OSMIUM", "XIRECS"),
@@ -354,6 +358,8 @@ def run_backtest_simulation(day):
         total_steps = len(timestamps)
         progress_bar = st.progress(0)
 
+        trader_data_state = trader.traderData  # Track state separately
+
         for i, ts in enumerate(timestamps):
             if i % 500 == 0:
                 progress_bar.progress((i + 1) / total_steps)
@@ -362,7 +368,7 @@ def run_backtest_simulation(day):
             order_depths = {p: d[0] for p, d in ts_data.items()}
 
             state = TradingState(
-                traderData=trader.traderData,
+                traderData=trader_data_state,
                 timestamp=ts,
                 listings=listings,
                 order_depths=order_depths,
@@ -372,8 +378,12 @@ def run_backtest_simulation(day):
                 observations=Observation({}, {})
             )
 
-            orders, conversions, trader_data = trader.run(state)
-            trader.traderData = trader_data
+            try:
+                orders, conversions, trader_data = trader.run(state)
+                trader_data_state = trader_data  # Update state
+            except Exception as e:
+                st.warning(f"Trader failed at timestamp {ts}: {str(e)}")
+                continue
 
             # --- Optimized Fill Logic ---
             for product, order_list in orders.items():
