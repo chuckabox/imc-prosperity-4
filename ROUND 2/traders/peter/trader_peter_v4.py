@@ -89,6 +89,15 @@ class Trader:
     PEPPER_FLATTEN_CHUNK = 15
     PEPPER_FLATTEN_FIRST = 40
 
+    # V4: Liquidity-adaptive scaling
+    PEPPER_LIQ_SCALE_HIGH = 1.2
+    PEPPER_LIQ_SCALE_LOW = 0.8
+    PEPPER_LIQ_DEPTH_THRESHOLD = 80
+    PEPPER_PASSIVE_SCALE_HIGH = 1.15
+
+    # V4: Market access bid (conservative, top 50% target)
+    MAF_BID = 50
+
     # --- OSMIUM ---
     OSMIUM_ANCHOR = 10_000
     OSMIUM_TAKE_EDGE = 1
@@ -131,8 +140,8 @@ class Trader:
         return self.PEPPER_STOP_MODERATE, self.PEPPER_RESUME_MODERATE
 
     def bid(self):
-        """R2 Market Access Fee bid. Conservative (50) = asymmetric +EV: cost <= 50, gain 12-21k if accepted."""
-        return 50
+        """V4 Market Access Fee bid. Conservative to stay top 50%."""
+        return self.MAF_BID
 
     # ------------------------------------------------------------------
     # PEPPER_ROOT
@@ -357,11 +366,24 @@ class Trader:
         rem_buy = self.LIMIT - pos
         rem_sell = self.LIMIT + pos
 
+        # V4: Deep-book detection for aggressive taker
+        osm_depth = sum(abs(v) for v in depth.sell_orders.values()) + sum(abs(v) for v in depth.buy_orders.values())
+        deep_book = osm_depth >= 60
+
         if not toxic_skip_buys:
             for ask in sorted(depth.sell_orders.keys()):
+                # Tight edge first
                 if ask <= fair - buy_edge and rem_buy > 0:
                     avail = -depth.sell_orders[ask]
                     qty = min(rem_buy, avail)
+                    if qty > 0:
+                        orders.append(Order(product, ask, qty))
+                        rem_buy -= qty
+                        pos += qty
+                # V4: Relaxed edge if book deep and not loaded
+                elif deep_book and ask <= fair - 1 and rem_buy > 0 and pos < 40:
+                    avail = -depth.sell_orders[ask]
+                    qty = min(rem_buy, avail, 10)  # cap opportunistic take
                     if qty > 0:
                         orders.append(Order(product, ask, qty))
                         rem_buy -= qty
@@ -372,6 +394,13 @@ class Trader:
                 if bid >= fair + sell_edge and rem_sell > 0:
                     avail = depth.buy_orders[bid]
                     qty = min(rem_sell, avail)
+                    if qty > 0:
+                        orders.append(Order(product, bid, -qty))
+                        rem_sell -= qty
+                        pos -= qty
+                elif deep_book and bid >= fair + 1 and rem_sell > 0 and pos > -40:
+                    avail = depth.buy_orders[bid]
+                    qty = min(rem_sell, avail, 10)
                     if qty > 0:
                         orders.append(Order(product, bid, -qty))
                         rem_sell -= qty
