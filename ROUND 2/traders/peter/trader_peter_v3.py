@@ -1,35 +1,37 @@
 """
-trader_peter_v2.py (Round 2 evolution from v13)
-================================================
-V2 — v1 upgraded with regime-aware adaptive stops, moderate fast-track,
-and position-asymmetric edge gating. Ports Round 1 v13 refinements.
+trader_peter_v3.py (Round 2 advanced optimization)
+===================================================
+V3 — v2 enhanced with liquidity-aware position sizing, reduced weak-regime cap,
+and volatility-adaptive quote sizing. Addresses R2 PEPPER PnL degradation.
 
+V2 Features (inherited)
+-----------------------
+- Regime-adaptive stops (STRONG -16, MODERATE -12, WEAK -8)
+- Fast-track for both STRONG and MODERATE slopes
+- Inside-spread passive in STRONG with spread >= 3
+- Position-asymmetric take-edge for Osmium
+
+V3 Enhancements
+---------------
 Pepper
 ------
-1. ADAPTIVE STOP THRESHOLD by regime. v1 used flat -12. Now:
-       STRONG  → -16  (resume +7)
-       MODERATE → -12  (resume +5)
-       WEAK    → -8   (resume +4)
-   Protects STRONG-regime PnL from noise-trips, tightens WEAK exposure.
+1. REDUCED WEAK CAP: 30 → 20. In negative/weak drift, smaller positions
+   reduce tail risk and whipsaw exposure. Complements tighter -8 stop.
 
-2. FAST-TRACK also promotes MODERATE. v1 only fast-tracked STRONG
-   (slope >= 0.10). Now commits CAP_MODERATE at slope >= 0.04 within
-   fast-track window. Moderate-drift days avoid 1500 ts at tentative cap.
+2. LIQUIDITY-GATING: min total volume threshold. If (bid_vol + ask_vol) < 10,
+   reduce take qty by 25%. Preserves capital when market is dry.
 
-3. INSIDE-SPREAD PASSIVE in STRONG. v1 rested passive at bb+1 only.
-   In STRONG with spread >= 3, split 50/50 between bb+1 (safe) and
-   ba-1 (aggressive). Confident uptrend pays 1 tick more for fill surface.
-
-4. FLATTEN_FIRST bumped 30 → 40. On stop trigger dump 40 immediately;
-   clears more book-depth, faster damage control post-reversal.
+3. VOLATILITY DETECTOR: track 20-tick realized volatility proxy. Clamp max
+   take_per_tick if volatility exceeds threshold. Defensive in vol spikes.
 
 Osmium
 ------
-5. POSITION-ASYMMETRIC TAKE-EDGE. v1 same edge for buy/sell. Now:
-       buy_edge  = base_edge + max(0, pos // 30)
-       sell_edge = base_edge + max(0, -pos // 30)
-   At pos=+30, need 2-tick edge to buy but 1 to sell. Asymmetry
-   compounds with skew for coherent multi-layer unwind pressure.
+4. VOLATILITY-SCALED QUOTES: scale OSMIUM_QUOTE_SIZE by inverse volatility.
+   Low vol: be aggressive (size 25). High vol: conservative (size 18).
+   Adapts to market regime in real-time.
+
+5. MEAN-REVERSION BIAS: when abs(pos) > 75 and recent trend is down,
+   boost quote size by 33%. Contrarian when overexposed and reverting.
 """
 
 import json
@@ -67,7 +69,7 @@ class Trader:
 
     PEPPER_CAP_STRONG = 80
     PEPPER_CAP_MODERATE = 60
-    PEPPER_CAP_WEAK = 30
+    PEPPER_CAP_WEAK = 20  # Reduced from 30 for tighter control
     PEPPER_CAP_NEGATIVE = 0
     PEPPER_CAP_TENTATIVE = 20
 
@@ -75,6 +77,10 @@ class Trader:
     PEPPER_TAKE_PER_TICK_STRONG = 15
     PEPPER_TAKE_PER_TICK_TENTATIVE = 5
     PEPPER_PASSIVE_CAP = 40
+
+    # V3 Enhancements
+    PEPPER_LIQUIDITY_MIN = 10  # min combined bid+ask volume
+    PEPPER_VOL_THRESHOLD = 0.015  # volatility proxy threshold
 
     # --- PEPPER: magnitude stop guard (regime-adaptive) ---
     PEPPER_SLOPE_WINDOW = 20
@@ -103,6 +109,13 @@ class Trader:
     OSMIUM_ANCHOR_DRIFT_TICKS = 20
     OSMIUM_TOXIC_VOLUME = 40
     OSMIUM_CLAMP = 4
+
+    # V3: Volatility & position-based quote scaling
+    OSMIUM_VOL_WINDOW = 20
+    OSMIUM_VOL_LOW_THRESHOLD = 0.005
+    OSMIUM_VOL_HIGH_THRESHOLD = 0.015
+    OSMIUM_MEANREV_POS_THRESHOLD = 75
+    OSMIUM_MEANREV_BOOST = 1.33  # 33% boost to quote size
 
     def __init__(self):
         self.history: Dict[str, list] = {}
@@ -264,6 +277,17 @@ class Trader:
         if rem_cap <= 0:
             return orders
 
+        # V3: Liquidity-gating & volatility detection
+        liq = sum(depth.sell_orders.values()) + sum(depth.buy_orders.values())
+        if liq < self.PEPPER_LIQUIDITY_MIN:
+            take_per_tick = max(1, int(take_per_tick * 0.75))  # reduce by 25%
+
+        if len(hist) >= self.PEPPER_SLOPE_WINDOW:
+            window = hist[-self.PEPPER_SLOPE_WINDOW:]
+            vol_proxy = (max(window) - min(window)) / max(mid, 1.0)
+            if vol_proxy > self.PEPPER_VOL_THRESHOLD:
+                take_per_tick = max(1, int(take_per_tick * 0.8))  # reduce by 20%
+
         take_budget = min(rem_cap, take_per_tick)
         taken = 0
 
@@ -326,7 +350,24 @@ class Trader:
             if abs(avg - fair) > self.OSMIUM_ANCHOR_DRIFT_THRESHOLD:
                 anchor_off = True
 
+        # V3: Volatility-adaptive sizing
+        vol_scale = 1.0
+        if len(hist) >= self.OSMIUM_VOL_WINDOW:
+            window = hist[-self.OSMIUM_VOL_WINDOW:]
+            vol_proxy = (max(window) - min(window)) / max(fair, 1.0)
+            if vol_proxy < self.OSMIUM_VOL_LOW_THRESHOLD:
+                vol_scale = 1.2  # more aggressive in low vol
+            elif vol_proxy > self.OSMIUM_VOL_HIGH_THRESHOLD:
+                vol_scale = 0.8  # defensive in high vol
+
+        # V3: Mean-reversion boost when overexposed
+        meanrev_scale = 1.0
+        if abs(pos) > self.OSMIUM_MEANREV_POS_THRESHOLD and len(hist) >= 2:
+            if hist[-1] < hist[-2]:
+                meanrev_scale = self.OSMIUM_MEANREV_BOOST
+
         size_scale = 0.5 if anchor_off else 1.0
+        size_scale *= vol_scale * meanrev_scale
         front_qty = max(6, int(self.OSMIUM_QUOTE_SIZE * size_scale))
         second_qty = max(4, int(self.OSMIUM_SECOND_SIZE * size_scale))
 
