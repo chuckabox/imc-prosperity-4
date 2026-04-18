@@ -32,7 +32,17 @@ rebalancing sliders to sum to 100%. This app surfaces it:
 
 ## How to open it
 
-From the repo root:
+**Inside the unified dashboard** (preferred — reuses cached MC across modes):
+
+```bash
+streamlit run "tools/dashboard.py"
+```
+
+Then open the **♟️ Manual Optimizer** tab and switch the mode toggle to
+**💰 Partial Budget**. Pick a competitor scenario from the dropdown; the
+three picks and frontier update against that scenario's MC.
+
+**Standalone** (separate streamlit process, single-scenario view):
 
 ```bash
 streamlit run tools/manual_optimiser/app_profit.py
