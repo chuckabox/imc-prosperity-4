@@ -36,7 +36,7 @@ class Trader:
         self.history["pp"] = hist
         
         base_samples = self.history.setdefault("pp_base", [])
-        if len(base_samples) < 15: 
+        if len(base_samples) < 10: 
             base_samples.append(mid)
         
         start_ts = self.history.setdefault("pp_t0", ts)
@@ -47,9 +47,9 @@ class Trader:
         fast_track = (ts - start_ts) >= 500
         
         cap = 0
-        if len(base_samples) >= 15 and len(hist) >= 15:
+        if len(base_samples) >= 10 and len(hist) >= 10:
             base_mean = _median(base_samples)
-            current_mean = _median(hist[-15:])
+            current_mean = _median(hist[-10:])
             drift = (current_mean - base_mean) / max(1, ts - start_ts) * 100.0
             
             if fast_track and drift >= 0.08:
@@ -85,8 +85,8 @@ class Trader:
                 if qty > 0: orders.append(Order(product, bb, -qty))
             return orders
             
-        # V2 Edge: AGGRESSIVE Liquidity Taking
-        take_budget = min(rem_cap, 20 if cap == 80 else 10)
+        # V4 Normalized Edge: Optimal liquidity draw
+        take_budget = min(rem_cap, 15 if cap == 80 else 10)
         taken = 0
         
         for ask in sorted(depth.sell_orders.keys()):
@@ -135,8 +135,8 @@ class Trader:
                 else: sell_vol += abs(t.quantity)
         
         diff = buy_vol - sell_vol
-        toxic_buys = diff >= 45
-        toxic_sells = -diff >= 45
+        toxic_buys = diff >= 40
+        toxic_sells = -diff >= 40
         
         orders: List[Order] = []; rb = self.LIMIT - pos; rs = self.LIMIT + pos
         
@@ -153,7 +153,7 @@ class Trader:
                     q = min(rs, depth.buy_orders[bid])
                     orders.append(Order(product, bid, -q)); rs -= q; pos -= q
                     
-        # Flattening sequence
+        # Flattening sequence optimized for 10k anchor
         flatten_bound = 55
         if pos > flatten_bound and rs > 0:
             q = min(pos - flatten_bound + 5, rs)
