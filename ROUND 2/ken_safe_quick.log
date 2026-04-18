@@ -1,0 +1,85 @@
+﻿
+Running 49 backtests for: traders/ken/trader_ken_v2_safe.py
+======================================================================
+  [1/49] imc_round_1_day_-1                            PnL: $   43,327.00  DD: $1,594,187.00
+  [2/49] imc_round_1_day_-2                            PnL: $   42,077.00  DD: $1,590,392.50
+  [3/49] imc_round_1_day_0                             PnL: $   42,428.00  DD: $1,597,892.00
+  [4/49] imc_round_2_day_-1                            PnL: $   43,631.00  DD: $1,594,340.00
+  [5/49] imc_round_2_day_0                             PnL: $   41,609.00  DD: $1,596,247.00
+  [6/49] imc_round_2_day_1                             PnL: $   42,000.00  DD: $1,591,378.00
+  [7/49] av_COFFEE_d0                                  PnL: $    3,758.00  DD: $  3,165.00
+  [8/49] av_COFFEE_d3                                  PnL: $   -3,513.00  DD: $  3,513.00 (LOSS)
+  [9/49] av_COFFEE_d8                                  PnL: $      202.00  DD: $  3,030.00
+  [10/49] av_CORN_d11                                   PnL: $     -420.00  DD: $  2,811.00 (LOSS)
+  [11/49] av_CORN_d6                                    PnL: $     -954.00  DD: $  2,810.00 (LOSS)
+  [12/49] av_COTTON_d1                                  PnL: $   -2,690.00  DD: $  2,798.00 (LOSS)
+  [13/49] av_COTTON_d4                                  PnL: $    4,547.00  DD: $  3,290.00
+  [14/49] av_COTTON_d9                                  PnL: $    4,866.00  DD: $  3,429.00
+  [15/49] av_SUGAR_d2                                   PnL: $    1,093.00  DD: $  2,981.00
+  [16/49] av_SUGAR_d7                                   PnL: $    1,703.00  DD: $  3,179.00
+  [17/49] av_WHEAT_d10                                  PnL: $   -3,215.00  DD: $  3,215.00 (LOSS)
+  [18/49] av_WHEAT_d5                                   PnL: $   -3,903.00  DD: $  3,903.00 (LOSS)
+  [19/49] yf_ADM_d0                                     PnL: $    5,090.00  DD: $  2,740.00
+  [20/49] yf_ADM_d13                                    PnL: $    4,547.00  DD: $  3,290.00
+  [21/49] yf_ADM_d5                                     PnL: $    3,963.00  DD: $  3,170.00
+  [22/49] yf_BGS_d0                                     PnL: $    3,758.00  DD: $  3,165.00
+  [23/49] yf_BGS_d13                                    PnL: $   -1,262.00  DD: $  3,282.50 (LOSS)
+  [24/49] yf_BGS_d5                                     PnL: $    3,368.00  DD: $  2,997.00
+  [25/49] yf_MKC_d0                                     PnL: $      207.00  DD: $  3,408.00
+  [26/49] yf_MKC_d13                                    PnL: $   -3,215.00  DD: $  3,215.00 (LOSS)
+  [27/49] yf_MKC_d5                                     PnL: $    3,369.00  DD: $  3,035.00
+  [28/49] yf_ZC_F_d0                                    PnL: $     -981.00  DD: $  2,853.00 (LOSS)
+  [29/49] yf_ZC_F_d13                                   PnL: $    2,948.00  DD: $  3,134.00
+  [30/49] yf_ZC_F_d5                                    PnL: $    1,446.00  DD: $  3,026.00
+  [31/49] yf_ZS_F_d0                                    PnL: $     -911.00  DD: $  3,624.50 (LOSS)
+  [32/49] yf_ZS_F_d13                                   PnL: $   -1,318.00  DD: $  3,465.00 (LOSS)
+  [33/49] yf_ZS_F_d5                                    PnL: $    4,699.00  DD: $  3,254.00
+  [34/49] yf_ZW_F_d0                                    PnL: $      461.00  DD: $  3,298.00
+  [35/49] yf_ZW_F_d13                                   PnL: $    3,002.00  DD: $  2,992.00
+  [36/49] yf_ZW_F_d5                                    PnL: $    1,093.00  DD: $  2,981.00
+  [37/49] bear_normal_s0                                PnL: $    3,832.00  DD: $  3,296.00
+  [38/49] bear_volatile_s0                              PnL: $    1,284.00  DD: $  4,084.00
+  [39/49] bull_normal_s0                                PnL: $  113,980.00  DD: $  2,954.00
+  [40/49] crash_normal_s0                               PnL: $    5,468.00  DD: $  3,046.00
+  [41/49] crash_volatile_s0                             PnL: $    3,227.00  DD: $  3,954.00
+  [42/49] high_vol_volatile_s0                          PnL: $      928.00  DD: $    859.00
+  [43/49] sawtooth_normal_s0                            PnL: $    4,219.00  DD: $  1,600.00
+  [44/49] sawtooth_volatile_s0                          PnL: $    6,335.00  DD: $  2,815.00
+  [45/49] sideways_drift_s0                             PnL: $   -2,720.00  DD: $  3,239.00 (LOSS)
+  [46/49] sideways_normal_s0                            PnL: $    5,142.00  DD: $  2,359.00
+  [47/49] spike_crash_volatile_s0                       PnL: $      505.00  DD: $  2,943.00
+  [48/49] v_recovery_drift_s0                           PnL: $   -6,005.00  DD: $  6,173.00 (LOSS)
+  [49/49] v_recovery_normal_s0                          PnL: $    4,482.00  DD: $  5,105.00
+
+======================================================================
+ROBUST BACKTEST SUMMARY
+======================================================================
+Trader:          traders/ken/trader_ken_v2_safe.py
+Datasets tested: 49
+
+PnL Distribution:
+  Mean PnL:      $    8,724.22  <-- THE TARGET METRIC
+  Median PnL:    $    3,002.00
+  Std Dev:       $   20,494.48
+
+Risk-Adjusted Metrics (Averaged):
+  Mean Sharpe:          0.3371
+  Mean Sortino:         0.8851
+  Mean Calmar:          1.2390
+
+Risk Metrics:
+  Worst PnL:     $   -6,005.00
+  Best PnL:      $  113,980.00
+  5th %ile:      $   -3,393.80
+  95th %ile:     $   42,967.40
+  Win Rate:             73.5%
+  Blow-up Rate:          0.0%
+  Worst DD:      $1,597,892.00
+
+By Category:
+  imc         : n=  6  mean=$ 42,512.00  Sharpe=  0.00  range=[$ 41,609.00, $ 43,631.00]
+  real        : n= 30  mean=$  1,057.93  Sharpe=  0.01  range=[$ -3,903.00, $  5,090.00]
+  scenario    : n= 13  mean=$ 10,821.31  Sharpe=  1.26  range=[$ -6,005.00, $113,980.00]
+======================================================================
+
+Detailed results saved to: C:\Users\ductv\Desktop\Projects\imc prosperity\imc-prosperity-4\ROUND 2\results\robust\trader_ken_v2_safe_quick_robust_results.csv
