@@ -5,10 +5,11 @@ import os
 import sys
 import glob
 
-# Resolve absolute paths for relative imports (datamodel in ../config, trader in ../traders)
+# Resolve absolute paths for relative imports (datamodel in ../../ROUND 2/config, trader in ../../ROUND 2/traders)
 script_dir = os.path.dirname(os.path.abspath(__file__))
-config_path = os.path.abspath(os.path.join(script_dir, "..", "config"))
-traders_path = os.path.abspath(os.path.join(script_dir, "..", "traders"))
+repo_root = os.path.abspath(os.path.join(script_dir, "..", ".."))
+config_path = os.path.join(repo_root, "ROUND 2", "config")
+traders_path = os.path.join(repo_root, "ROUND 2", "traders")
 
 if config_path not in sys.path:
     sys.path.insert(0, config_path)
@@ -1512,28 +1513,22 @@ def main():
 
     with tab_backtest:
 
-        col_day, col_btn = st.columns([1, 1])
-        with col_day:
-            def on_day_change():
-                st.session_state.config["selected_day"] = st.session_state.day_radio
-                save_config(st.session_state.config)
-                run_backtest_simulation(st.session_state.day_radio)
+        def on_day_change():
+            st.session_state.config["selected_day"] = st.session_state.day_radio
+            save_config(st.session_state.config, st.session_state.active_round)
+            run_backtest_simulation(st.session_state.day_radio)
 
-            available_days = discover_available_days(get_paths()["data_dir"])
-            day_options = ["All"] + available_days
-            current_day = st.session_state.config.get("selected_day", -1)
-            if current_day not in day_options:
-                current_day = day_options[0]
+        available_days = discover_available_days(get_paths()["data_dir"])
+        day_options = ["All"] + available_days
+        current_day = st.session_state.config.get("selected_day", -1)
+        if current_day not in day_options:
+            current_day = day_options[0]
 
-            selected_day = st.radio("Select Historical Data Day:", day_options,
-                                     key="day_radio",
-                                     index=day_options.index(current_day),
-                                     horizontal=True,
-                                     on_change=on_day_change)
-        with col_btn:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🔄 Run Simulation"):
-                run_backtest_simulation(selected_day)
+        selected_day = st.radio("Select Historical Data Day:", day_options,
+                                 key="day_radio",
+                                 index=day_options.index(current_day),
+                                 horizontal=True,
+                                 on_change=on_day_change)
 
         if "sim_result" in st.session_state and st.session_state.sim_result["day"] == selected_day:
             st.metric("Simulated PnL", f"${st.session_state.sim_result['pnl']:,.2f}", "+12%")
