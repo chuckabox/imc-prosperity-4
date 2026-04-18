@@ -3,6 +3,7 @@ import math
 import json
 import os
 import sys
+import glob
 
 # Resolve absolute paths for relative imports (datamodel in ../config, trader in ../traders)
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -23,10 +24,64 @@ import numpy as np
 from scipy.interpolate import make_interp_spline
 
 
-CONFIG_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "config.json"))
-DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data_capsule"))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+ROUND_DIRS = sorted(
+    d for d in os.listdir(REPO_ROOT)
+    if d.startswith("ROUND ") and os.path.isdir(os.path.join(REPO_ROOT, d))
+)
+DEFAULT_ROUND = os.path.basename(os.path.abspath(os.path.join(SCRIPT_DIR, "..")))
 
-def load_config():
+
+def get_paths(round_name: str | None = None) -> dict:
+    rn = round_name or st.session_state.get("active_round", DEFAULT_ROUND)
+    base_dir = os.path.join(REPO_ROOT, rn)
+    return {
+        "round": rn,
+        "base_dir": base_dir,
+        "config_dir": os.path.join(base_dir, "config"),
+        "config_file": os.path.join(base_dir, "tools", "config.json"),
+        "data_dir": os.path.join(base_dir, "data_capsule"),
+        "traders_dir": os.path.join(base_dir, "traders"),
+        "results_robust_dir": os.path.join(base_dir, "results", "robust"),
+        "tools_dir": os.path.join(base_dir, "tools"),
+    }
+
+
+def sync_round_import_paths(round_name: str | None = None):
+    paths = get_paths(round_name)
+    for p in [paths["config_dir"], paths["traders_dir"]]:
+        if os.path.isdir(p) and p not in sys.path:
+            sys.path.insert(0, p)
+
+
+def _active_round_number() -> str | None:
+    rn = st.session_state.get("active_round", DEFAULT_ROUND)
+    m = re.search(r"\d+", rn)
+    return m.group(0) if m else None
+
+
+def discover_available_days(data_dir: str) -> list[int]:
+    round_num = _active_round_number()
+    preferred = sorted(glob.glob(os.path.join(data_dir, f"prices_round_{round_num}_day_*.csv"))) if round_num else []
+    files = preferred if preferred else sorted(glob.glob(os.path.join(data_dir, "prices_round_*_day_*.csv")))
+    days = []
+    for f in files:
+        m = re.search(r"prices_round_\d+_day_(-?\d+)\.csv$", os.path.basename(f))
+        if m:
+            days.append(int(m.group(1)))
+    return sorted(set(days))
+
+
+def _resolve_round_day_file(data_dir: str, file_type: str, day: int) -> str | None:
+    round_num = _active_round_number()
+    preferred = os.path.join(data_dir, f"{file_type}_round_{round_num}_day_{day}.csv") if round_num else None
+    if preferred and os.path.exists(preferred):
+        return preferred
+    candidates = sorted(glob.glob(os.path.join(data_dir, f"{file_type}_round_*_day_{day}.csv")))
+    return candidates[0] if candidates else None
+
+def load_config(round_name: str | None = None):
     defaults = {
         "osmium_active": True,
         "pepper_active": True,
@@ -42,8 +97,9 @@ def load_config():
         "skew": 0.2,
         "selected_day": -1
     }
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
+    cfg_file = get_paths(round_name)["config_file"]
+    if os.path.exists(cfg_file):
+        with open(cfg_file, "r") as f:
             try:
                 config = json.load(f)
                 return {**defaults, **config}
@@ -51,8 +107,9 @@ def load_config():
                 pass
     return defaults
 
-def save_config(config):
-    with open(CONFIG_FILE, "w") as f:
+def save_config(config, round_name: str | None = None):
+    cfg_file = get_paths(round_name)["config_file"]
+    with open(cfg_file, "w") as f:
         json.dump(config, f, indent=4)
 
 # Emergency stop removed per user request
@@ -66,9 +123,24 @@ import logging
 if OPTUNA_AVAILABLE:
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-from trader import Trader, logger as trader_logger
+
+def load_default_trader_class():
+    sync_round_import_paths()
+    trader_path = os.path.join(get_paths()["traders_dir"], "trader.py")
+    if not os.path.exists(trader_path):
+        active_round = st.session_state.get("active_round", DEFAULT_ROUND)
+        raise FileNotFoundError(
+            f"Missing `{active_round}/traders/trader.py`. "
+            f"Please add a trader template before running simulation/optimizer.\nPath: {trader_path}"
+        )
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("default_round_trader", trader_path)
+    trader_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(trader_mod)
+    return trader_mod.Trader
 
 def execute_backtest_headless(day, trader_path, config_override=None):
+    sync_round_import_paths()
     df_prices, df_trades = load_and_process_data(day)
     if df_prices is None: return 0
     
@@ -147,6 +219,7 @@ def execute_backtest_headless(day, trader_path, config_override=None):
 
 def run_stress_backtest(trader_path, prices_dict, products, limits=80):
     """Runs a backtest on multiple price series synchronously."""
+    sync_round_import_paths()
     import importlib.util
     spec = importlib.util.spec_from_file_location("trader_stress", trader_path)
     trader_mod = importlib.util.module_from_spec(spec)
@@ -232,7 +305,8 @@ def run_backtest_simulation(day):
         st.error("Missing data for simulation!")
         return
 
-    trader = Trader()
+    TraderClass = load_default_trader_class()
+    trader = TraderClass()
     # Mock symbols and listings
     listings = {
         "ASH_COATED_OSMIUM": Listing("ASH_COATED_OSMIUM", "ASH_COATED_OSMIUM", "XIRECS"),
@@ -376,15 +450,17 @@ def run_backtest_simulation(day):
 # Disable caching temporarily to ensure fresh data for every backtest
 # @st.cache_data
 def load_and_process_data(day):
-    days_to_load = [-2, -1, 0] if day == "All" else [day]
+    data_dir = get_paths()["data_dir"]
+    available_days = discover_available_days(data_dir)
+    days_to_load = available_days if day == "All" else [day]
     all_prices = []
     all_trades = []
     
     for d in days_to_load:
-        prices_file = os.path.join(DATA_DIR, f"prices_round_1_day_{d}.csv")
-        trades_file = os.path.join(DATA_DIR, f"trades_round_1_day_{d}.csv")
+        prices_file = _resolve_round_day_file(data_dir, "prices", d)
+        trades_file = _resolve_round_day_file(data_dir, "trades", d)
         
-        if os.path.exists(prices_file):
+        if prices_file and os.path.exists(prices_file):
             df_p = pd.read_csv(prices_file, sep=";")
             df_p = df_p.dropna(subset=["bid_price_1", "ask_price_1", "timestamp"])
             # Offset timestamp for continuity if showing All
@@ -395,7 +471,7 @@ def load_and_process_data(day):
             df_p["day"] = d
             all_prices.append(df_p)
             
-        if os.path.exists(trades_file):
+        if trades_file and os.path.exists(trades_file):
             df_t = pd.read_csv(trades_file, sep=";")
             if "symbol" in df_t.columns:
                 df_t = df_t.rename(columns={"symbol": "product"})
@@ -676,7 +752,7 @@ def render_reversal_chart(df, product, start_idx=0, window=1000):
     st.pyplot(fig, use_container_width=True)
 
 def forge_trader():
-    TRADER_TEMPLATE = os.path.join(os.path.dirname(__file__), "..", "traders", "trader.py")
+    TRADER_TEMPLATE = os.path.join(get_paths()["traders_dir"], "trader.py")
     if not os.path.exists(TRADER_TEMPLATE):
         st.error(f"Template not found at {TRADER_TEMPLATE}")
         return
@@ -714,15 +790,20 @@ def forge_trader():
         st.error(f"Forge failed! Generated code has a syntax error: {e}")
 
 def perform_auto_analysis():
-    df1, _ = load_and_process_data(-1)
-    df2, _ = load_and_process_data(-2)
-    df0, _ = load_and_process_data(0)
+    days = discover_available_days(get_paths()["data_dir"])
+    preferred = [d for d in [-2, -1, 0] if d in days]
+    sample_days = preferred if preferred else days[:3]
+    frames = []
+    for d in sample_days:
+        df_d, _ = load_and_process_data(d)
+        if df_d is not None:
+            frames.append(df_d)
 
-    if df1 is None or df2 is None:
-        st.error("Cannot run analysis! Ensure day_-1 and day_-2 CSVs are in data_capsule.")
+    if not frames:
+        st.error("Cannot run analysis! No day files found in selected round data_capsule.")
         return
 
-    df = pd.concat([d for d in [df1, df2, df0] if d is not None])
+    df = pd.concat(frames)
     os_mean = df[df["product"] == "ASH_COATED_OSMIUM"]["mid_price"].mean()
     pep_std = df[df["product"] == "INTARIAN_PEPPER_ROOT"]["mid_price"].std()
 
@@ -730,32 +811,58 @@ def perform_auto_analysis():
     st.toast("Analysis Successful!")
 
 def main():
+    st.set_page_config(
+        page_title="P4 Control Center",
+        layout="wide"
+    )
+
+    if "active_round" not in st.session_state:
+        default_round = DEFAULT_ROUND if DEFAULT_ROUND in ROUND_DIRS else (ROUND_DIRS[0] if ROUND_DIRS else DEFAULT_ROUND)
+        st.session_state.active_round = default_round
+    sync_round_import_paths(st.session_state.active_round)
+    if "config_round" not in st.session_state:
+        st.session_state.config_round = st.session_state.active_round
+
+    if ROUND_DIRS:
+        selected_round = st.sidebar.selectbox(
+            "Round Folder",
+            ROUND_DIRS,
+            index=ROUND_DIRS.index(st.session_state.active_round) if st.session_state.active_round in ROUND_DIRS else 0,
+            key="round_selector",
+            help="Switch all data/traders/results paths to this round folder.",
+        )
+        if selected_round != st.session_state.active_round:
+            st.session_state.active_round = selected_round
+            sync_round_import_paths(selected_round)
+            st.session_state.config = load_config(selected_round)
+            st.session_state.config_round = selected_round
+            st.session_state.pop("sim_result", None)
+            st.rerun()
+
+    if "config" not in st.session_state or st.session_state.config_round != st.session_state.active_round:
+        st.session_state.config = load_config(st.session_state.active_round)
+        st.session_state.config_round = st.session_state.active_round
+
     # --- PRE-RENDER STATE SYNC (CRITICAL FOR WIDGET UPDATES) ---
     if st.session_state.get("pending_apply"):
         for k, v in st.session_state.best_params.items():
             st.session_state.config[k] = v
             # Initialize or Update the widget key BEFORE it renders
             st.session_state[k] = v
-        save_config(st.session_state.config)
+        save_config(st.session_state.config, st.session_state.active_round)
         del st.session_state["pending_apply"]
         st.toast("✅ Optimization parameters applied to configuration!")
         # No rerun here to keep tab state if possible, or use a small toast
-    st.set_page_config(
-        page_title="P4 Control Center",
-        layout="wide"
-    )
-
-    if "config" not in st.session_state:
-        st.session_state.config = load_config()
 
     def on_change_callback():
         for key in ["osmium_active", "pepper_active", "osmium_limit", "pepper_limit", "target_spread", "mr_threshold", "edge", "skew"]:
              if key in st.session_state:
                  st.session_state.config[key] = st.session_state[key]
-        save_config(st.session_state.config)
+        save_config(st.session_state.config, st.session_state.active_round)
 
     # --- MAIN CONTENT ---
-    st.title("📈 Prosperity 4: Operations Console")
+    st.title("📈 Prosperity Operations Console")
+    st.caption(f"Active round: `{st.session_state.active_round}`")
 
     with st.expander("⚙️ Strategy Configuration", expanded=False):
         col_act, col_lim, col_prc = st.columns(3)
@@ -810,7 +917,7 @@ def main():
                         st.table(pd.DataFrame([st.session_state.best_params]).T.rename(columns={0: "Value"}))
                 with col_setup:
                     trader_search = []
-                    trader_base = os.path.join(os.path.dirname(__file__), "..", "traders")
+                    trader_base = get_paths()["traders_dir"]
                     for root, _, files in os.walk(trader_base):
                         for f in files:
                             if f.endswith(".py") and not f.startswith("__"):
@@ -818,7 +925,9 @@ def main():
                     
                     sel_trader = st.selectbox("Target File", trader_search, key="opt_trader")
                     n_tri = st.number_input("Iterations", 10, 200, 30, key="opt_n")
-                    t_day = st.selectbox("Style", ["All Days (Robust)", -1, -2, 0], index=0, key="opt_day")
+                    avail_days = discover_available_days(get_paths()["data_dir"])
+                    opt_choices = ["All Days (Robust)"] + avail_days
+                    t_day = st.selectbox("Style", opt_choices, index=0, key="opt_day")
 
                     if st.button("🚀 Start Search", type="primary", use_container_width=True):
                         pbar = st.progress(0)
@@ -830,7 +939,7 @@ def main():
                                 "skew": trial.suggest_float("skew", 0.1, 1.0)
                             }
                             f_path = os.path.abspath(sel_trader)
-                            d_test = [-1, -2, 0] if t_day == "All Days (Robust)" else [t_day]
+                            d_test = discover_available_days(get_paths()["data_dir"]) if t_day == "All Days (Robust)" else [t_day]
                             t_res = sum(execute_backtest_headless(d, f_path, cfg) for d in d_test)
                             r = t_res / len(d_test)
                             pbar.progress((trial.number + 1) / n_tri)
@@ -842,7 +951,7 @@ def main():
                         st.rerun()
 
         with st.expander("🌐 Market Data Terminal", expanded=False):
-            ext_path = 'ROUND 1/data/external/processed/SPY.csv'
+            ext_path = os.path.join(get_paths()["base_dir"], "data", "external", "processed", "SPY.csv")
             if os.path.exists(ext_path):
                 df_ext = pd.read_csv(ext_path)
                 st.altair_chart(alt.Chart(df_ext).mark_line().encode(
@@ -876,8 +985,8 @@ def main():
         - **Note**: Data is actual, sourced from `ROUND 1/results/` logs.
         """)
 
-        trader_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "traders"))
-        results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results"))
+        trader_dir = get_paths()["traders_dir"]
+        results_dir = os.path.join(get_paths()["base_dir"], "results")
         results = []
 
         if os.path.exists(trader_dir):
@@ -969,8 +1078,8 @@ def main():
 
         # Robust backtester outputs are now saved under ROUND 1/results/robust.
         # Keep a fallback to ROUND 1/tools for older runs.
-        robust_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "robust"))
-        fallback_tools_dir = os.path.dirname(os.path.abspath(__file__))
+        robust_results_dir = get_paths()["results_robust_dir"]
+        fallback_tools_dir = get_paths()["tools_dir"]
 
         robust_csvs = []
         if os.path.isdir(robust_results_dir):
@@ -1293,7 +1402,7 @@ def main():
 
                 # 1. SETUP
                 trader_search = []
-                trader_base = os.path.join(os.path.dirname(__file__), "..", "traders")
+                trader_base = get_paths()["traders_dir"]
                 for root, _, files in os.walk(trader_base):
                     for f in files:
                         if f.endswith(".py") and not f.startswith("__"):
@@ -1454,10 +1563,11 @@ def main():
                 save_config(st.session_state.config)
                 run_backtest_simulation(st.session_state.day_radio)
 
-            day_options = ["All", -1, -2, 0]
+            available_days = discover_available_days(get_paths()["data_dir"])
+            day_options = ["All"] + available_days
             current_day = st.session_state.config.get("selected_day", -1)
             if current_day not in day_options:
-                current_day = -1
+                current_day = day_options[0]
 
             selected_day = st.radio("Select Historical Data Day:", day_options,
                                      key="day_radio",
@@ -1494,8 +1604,10 @@ def main():
             render_total_chart(df_prices, df_trades)
 
         else:
-            st.warning(f"Could not locate data for Day {selected_day} at: {DATA_DIR}")
-            st.code(f"Looking for: prices_round_1_day_{selected_day}.csv")
+            data_dir = get_paths()["data_dir"]
+            round_num = _active_round_number() or "?"
+            st.warning(f"Could not locate data for Day {selected_day} at: {data_dir}")
+            st.code(f"Looking for pattern: prices_round_{round_num}_day_{selected_day}.csv")
 
 if __name__ == "__main__":
     main()
