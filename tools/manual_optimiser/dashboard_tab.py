@@ -344,22 +344,47 @@ def render_advanced_mode(get_sim_data):
     names = list(sims.keys())
     grid = sims[names[0]]["grid"]
 
-    # ========== SECTIONS ==========
+    # Initialize session state for sliders if not present
+    if "adv_x" not in st.session_state: st.session_state.adv_x = 25
+    if "adv_y" not in st.session_state: st.session_state.adv_y = 35
+    if "adv_z" not in st.session_state: st.session_state.adv_z = 40
+
     st.divider()
     st.markdown("## 🔍 Inspector — Test Any Allocation")
     st.markdown("### Test any allocation")
 
     col_x, col_y, col_z = st.columns(3)
+    
+    # Logic to enforce 100% total budget while keeping 0-100 scale on sliders
+    def enforce_100_budget():
+        changed_key = st.session_state.get("last_changed_slider")
+        if not changed_key: return
+        
+        tx = st.session_state.get("adv_x", 0)
+        ty = st.session_state.get("adv_y", 0)
+        tz = st.session_state.get("adv_z", 0)
+        total = tx + ty + tz
+        
+        if total > 100:
+            if changed_key == "adv_x":
+                st.session_state.adv_x = max(0, 100 - ty - tz)
+            elif changed_key == "adv_y":
+                st.session_state.adv_y = max(0, 100 - tx - tz)
+            elif changed_key == "adv_z":
+                st.session_state.adv_z = max(0, 100 - tx - ty)
+
+    def on_x_change(): st.session_state.last_changed_slider = "adv_x"; enforce_100_budget()
+    def on_y_change(): st.session_state.last_changed_slider = "adv_y"; enforce_100_budget()
+    def on_z_change(): st.session_state.last_changed_slider = "adv_z"; enforce_100_budget()
+
     with col_x:
-        cur_x = st.slider("Research x", 0, 100, 25, key="adv_x",
-                        help="x=0→0k, x=25→79k, x=50→124k, x=100→200k")
+        cur_x = st.slider("Research x", 0, 100, key="adv_x", on_change=on_x_change,
+                        help="x=0\u21920k, x=25\u219279k, x=50\u2192124k, x=100\u2192200k")
     with col_y:
-        remaining_y_max = 100 - cur_x
-        cur_y = st.slider("Scale y", 0, remaining_y_max, min(35, remaining_y_max), key="adv_y",
-                        help="Linear growth. y=50→3.5× multiplier")
+        cur_y = st.slider("Scale y", 0, 100, key="adv_y", on_change=on_y_change,
+                        help="Linear growth. y=50\u21923.5\u00d7 multiplier")
     with col_z:
-        remaining_z_max = 100 - cur_x - cur_y
-        cur_z = st.slider("Speed z", 0, remaining_z_max, min(40, remaining_z_max), key="adv_z",
+        cur_z = st.slider("Speed z", 0, 100, key="adv_z", on_change=on_z_change,
                         help="Depends entirely on competitors' bids")
 
     total_pct = cur_x + cur_y + cur_z
