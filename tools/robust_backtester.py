@@ -10,6 +10,7 @@ Usage:
     python tools/robust_backtester.py <trader_file>
     python tools/robust_backtester.py <trader_file> --quick
     python tools/robust_backtester.py <trader_file> --rounds 1 2
+    python tools/robust_backtester.py <trader_file> --imc  # Run only IMC historical days
 """
 
 import sys
@@ -253,34 +254,46 @@ def discover_datasets(rounds: List[int], quick: bool = False) -> List[Tuple[str,
                 name = p.stem.replace("prices_", f"imc_r{r}_")
                 datasets.append((name, str(p), f"round_{r}"))
 
-    # 2. Real World and Scenarios (usually stored in Round 1's capsule for this project)
-    r1_capsule = REPO_ROOT / "ROUND 1" / "data_capsule"
-    if r1_capsule.exists():
-        # Real World
-        real_dir = r1_capsule / "real_world" / "normalized"
-        if real_dir.exists():
-            real_files = sorted(real_dir.glob("prices_*.csv"))
-            if quick:
-                real_files = real_files[::5]
-            for f in real_files:
-                datasets.append((f.stem.replace("prices_", "real_"), str(f), "real_world"))
+    # 2. Real World and Scenarios
+    processed_files = set()
+    for r in rounds:
+        round_dir = REPO_ROOT / f"ROUND {r}"
+        if not round_dir.exists():
+            round_dir = REPO_ROOT / f"ROUND%20{r}"
         
-        # Scenarios
-        scen_dir = r1_capsule / "scenarios"
-        if scen_dir.exists():
-            scen_files = sorted(scen_dir.glob("prices_*.csv"))
-            if quick:
-                # One per regime
-                seen_regimes = set()
-                filtered = []
+        round_capsule = round_dir / "data_capsule"
+        if round_capsule.exists():
+            # Real World
+            real_dir = round_capsule / "real_world" / "normalized"
+            if real_dir.exists():
+                real_files = sorted(real_dir.glob("prices_*.csv"))
+                if quick:
+                    real_files = real_files[::5]
+                for f in real_files:
+                    path_str = str(f)
+                    if path_str not in processed_files:
+                        datasets.append((f.stem.replace("prices_", "real_"), path_str, "real_world"))
+                        processed_files.add(path_str)
+            
+            # Scenarios
+            scen_dir = round_capsule / "scenarios"
+            if scen_dir.exists():
+                scen_files = sorted(scen_dir.glob("prices_*.csv"))
+                if quick:
+                    # One per regime
+                    seen_regimes = set()
+                    filtered = []
+                    for f in scen_files:
+                        regime = "_".join(f.stem.replace("prices_", "").split("_")[:-1])
+                        if regime not in seen_regimes:
+                            seen_regimes.add(regime)
+                            filtered.append(f)
+                    scen_files = filtered
                 for f in scen_files:
-                    regime = "_".join(f.stem.replace("prices_", "").split("_")[:-1])
-                    if regime not in seen_regimes:
-                        seen_regimes.add(regime)
-                        filtered.append(f)
-                scen_files = filtered
-            for f in scen_files:
-                datasets.append((f.stem.replace("prices_", "scen_"), str(f), "scenario"))
+                    path_str = str(f)
+                    if path_str not in processed_files:
+                        datasets.append((f.stem.replace("prices_", "scen_"), path_str, "scenario"))
+                        processed_files.add(path_str)
 
     return datasets
 
@@ -364,17 +377,37 @@ def run_unified_backtest(trader_file: str, datasets: List[Tuple[str, str, str]],
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Unified Robust Backtester")
     parser.add_argument("trader", help="Path to trader .py file")
+    parser.add_argument("extra_tag", nargs="?", help="Optional tag for results filename")
     parser.add_argument("--rounds", type=int, nargs="+", default=[1, 2], help="Rounds to include (default: 1 2)")
     parser.add_argument("--quick", action="store_true", help="Subset for speed")
     parser.add_argument("--tag", type=str, default=None, help="Tag for results file")
+    parser.add_argument("--imc", action="store_true", help="Only run IMC historical days")
+    parser.add_argument("--real", action="store_true", help="Only run real-world normalized data")
+    parser.add_argument("--scen", action="store_true", help="Only run synthetic scenarios")
     args = parser.parse_args()
 
-    # Automatic tagging logic
-    run_tag = "robust"
+    datasets = discover_datasets(args.rounds, quick=args.quick)
+    
+    # Filter by category if requested
+    if args.imc or args.real or args.scen:
+        filtered = []
+        if args.imc:
+            filtered.extend([d for d in datasets if d[2].startswith("round_")])
+        if args.real:
+            filtered.extend([d for d in datasets if d[2] == "real_world"])
+        if args.scen:
+            filtered.extend([d for d in datasets if d[2] == "scenario"])
+        datasets = filtered
+
     if args.tag:
         run_tag = args.tag
+    elif args.extra_tag:
+        run_tag = args.extra_tag
+    elif args.imc and not args.real and not args.scen:
+        run_tag = "imc"
     elif args.quick:
         run_tag = "quick"
+    else:
+        run_tag = "robust"
 
-    datasets = discover_datasets(args.rounds, quick=args.quick)
     run_unified_backtest(args.trader, datasets, tag=run_tag)
