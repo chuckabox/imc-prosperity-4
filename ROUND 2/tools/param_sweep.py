@@ -48,21 +48,35 @@ SWEEP_PARAMS = {
 def evaluate_params(params: Dict, datasets: List, trader_file: str) -> Dict:
     """Run the trader across all datasets with given parameter overrides."""
     pnls = []
+    wins = 0
+    losses = 0
+    win_sum = 0.0
+    loss_sum = 0.0
     for name, path, category in datasets:
         result = run_backtest_on_csv(trader_file, path, name, category)
         if result:
             pnls.append(result.final_pnl)
+            wins   += result.rt_wins
+            losses += result.rt_losses
+            win_sum  += result.rt_wins   * result.avg_win
+            loss_sum += result.rt_losses * result.avg_loss
 
     if not pnls:
-        return {"mean_pnl": 0, "worst_pnl": 0, "std_pnl": 0, "win_rate": 0}
+        return {"mean_pnl": 0, "worst_pnl": 0, "std_pnl": 0,
+                "positive_sessions_rate": 0, "trade_win_rate": 0, "profit_factor": 0}
 
+    denom = wins + losses
     return {
         "mean_pnl": float(np.mean(pnls)),
         "median_pnl": float(np.median(pnls)),
         "worst_pnl": float(np.min(pnls)),
         "best_pnl": float(np.max(pnls)),
         "std_pnl": float(np.std(pnls)),
-        "win_rate": sum(1 for p in pnls if p > 0) / len(pnls),
+        # Fraction of dataset-level sessions ending green. Saturates at 1.0.
+        "positive_sessions_rate": sum(1 for p in pnls if p > 0) / len(pnls),
+        # Real win rate: fraction of CLOSED round-trips with realized PnL > 0.
+        "trade_win_rate": (wins / denom) if denom > 0 else 0.0,
+        "profit_factor": (win_sum / abs(loss_sum)) if loss_sum < 0 else (float("inf") if win_sum > 0 else 0.0),
         "n": len(pnls),
     }
 
@@ -132,9 +146,9 @@ def plot_pareto(df: pd.DataFrame, param_a: str, param_b: str):
 
     sc = ax.scatter(
         df["mean_pnl"], df["worst_pnl"],
-        c=df["win_rate"], cmap="coolwarm", s=80, edgecolors="black", linewidths=0.5,
+        c=df["trade_win_rate"], cmap="coolwarm", s=80, edgecolors="black", linewidths=0.5,
     )
-    fig.colorbar(sc, ax=ax, label="Win Rate")
+    fig.colorbar(sc, ax=ax, label="Trade Win Rate (round-trips)")
 
     for _, row in df.iterrows():
         label = f"({row[param_a]}, {row[param_b]})"
@@ -214,13 +228,18 @@ def main():
     if robust_csv.exists():
         plot_distribution(str(robust_csv))
 
+    cols = [args.param_a, args.param_b, "mean_pnl", "worst_pnl", "trade_win_rate", "profit_factor"]
     print("\nBest by mean PnL:")
     best = df.sort_values("mean_pnl", ascending=False).head(5)
-    print(best[[args.param_a, args.param_b, "mean_pnl", "worst_pnl", "win_rate"]].to_string(index=False))
+    print(best[cols].to_string(index=False))
 
     print("\nBest by worst-case PnL:")
     safest = df.sort_values("worst_pnl", ascending=False).head(5)
-    print(safest[[args.param_a, args.param_b, "mean_pnl", "worst_pnl", "win_rate"]].to_string(index=False))
+    print(safest[cols].to_string(index=False))
+
+    print("\nBest by trade win rate (edge signal):")
+    edgy = df.sort_values("trade_win_rate", ascending=False).head(5)
+    print(edgy[cols].to_string(index=False))
 
 
 if __name__ == "__main__":
