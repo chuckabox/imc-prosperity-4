@@ -420,6 +420,115 @@ def load_and_process_data(day):
     st.info(f"Loaded {len(df_prices)} price rows total (Mode: {day}).")
     return df_prices, df_trades
 
+
+def _resolve_target_pnls(df: pd.DataFrame, target_col: str, p_filter: str) -> tuple[pd.Series, bool]:
+    """Return selected PnL column and whether data was missing for requested product filter."""
+    if target_col in df.columns:
+        return df[target_col], False
+    if p_filter == "All":
+        if "final_pnl" in df.columns:
+            return df["final_pnl"], False
+        return pd.Series([0.0] * len(df)), True
+    return pd.Series([0.0] * len(df)), True
+
+
+def _build_comparison_table(
+    selected_files: list[str],
+    robust_results_dir: str,
+    target_col: str,
+    p_filter: str,
+    blowup_cutoff: float,
+    weights: dict,
+) -> pd.DataFrame:
+    rows = []
+    for filename in selected_files:
+        path = os.path.join(robust_results_dir, filename)
+        df = pd.read_csv(path)
+        trader_name = filename.replace("_robust_results.csv", "")
+        pnls, data_missing = _resolve_target_pnls(df, target_col, p_filter)
+        df = df.copy()
+        df["target_pnl"] = pnls
+
+        imc = df[df["category"] == "imc"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+        real = df[df["category"] == "real"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+        scen = df[df["category"] == "scenario"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+        allp = df["target_pnl"]
+
+        row = {
+            "Trader": trader_name + (" (⚠️ RECALC)" if data_missing else ""),
+            "IMC Mean": imc.mean() if len(imc) else np.nan,
+            "IMC Worst": imc.min() if len(imc) else np.nan,
+            "Real Mean": real.mean() if len(real) else np.nan,
+            "Real Win%": (real > 0).mean() * 100 if len(real) else np.nan,
+            "Scen Mean": scen.mean() if len(scen) else np.nan,
+            "Scen Worst": scen.min() if len(scen) else np.nan,
+            "Full Mean": allp.mean() if len(allp) else np.nan,
+            "Worst Day": allp.min() if len(allp) else np.nan,
+            "Win%": (allp > 0).mean() * 100 if len(allp) else np.nan,
+            "Blow-up%": (allp <= -abs(blowup_cutoff)).mean() * 100 if len(allp) else np.nan,
+            "N": len(df),
+        }
+        rows.append(row)
+
+    comp = pd.DataFrame(rows)
+    if comp.empty:
+        return comp
+
+    # Auto-rank score: emphasize IMC + overall robustness (higher is better).
+    rank_frame = comp.copy()
+    for c in ["IMC Mean", "Real Mean", "Scen Mean", "Full Mean", "Win%"]:
+        rank_frame[c] = rank_frame[c].rank(pct=True, ascending=True)
+    for c in ["IMC Worst", "Scen Worst", "Worst Day"]:
+        rank_frame[c] = rank_frame[c].rank(pct=True, ascending=True)
+    rank_frame["Blow-up%"] = rank_frame["Blow-up%"].rank(pct=True, ascending=False)
+
+    comp["AutoScore"] = (
+        weights["imc_mean"] * rank_frame["IMC Mean"]
+        + weights["full_mean"] * rank_frame["Full Mean"]
+        + weights["win_rate"] * rank_frame["Win%"]
+        + weights["worst_day"] * rank_frame["Worst Day"]
+        + weights["scen_mean"] * rank_frame["Scen Mean"]
+        + weights["blowup"] * rank_frame["Blow-up%"]
+    ) * 100
+    comp["Rank"] = comp["AutoScore"].rank(method="min", ascending=False).astype(int)
+    return comp.sort_values(["Rank", "IMC Mean"], ascending=[True, False]).reset_index(drop=True)
+
+
+def _style_comparison_table(comp_df: pd.DataFrame) -> "pd.io.formats.style.Styler":
+    money_cols = ["IMC Mean", "IMC Worst", "Real Mean", "Scen Mean", "Scen Worst", "Full Mean", "Worst Day"]
+    pct_cols = ["Real Win%", "Win%", "Blow-up%", "AutoScore"]
+    low_is_good_cols = ["Blow-up%"]
+
+    styler = comp_df.style
+    for col in money_cols:
+        if col in comp_df.columns:
+            styler = styler.background_gradient(
+                cmap="RdYlGn",
+                subset=[col],
+                vmin=comp_df[col].min(skipna=True),
+                vmax=comp_df[col].max(skipna=True),
+            )
+    for col in pct_cols:
+        if col in comp_df.columns:
+            cmap = "RdYlGn_r" if col in low_is_good_cols else "RdYlGn"
+            styler = styler.background_gradient(cmap=cmap, subset=[col])
+
+    return styler.format({
+        "Rank": "{:.0f}",
+        "IMC Mean": "${:,.0f}",
+        "IMC Worst": "${:,.0f}",
+        "Real Mean": "${:,.0f}",
+        "Scen Mean": "${:,.0f}",
+        "Scen Worst": "${:,.0f}",
+        "Full Mean": "${:,.0f}",
+        "Worst Day": "${:,.0f}",
+        "Real Win%": "{:.1f}%",
+        "Win%": "{:.1f}%",
+        "Blow-up%": "{:.1f}%",
+        "AutoScore": "{:.1f}",
+        "N": "{:.0f}",
+    })
+
 def render_chart(df_prices, df_trades, product, color, show_mean=False):
     df_p = df_prices[df_prices["product"] == product].copy()
     if df_p.empty:
@@ -911,6 +1020,147 @@ def main():
             full_df = pd.concat(all_dfs)
 
             with tab_lead:
+                st.subheader("⚔️ Interactive Comparison Matrix")
+                st.caption("Select any robust result files, auto-compute side-by-side metrics, color by quality, and auto-rank.")
+
+                quick_first = sorted(
+                    robust_csvs,
+                    key=lambda x: (0 if "_quick_" in x else 1, x)
+                )
+                default_selection = quick_first[: min(6, len(quick_first))]
+
+                selected_compare = st.multiselect(
+                    "Backtest Result Files",
+                    options=sorted(robust_csvs),
+                    default=default_selection,
+                    format_func=lambda x: x.replace("_robust_results.csv", ""),
+                    key="comparison_files_multi",
+                )
+                cutoff_col, _ = st.columns([1, 3])
+                with cutoff_col:
+                    blowup_cutoff = st.number_input(
+                        "Blow-up cutoff ($)",
+                        min_value=1000,
+                        max_value=500000,
+                        value=10000,
+                        step=1000,
+                        key="comparison_blowup_cutoff",
+                        help="A run is counted as blow-up when PnL <= -cutoff.",
+                    )
+
+                st.markdown("**AutoScore Preset**")
+                preset = st.radio(
+                    "Ranking profile",
+                    ["Balanced", "IMC-focused", "Safety-first"],
+                    horizontal=True,
+                    key="comparison_rank_profile",
+                )
+
+                if preset == "IMC-focused":
+                    weights = {
+                        "imc_mean": 0.48,
+                        "full_mean": 0.22,
+                        "win_rate": 0.10,
+                        "worst_day": 0.08,
+                        "scen_mean": 0.08,
+                        "blowup": 0.04,
+                    }
+                elif preset == "Safety-first":
+                    weights = {
+                        "imc_mean": 0.18,
+                        "full_mean": 0.20,
+                        "win_rate": 0.22,
+                        "worst_day": 0.20,
+                        "scen_mean": 0.08,
+                        "blowup": 0.12,
+                    }
+                else:
+                    weights = {
+                        "imc_mean": 0.34,
+                        "full_mean": 0.22,
+                        "win_rate": 0.16,
+                        "worst_day": 0.12,
+                        "scen_mean": 0.10,
+                        "blowup": 0.06,
+                    }
+
+                if selected_compare:
+                    comparison_df = _build_comparison_table(
+                        selected_compare,
+                        robust_results_dir,
+                        target_col,
+                        p_filter,
+                        float(blowup_cutoff),
+                        weights,
+                    )
+                    if not comparison_df.empty:
+                        st.dataframe(
+                            _style_comparison_table(comparison_df),
+                            use_container_width=True,
+                            hide_index=True,
+                            height=min(700, 120 + len(comparison_df) * 35),
+                        )
+                        st.caption(
+                            f"Preset: {preset}. AutoScore blends IMC mean, full mean, win rate, worst day, scenario mean, and blow-up%. "
+                            "Higher rank = better profile under chosen objective."
+                        )
+
+                        rank_bar = alt.Chart(comparison_df).mark_bar().encode(
+                            x=alt.X("AutoScore:Q", title="AutoScore"),
+                            y=alt.Y("Trader:N", sort="-x", title="Trader"),
+                            color=alt.Color("IMC Mean:Q", scale=alt.Scale(scheme="yellowgreenblue"), title="IMC Mean"),
+                            tooltip=["Rank", "Trader", "AutoScore", "IMC Mean", "Full Mean", "Worst Day", "Win%", "Blow-up%"],
+                        ).properties(height=max(220, 30 * len(comparison_df)), title="Auto-Rank Overview")
+                        st.altair_chart(rank_bar, use_container_width=True)
+
+                        st.markdown("**Pairwise Edge vs Baseline**")
+                        baseline = st.selectbox(
+                            "Baseline trader",
+                            options=comparison_df["Trader"].tolist(),
+                            key="comparison_baseline_trader",
+                        )
+                        base_row = comparison_df[comparison_df["Trader"] == baseline].iloc[0]
+                        pair_df = comparison_df.copy()
+                        pair_df["Edge IMC Mean"] = pair_df["IMC Mean"] - base_row["IMC Mean"]
+                        pair_df["Edge Full Mean"] = pair_df["Full Mean"] - base_row["Full Mean"]
+                        pair_df["Edge Worst Day"] = pair_df["Worst Day"] - base_row["Worst Day"]
+                        pair_df["Edge Win%"] = pair_df["Win%"] - base_row["Win%"]
+                        pair_df["Edge Blow-up%"] = base_row["Blow-up%"] - pair_df["Blow-up%"]
+
+                        edge_cols = [
+                            "Rank",
+                            "Trader",
+                            "IMC Mean",
+                            "Full Mean",
+                            "Worst Day",
+                            "Win%",
+                            "Blow-up%",
+                            "Edge IMC Mean",
+                            "Edge Full Mean",
+                            "Edge Worst Day",
+                            "Edge Win%",
+                            "Edge Blow-up%",
+                        ]
+                        pair_view = pair_df[edge_cols].copy().sort_values("Edge Full Mean", ascending=False)
+                        pair_styler = pair_view.style.background_gradient(cmap="RdYlGn", subset=["Edge IMC Mean", "Edge Full Mean", "Edge Worst Day", "Edge Win%", "Edge Blow-up%"]).format({
+                            "IMC Mean": "${:,.0f}",
+                            "Full Mean": "${:,.0f}",
+                            "Worst Day": "${:,.0f}",
+                            "Win%": "{:.1f}%",
+                            "Blow-up%": "{:.1f}%",
+                            "Edge IMC Mean": "{:+,.0f}",
+                            "Edge Full Mean": "{:+,.0f}",
+                            "Edge Worst Day": "{:+,.0f}",
+                            "Edge Win%": "{:+.1f}pp",
+                            "Edge Blow-up%": "{:+.1f}pp",
+                        })
+                        st.dataframe(pair_styler, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No comparable rows found in selected files.")
+                else:
+                    st.info("Select one or more result files to build the comparison matrix.")
+
+                st.divider()
                 st.subheader("Global Leaderboard")
                 st.dataframe(
                     leaderboard_df.sort_values("Mean PnL", ascending=False),
