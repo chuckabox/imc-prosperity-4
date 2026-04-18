@@ -957,32 +957,12 @@ def main():
     st.title("📈 Prosperity Operations Console")
     st.caption(f"Active round: `{st.session_state.active_round}`")
 
-    with st.expander("⚙️ Strategy Configuration", expanded=False):
-        col_act, col_lim, col_prc = st.columns(3)
-        with col_act:
-            st.subheader("Activation")
-            st.toggle("🟩 OSMIUM (MR)", key="osmium_active", value=st.session_state.config["osmium_active"], on_change=on_change_callback)
-            st.toggle("🟥 PEPPER (Trend)", key="pepper_active", value=st.session_state.config["pepper_active"], on_change=on_change_callback)
-        with col_lim:
-            st.subheader("Limits")
-            st.slider("💎 Osmium", 0, 80, key="osmium_limit", value=st.session_state.config["osmium_limit"], on_change=on_change_callback)
-            st.slider("🌶️ Pepper", 0, 80, key="pepper_limit", value=st.session_state.config["pepper_limit"], on_change=on_change_callback)
-        with col_prc:
-            st.subheader("Parameters")
-            st.slider("🎯 Spread", 1.0, 15.0, key="target_spread", value=float(st.session_state.config["target_spread"]), on_change=on_change_callback)
-            st.slider("📏 MR Thresh", 1.0, 20.0, key="mr_threshold", value=float(st.session_state.config["mr_threshold"]), on_change=on_change_callback)
-            col_s1, col_s2 = st.columns(2)
-            with col_s1:
-                st.slider("⚔️ Edge", 0.0, 10.0, key="edge", value=float(st.session_state.config.get("edge", 1.5)), on_change=on_change_callback)
-            with col_s2:
-                st.slider("⚖️ Skew", 0.0, 2.0, key="skew", value=float(st.session_state.config.get("skew", 0.2)), on_change=on_change_callback)
 
     # Final tab layout
 
-    tab_backtest, tab_robust, tab_archive = st.tabs([
+    tab_backtest, tab_robust = st.tabs([
         "📉 Visual Backtester",
         "🛡️ Robust Analysis",
-        "🕰️ Archive",
     ])
 
     # Content for the remaining tabs
@@ -990,176 +970,6 @@ def main():
 
 
 
-    with tab_archive:
-        st.header("🕰️ Legacy & Experimental Tools")
-
-        with st.expander("🧠 AI Optimizer (Bayesian)", expanded=False):
-            if not OPTUNA_AVAILABLE:
-                st.error("📉 AI Optimizer is currently unavailable.")
-            else:
-                col_info, col_setup = st.columns([1, 1])
-                with col_info:
-                    st.markdown("""
-                    Utilizing a **Tree-structured Parzen Estimator (TPE)** algorithm.
-                    """)
-                    if "best_params" in st.session_state:
-                        st.success(f"Best: **${st.session_state.get('best_pnl', 0):,.2f}**")
-                        if st.button("✅ Apply to Config", type="primary"):
-                            st.session_state.pending_apply = True
-                            st.rerun()
-                        st.table(pd.DataFrame([st.session_state.best_params]).T.rename(columns={0: "Value"}))
-                with col_setup:
-                    trader_search = []
-                    trader_base = get_paths()["traders_dir"]
-                    for root, _, files in os.walk(trader_base):
-                        for f in files:
-                            if f.endswith(".py") and not f.startswith("__"):
-                                trader_search.append(os.path.relpath(os.path.join(root, f), os.getcwd()))
-                    
-                    sel_trader = st.selectbox("Target File", trader_search, key="opt_trader")
-                    n_tri = st.number_input("Iterations", 10, 200, 30, key="opt_n")
-                    avail_days = discover_available_days(get_paths()["data_dir"])
-                    opt_choices = ["All Days (Robust)"] + avail_days
-                    t_day = st.selectbox("Style", opt_choices, index=0, key="opt_day")
-
-                    if st.button("🚀 Start Search", type="primary", use_container_width=True):
-                        pbar = st.progress(0)
-                        def obj(trial):
-                            cfg = {
-                                "osmium_limit": trial.suggest_int("osmium_limit", 5, 80),
-                                "pepper_limit": trial.suggest_int("pepper_limit", 5, 80),
-                                "edge": trial.suggest_float("edge", 0.5, 5.0),
-                                "skew": trial.suggest_float("skew", 0.1, 1.0)
-                            }
-                            f_path = os.path.abspath(sel_trader)
-                            d_test = discover_available_days(get_paths()["data_dir"]) if t_day == "All Days (Robust)" else [t_day]
-                            t_res = sum(execute_backtest_headless(d, f_path, cfg) for d in d_test)
-                            r = t_res / len(d_test)
-                            pbar.progress((trial.number + 1) / n_tri)
-                            return r
-                        study = optuna.create_study(direction="maximize")
-                        study.optimize(obj, n_trials=n_tri)
-                        st.session_state.best_params = study.best_params
-                        st.session_state.best_pnl = study.best_value
-                        st.rerun()
-
-        with st.expander("🌐 Market Data Terminal", expanded=False):
-            ext_path = os.path.join(get_paths()["base_dir"], "data", "external", "processed", "SPY.csv")
-            if os.path.exists(ext_path):
-                df_ext = pd.read_csv(ext_path)
-                st.altair_chart(alt.Chart(df_ext).mark_line().encode(
-                    x='timestamp:T', y=alt.Y('close:Q', scale=alt.Scale(zero=False))
-                ).properties(height=300).interactive(), use_container_width=True)
-            else:
-                st.warning("No external data found.")
-        
-        with st.expander("🛠️ One-Click Forge", expanded=False):
-            st.markdown("Generate a `trader.py` based on current analysis and config.")
-            col_f1, col_f2 = st.columns(2)
-            with col_f1:
-                if st.button("🔍 Run Auto-Analysis", use_container_width=True):
-                    perform_auto_analysis()
-            with col_f2:
-                if st.button("🔨 Forge Trader.py", type="primary", use_container_width=True):
-                    if "analysis" not in st.session_state:
-                         st.error("Please run Auto-Analysis first!")
-                    else:
-                        forge_trader()
-            
-            if "forged_code" in st.session_state:
-                st.code(st.session_state.forged_code, language="python")
-
-        st.divider()
-        st.subheader("📊 Performance Matrix (Scatter)")
-        st.markdown("""
-        Comparative audit of all strategy variations.
-        - **Actual (Historical)**: PnL summed across all Round 1 CSV files (`data_capsule`).
-        - **Monte Carlo**: Expected PnL / Variance over synthetic synthetic paths.
-        - **Note**: Data is actual, sourced from `ROUND 1/results/` logs.
-        """)
-
-        trader_dir = get_paths()["traders_dir"]
-        results_dir = os.path.join(get_paths()["base_dir"], "results")
-        results = []
-
-        if os.path.exists(trader_dir):
-            trader_files = [f for f in os.listdir(trader_dir) if f.endswith(".py")]
-            for trader_file in trader_files:
-                trader_id = trader_file.replace(".py", "")
-                csv_path = os.path.join(results_dir, f"{trader_id}_mc_results.csv")
-                hist_path = os.path.join(results_dir, f"{trader_id}_historical_results.json")
-                
-                if os.path.exists(csv_path):
-                    try:
-                        df_mc = pd.read_csv(csv_path)
-                        avg_pnl = df_mc['final_pnl'].mean()
-                        var_pnl = df_mc['final_pnl'].var()
-                        if pd.isna(var_pnl): var_pnl = 0
-                        
-                        # Load Actual Historical Value
-                        hist_pnl = "N/A"
-                        if os.path.exists(hist_path):
-                            with open(hist_path, "r") as hf:
-                                hist_pnl = json.load(hf).get("total_pnl", 0)
-
-                        robust_file = os.path.join(results_dir, f"{trader_id}_robustness_results.json")
-                        external_stability = "N/A"
-                        if os.path.exists(robust_file):
-                            with open(robust_file, "r") as rf:
-                                robust_data = json.load(rf)
-                                external_stability = np.mean([r['final_pnl'] for r in robust_data])
-
-                            results.append({
-                                "trader_id": trader_id,
-                                "actual_historical": hist_pnl,
-                                "avg_mc_pnl": avg_pnl,
-                                "variance": var_pnl,
-                                "external_robustness": external_stability,
-                                "sharpe_proxy": avg_pnl / (np.sqrt(var_pnl) + 1e-6)
-                            })
-                    except Exception as e:
-                        st.error(f"Error loading results for {trader_id}: {e}")
-
-        if results:
-            df_perf = pd.DataFrame(results)
-
-            # Renaming columns for better UX with directional hints
-            df_perf_display = df_perf.rename(columns={
-                "trader_id": "Trader ID",
-                "actual_historical": "Actual (Historical PnL) ↑",
-                "avg_mc_pnl": "Expected (MC PnL) ↑",
-                "variance": "Risk (MC Variance) ↓",
-                "external_robustness": "Ext Robustness (yFinance) ↑",
-                "sharpe_proxy": "Stability Score ↑",
-            })
-
-            # Highlight top 10%
-            threshold = df_perf['avg_mc_pnl'].quantile(0.9)
-            df_perf['highlight'] = df_perf['avg_mc_pnl'] >= threshold
-
-            scatter = alt.Chart(df_perf).mark_circle(size=100).encode(
-                x=alt.X('variance:Q', title='PnL Variance (Risk - Lower is Better)'),
-                y=alt.Y('avg_mc_pnl:Q', title='Average MC PnL (Performance - Higher is Better)'),
-                color=alt.Color('highlight:N', scale=alt.Scale(domain=[True, False], range=['#FF4B4B', '#1F77B4']), legend=None),
-                tooltip=['trader_id', 'actual_historical', 'avg_mc_pnl', 'variance', 'sharpe_proxy', 'external_robustness']
-            ).properties(
-                width=700,
-                height=500
-            ).interactive()
-
-            # Add labels
-            labels = scatter.mark_text(
-                align='left',
-                baseline='middle',
-                dx=7
-            ).encode(
-                text='trader_id'
-            )
-
-            st.altair_chart(scatter + labels, use_container_width=True)
-            st.dataframe(df_perf_display.sort_values("Expected (MC PnL) ↑", ascending=False))
-        else:
-            st.info("No simulation results found in `results/`. Run Historical Audit to generate data.")
 
 
     with tab_robust:
@@ -1688,7 +1498,6 @@ def main():
                     st.image(os.path.join(sweep_dir, png), caption=png.replace("_", " ").replace(".png", ""))
 
     with tab_backtest:
-        st.success("**Mission Status:** Currently analyzing Round 1 Data. Goal: Maintain Osmium at ~10,000 and manage Pepper volatility.")
 
         col_day, col_btn = st.columns([1, 1])
         with col_day:

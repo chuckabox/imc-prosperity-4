@@ -13,7 +13,7 @@ Repository for multi-round strategy development, backtesting, and analysis.
 
 Run one dashboard for all rounds:
 
-- `streamlit run "tools/dashboard.py" --server.port 8501 --server.headless true`
+- `streamlit run "tools/dashboard.py"`
 
 Inside the UI, use **Round Folder** in the sidebar to switch between `ROUND *` directories.
 
