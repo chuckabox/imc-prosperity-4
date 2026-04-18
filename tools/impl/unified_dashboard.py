@@ -541,8 +541,9 @@ def _build_comparison_table(
         df = df.copy()
         df["target_pnl"] = pnls
 
-        imc = df[df["category"] == "imc"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
-        real = df[df["category"] == "real"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+        # Allow both robust labels (imc, real) and standard labels (round_1, round_2, real_world)
+        imc = df[df["category"].isin(["imc", "round_1", "round_2"])]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+        real = df[df["category"].isin(["real", "real_world"])]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
         scen = df[df["category"] == "scenario"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
         allp = df["target_pnl"]
 
@@ -610,12 +611,12 @@ def _build_cross_round_comparison(
         round_files = []
         source_dir = None
         if os.path.isdir(robust_dir):
-            candidates = [f for f in os.listdir(robust_dir) if f.endswith("_robust_results.csv")]
+            candidates = [f for f in os.listdir(robust_dir) if f.endswith("_results.csv")]
             if candidates:
                 round_files = candidates
                 source_dir = robust_dir
         if not round_files and os.path.isdir(fallback_dir):
-            candidates = [f for f in os.listdir(fallback_dir) if f.endswith("_robust_results.csv")]
+            candidates = [f for f in os.listdir(fallback_dir) if f.endswith("_results.csv")]
             if candidates:
                 round_files = candidates
                 source_dir = fallback_dir
@@ -633,8 +634,9 @@ def _build_cross_round_comparison(
             df = df.copy()
             df["target_pnl"] = pnls
 
-            imc = df[df["category"] == "imc"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
-            real = df[df["category"] == "real"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+            # Allow both robust labels (imc, real) and standard labels (round_1, round_2, real_world)
+            imc = df[df["category"].isin(["imc", "round_1", "round_2"])]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+            real = df[df["category"].isin(["real", "real_world"])]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
             scen = df[df["category"] == "scenario"]["target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
             allp = df["target_pnl"]
 
@@ -1059,11 +1061,7 @@ def main():
                 st.subheader("⚔️ Interactive Comparison Matrix")
                 st.caption("Select any robust result files, auto-compute side-by-side metrics, color by quality, and auto-rank.")
 
-                quick_first = sorted(
-                    robust_csvs,
-                    key=lambda x: (0 if "_quick_" in x else 1, x)
-                )
-                default_selection = quick_first[: min(6, len(quick_first))]
+                default_selection = robust_csvs
 
                 selected_compare = st.multiselect(
                     "Backtest Result Files",
