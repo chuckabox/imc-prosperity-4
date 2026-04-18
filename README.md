@@ -1,39 +1,32 @@
-# 🏛️ IMC Prosperity 4 Trading Suite
+# IMC Prosperity 4 Trading Suite
 
-![Status](https://img.shields.io/badge/Status-Round_2_Active-success)
-![Total PnL](https://img.shields.io/badge/R1_PnL-%24272k-blue)
+Repository for multi-round strategy development, backtesting, and analysis.
 
-This repository contains high-fidelity backtesting tools and production strategies for the IMC Prosperity 4 challenge.
+## Project Layout
 
----
+- `ROUND 1/`, `ROUND 2/`, ...: round-specific code and data
+- `ROUND_TEMPLATE/`: scaffold for new rounds
+- `tools/dashboard.py`: unified dashboard entrypoint (round selector built in)
+- `imc-prosperity-4-backtester/`: external/backtesting reference engine
 
-## 📂 Project Structure
+## Unified Dashboard
 
-- **[ROUND 1](./ROUND%201)**: Completed tasks for Ash-coated Osmium and Intarian Pepper Root.
-- **[ROUND 2](./ROUND%202)**: Current development round.
-- **[tools](./ROUND%202/tools)**: Standard backtesting and analysis tools (shared codebase).
-- **[imc-prosperity-4-backtester](./imc-prosperity-4-backtester)**: Core backtesting engine.
+Run one dashboard for all rounds:
 
----
+- `streamlit run "tools/dashboard.py" --server.port 8501 --server.headless true`
 
-## 🚀 Round 2 Quick Start
+Inside the UI, use **Round Folder** in the sidebar to switch between `ROUND *` directories.
 
-Follow these steps to begin development for Round 2.
+## Backtesting
 
-### 1️⃣ Setup Strategy
+Run robust backtests per round:
 
-Place your trade logic in `ROUND 2/traders/`.
+- `python "ROUND 1/tools/robust_backtester.py" "ROUND 1/traders/<your_file>.py" --quick`
+- `python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/<your_file>.py" --quick`
 
-- **Baseline:** Start by copying the best performer from Round 1 or use the template in `ROUND 2/traders/trader.py`.
+## Create a New Round
 
-### 2️⃣ Run Backtests
-
-Use the robust backtester to validate signals and risk management.
-
-- **Run:** `python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/<your_file>.py" --quick`
-
-### 3️⃣ Launch Visual Dashboard
-
-Analyze fills, positions, and PnL distributions.
-
-- **Run:** `streamlit run "ROUND 2/tools/dashboard.py"`
+1. Copy `ROUND_TEMPLATE/`
+2. Rename it (example: `ROUND 3`)
+3. Add data under `data_capsule/` and strategy files under `traders/`
+4. Open unified dashboard and select the new round
