@@ -52,6 +52,26 @@ def render_simple_mode(get_sim_data):
 
     st.markdown("---")
     st.markdown("""
+    ## 🎯 Analyst Recommendations
+    Based on your state: 173k → 200k (need +27k profit)
+    """)
+
+    # Show budget vs profit analysis
+    budget_data = {
+        "Spend": ["15,000", "30,000", "40,000", "50,000"],
+        "Alloc": ["(8,18,4)", "(13,36,11)", "(16,46,18)", "(14,41,45)"],
+        "Est Profit": ["8k", "40k", "74k", "131k"],
+        "Hits 200k": ["0/8 ❌", "0/8 ❌", "1/8 ⚠️", "3/8 ✅"],
+    }
+    st.dataframe(pd.DataFrame(budget_data), use_container_width=True, hide_index=True)
+
+    st.info(
+        "💡 **Key insight:** Partial budgets (15-40k) won't hit target. "
+        "You NEED to commit **50k** to have a real shot at 200k. "
+        "Allocation (14,41,45) hits 200k in lazy/bimodal/exponential scenarios (3/8 most likely)."
+    )
+
+    st.markdown("""
     ## Pick Your Strategy
     **3 allocations tested across all 8 scenarios. No sliders, no confusion.**
     """)
@@ -73,6 +93,57 @@ def render_simple_mode(get_sim_data):
     sims = out["sims"]
     names = list(sims.keys())
     grid = sims[names[0]]["grid"]
+
+    # TOP RECOMMENDATION SECTION
+    st.markdown("---")
+    st.markdown("## ⭐ Top Analyst Picks (Ranked)")
+
+    rec_cols = st.columns(3)
+
+    with rec_cols[0]:
+        st.markdown("""
+        ### #1 — 🟢 BEST EXPECTED VALUE
+        **Allocation:** x=14, y=41, z=45
+        - **Cost:** 50,000 XIRECs
+        - **Hits 200k in:** 3/8 scenarios ✅
+        - **Worst case:** −3k (Aggressive market)
+        - **Best case:** +240k (Exponential)
+
+        **Pick this if:** You believe lazy/casual markets dominate.
+        """)
+        if st.button("Use This →", key="rec_1"):
+            st.session_state.simple_inspect = "⭐ Analyst #1"
+
+    with rec_cols[1]:
+        st.markdown("""
+        ### #2 — 🛡️ SAFEST PLAY
+        **Allocation:** x=23, y=77, z=0
+        - **Cost:** 50,000 XIRECs
+        - **Hits 200k in:** 0/8 (lands ~197k)
+        - **Worst case:** +24k (always profitable)
+        - **Best case:** +35k (Bimodal)
+
+        **Pick this if:** You want guaranteed no-loss.
+        """)
+        if st.button("Use This →", key="rec_2"):
+            st.session_state.simple_inspect = "⭐ Analyst #2"
+
+    with rec_cols[2]:
+        st.markdown("""
+        ### #3 — 💰 BUDGET-CONSCIOUS
+        **Allocation:** x=16, y=46, z=18
+        - **Cost:** 40,000 XIRECs (save 10k)
+        - **Hits 200k in:** 1/8 (Exponential only)
+        - **Worst case:** −350 (Aggressive)
+        - **Best case:** +221k (Exponential)
+
+        **Pick this if:** You want flexibility & believe Exponential.
+        """)
+        if st.button("Use This →", key="rec_3"):
+            st.session_state.simple_inspect = "⭐ Analyst #3"
+
+    st.markdown("---")
+    st.markdown("## Or choose from preset templates below:")
 
     # Define 3 presets
     presets = {
@@ -157,9 +228,33 @@ def render_simple_mode(get_sim_data):
     # Detailed inspector if clicked
     if "simple_inspect" in st.session_state and st.session_state.simple_inspect:
         preset_name = st.session_state.simple_inspect
-        alloc_data = presets[preset_name]
-        x, y, z = alloc_data["x"], alloc_data["y"], alloc_data["z"]
-        cost = results[preset_name]["cost"]
+
+        # Handle analyst recommendations
+        analyst_picks = {
+            "⭐ Analyst #1": (14, 41, 45),
+            "⭐ Analyst #2": (23, 77, 0),
+            "⭐ Analyst #3": (16, 46, 18),
+        }
+
+        if preset_name in analyst_picks:
+            x, y, z = analyst_picks[preset_name]
+            cost = 500 * (x + y + z)
+            # Find in grid and get results
+            mask = (grid[:, 0] == x) & (grid[:, 1] == y) & (grid[:, 2] == z)
+            if mask.any():
+                idx = int(np.where(mask)[0][0])
+                per_scen = {}
+                for scen_name in names:
+                    sim = sims[scen_name]
+                    per_scen[scen_name] = {
+                        "mean": float(sim["mean_net"][idx]),
+                        "p05": float(sim["p05_net"][idx]),
+                    }
+                results[preset_name] = {"cost": cost, "per_scenario": per_scen}
+        else:
+            alloc_data = presets[preset_name]
+            x, y, z = alloc_data["x"], alloc_data["y"], alloc_data["z"]
+            cost = results[preset_name]["cost"]
 
         st.markdown("---")
         st.markdown(f"## 📋 Details: {preset_name}")
@@ -249,165 +344,166 @@ def render_advanced_mode(get_sim_data):
     names = list(sims.keys())
     grid = sims[names[0]]["grid"]
 
-    # Tabs for different views
-    tab1, tab2, tab3, tab4 = st.tabs(["🔍 Inspector", "📊 Per-Scenario Optima", "🧊 Robust", "🎲 Scenarios"])
+    # ========== SECTIONS ==========
+    st.divider()
+    st.markdown("## 🔍 Inspector — Test Any Allocation")
+    st.markdown("### Test any allocation")
 
-    # ========== TAB 1: Inspector ==========
-    with tab1:
-        st.markdown("### Test any allocation")
+    col_x, col_y, col_z = st.columns(3)
+    with col_x:
+        cur_x = st.slider("Research x", 0, 100, 25, key="adv_x",
+                        help="x=0→0k, x=25→79k, x=50→124k, x=100→200k")
+    with col_y:
+        remaining_y_max = 100 - cur_x
+        cur_y = st.slider("Scale y", 0, remaining_y_max, min(35, remaining_y_max), key="adv_y",
+                        help="Linear growth. y=50→3.5× multiplier")
+    with col_z:
+        remaining_z_max = 100 - cur_x - cur_y
+        cur_z = st.slider("Speed z", 0, remaining_z_max, min(40, remaining_z_max), key="adv_z",
+                        help="Depends entirely on competitors' bids")
 
-        col_x, col_y, col_z = st.columns(3)
-        with col_x:
-            cur_x = st.slider("Research x", 0, 100, 25, key="adv_x",
-                            help="x=0→0k, x=25→79k, x=50→124k, x=100→200k")
-        with col_y:
-            remaining_y_max = 100 - cur_x
-            cur_y = st.slider("Scale y", 0, remaining_y_max, min(35, remaining_y_max), key="adv_y",
-                            help="Linear growth. y=50→3.5× multiplier")
-        with col_z:
-            remaining_z_max = 100 - cur_x - cur_y
-            cur_z = st.slider("Speed z", 0, remaining_z_max, min(40, remaining_z_max), key="adv_z",
-                            help="Depends entirely on competitors' bids")
+    total_pct = cur_x + cur_y + cur_z
+    cost_actual = 500 * total_pct
+    unused_budget = 50_000 - cost_actual
 
-        total_pct = cur_x + cur_y + cur_z
-        cost_actual = 500 * total_pct
-        unused_budget = 50_000 - cost_actual
+    # Cost breakdown
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("Allocation %", f"{total_pct}%", "of 100%")
+    with m2:
+        st.metric("Cost (XIRECs)", f"{cost_actual:,}", f"of 50,000")
+    with m3:
+        pct_used = int(100 * cost_actual / 50_000) if cost_actual > 0 else 0
+        st.metric("Budget Used", f"{pct_used}%", f"Unused: {unused_budget:,}")
+    with m4:
+        risk = "🟢 LOW" if total_pct <= 30 else ("🟡 MID" if total_pct <= 60 else "🔴 HIGH")
+        st.metric("Risk Level", risk, "")
 
-        # Cost breakdown
-        m1, m2, m3, m4 = st.columns(4)
-        with m1:
-            st.metric("Allocation %", f"{total_pct}%", "of 100%")
-        with m2:
-            st.metric("Cost (XIRECs)", f"{cost_actual:,}", f"of 50,000")
-        with m3:
-            pct_used = int(100 * cost_actual / 50_000) if cost_actual > 0 else 0
-            st.metric("Budget Used", f"{pct_used}%", f"Unused: {unused_budget:,}")
-        with m4:
-            risk = "🟢 LOW" if total_pct <= 30 else ("🟡 MID" if total_pct <= 60 else "🔴 HIGH")
-            st.metric("Risk Level", risk, "")
+    # Profitability math
+    st.markdown("#### 💡 Profitability Math")
+    profit_cols = st.columns(4)
+    with profit_cols[0]:
+        st.write(f"**Cost:** {cost_actual:,} XIRECs")
+    with profit_cols[1]:
+        st.write(f"**Breakeven:** {cost_actual:,}")
+        st.caption("to stay at 173k")
+    with profit_cols[2]:
+        total_needed = cost_actual + 27_000
+        st.write(f"**For 200k:** {total_needed:,}")
+        st.caption("needed profit")
+    with profit_cols[3]:
+        feasibility = "Easy" if total_needed <= 60_000 else ("Tight" if total_needed <= 100_000 else "Hard")
+        st.write(f"**Feasibility:** {feasibility}")
 
-        # Profitability math
-        st.markdown("#### 💡 Profitability Math")
-        profit_cols = st.columns(4)
-        with profit_cols[0]:
-            st.write(f"**Cost:** {cost_actual:,} XIRECs")
-        with profit_cols[1]:
-            st.write(f"**Breakeven:** {cost_actual:,}")
-            st.caption("to stay at 173k")
-        with profit_cols[2]:
-            total_needed = cost_actual + 27_000
-            st.write(f"**For 200k:** {total_needed:,}")
-            st.caption("needed profit")
-        with profit_cols[3]:
-            feasibility = "Easy" if total_needed <= 60_000 else ("Tight" if total_needed <= 100_000 else "Hard")
-            st.write(f"**Feasibility:** {feasibility}")
+    # Per-scenario results
+    st.markdown("#### 📊 Results across 8 scenarios")
+    mask = (grid[:, 0] == cur_x) & (grid[:, 1] == cur_y) & (grid[:, 2] == cur_z)
+    if mask.any():
+        idx = int(np.where(mask)[0][0])
+        rows = []
+        for n in names:
+            sim = sims[n]
+            mn = float(sim["mean_net"][idx])
+            p5 = float(sim["p05_net"][idx])
+            status = "✅ SAFE" if p5 >= 200_000 else ("⚠️ RISKY" if mn >= 200_000 else "❌ MISS")
+            rows.append({
+                "Scenario": n.split("(")[0][:15],
+                "Mean": f"{mn:,.0f}",
+                "P05": f"{p5:,.0f}",
+                "Status": status,
+            })
 
-        # Per-scenario results
-        st.markdown("#### 📊 Results across 8 scenarios")
-        mask = (grid[:, 0] == cur_x) & (grid[:, 1] == cur_y) & (grid[:, 2] == cur_z)
-        if mask.any():
-            idx = int(np.where(mask)[0][0])
-            rows = []
-            for n in names:
-                sim = sims[n]
-                mn = float(sim["mean_net"][idx])
-                p5 = float(sim["p05_net"][idx])
-                status = "✅ SAFE" if p5 >= 200_000 else ("⚠️ RISKY" if mn >= 200_000 else "❌ MISS")
-                rows.append({
-                    "Scenario": n.split("(")[0][:15],
-                    "Mean": f"{mn:,.0f}",
-                    "P05": f"{p5:,.0f}",
-                    "Status": status,
-                })
+        df = pd.DataFrame(rows)
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
-            df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+        safe = sum(1 for r in rows if r["Status"] == "✅ SAFE")
+        st.markdown(f"**Summary:** {safe}/8 scenarios are SAFE (P05≥200k)")
+    else:
+        st.warning("Allocation not on grid. Adjust sliders.")
 
-            safe = sum(1 for r in rows if r["Status"] == "✅ SAFE")
-            st.markdown(f"**Summary:** {safe}/8 scenarios are SAFE (P05≥200k)")
-        else:
-            st.warning("Allocation not on grid. Adjust sliders.")
+    # ========== SECTION 2: Per-Scenario Optima ==========
+    st.divider()
+    st.markdown("## 📊 Per-Scenario Optima")
+    st.markdown("### Optimal allocation per scenario (3 strategies each)")
 
-    # ========== TAB 2: Per-Scenario Optima ==========
-    with tab2:
-        st.markdown("### Optimal allocation per scenario (3 strategies each)")
-
-        st.markdown("""
+    st.markdown("""
 **Global**: Max average profit.
 **Safety**: Robust to speed variance. (Recommended for balanced play)
 **P05-Max**: Maximize worst 5%. (Ultra-conservative)
-        """)
+    """)
 
-        rows = []
-        for name, opt in optima_per.items():
-            for which in ("global", "safety", "p05_max"):
-                o = opt.get(which)
-                if o is None:
-                    continue
-                a = o["alloc"]
-                rows.append({
-                    "Scenario": name.split("(")[0][:15],
-                    "Strategy": which.replace("_", "-"),
-                    "x": int(a[0]), "y": int(a[1]), "z": int(a[2]),
-                    "Cost": f"{int(o['cost']):,}",
-                    "Mean": f"{o['mean_net']:,.0f}",
-                    "P05": f"{o['p05_net']:,.0f}",
-                    "Goal": "✅" if o["p05_net"] >= 200_000 else ("⚠️" if o["mean_net"] >= 200_000 else "❌"),
-                })
+    rows = []
+    for name, opt in optima_per.items():
+        for which in ("global", "safety", "p05_max"):
+            o = opt.get(which)
+            if o is None:
+                continue
+            a = o["alloc"]
+            rows.append({
+                "Scenario": name.split("(")[0][:15],
+                "Strategy": which.replace("_", "-"),
+                "x": int(a[0]), "y": int(a[1]), "z": int(a[2]),
+                "Cost": f"{int(o['cost']):,}",
+                "Mean": f"{o['mean_net']:,.0f}",
+                "P05": f"{o['p05_net']:,.0f}",
+                "Goal": "✅" if o["p05_net"] >= 200_000 else ("⚠️" if o["mean_net"] >= 200_000 else "❌"),
+            })
 
-        df_opts = pd.DataFrame(rows)
-        st.dataframe(df_opts, use_container_width=True, hide_index=True)
+    df_opts = pd.DataFrame(rows)
+    st.dataframe(df_opts, use_container_width=True, hide_index=True)
 
-    # ========== TAB 3: Robust Hedging ==========
-    with tab3:
-        st.markdown("### Robust allocations (hedge all scenarios equally)")
+    # ========== SECTION 3: Robust Hedging ==========
+    st.divider()
+    st.markdown("## 🧊 Robust Hedging")
+    st.markdown("### Robust allocations (hedge all scenarios equally)")
 
-        rmm = robust["maximin_mean"]
-        rmp = robust["maximin_p05"]
+    rmm = robust["maximin_mean"]
+    rmp = robust["maximin_p05"]
 
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown(f"**Maximin-Mean** (balanced hedge)  \nx={rmm['alloc'][0]}, y={rmm['alloc'][1]}, z={rmm['alloc'][2]}")
-            st.metric("Worst-case mean", f"{rmm['worst_case_mean_net']:,.0f}")
-            with st.expander("Per-scenario"):
-                r1_df = pd.DataFrame(
-                    rmm["per_scenario_mean_net"].items(),
-                    columns=["Scenario", "Mean"],
-                ).assign(**{"Mean": lambda d: d["Mean"].round().astype(int).apply(lambda x: f"{x:,}")})
-                st.dataframe(r1_df, use_container_width=True, hide_index=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"**Maximin-Mean** (balanced hedge)  \nx={rmm['alloc'][0]}, y={rmm['alloc'][1]}, z={rmm['alloc'][2]}")
+        st.metric("Worst-case mean", f"{rmm['worst_case_mean_net']:,.0f}")
+        with st.expander("Per-scenario"):
+            r1_df = pd.DataFrame(
+                rmm["per_scenario_mean_net"].items(),
+                columns=["Scenario", "Mean"],
+            ).assign(**{"Mean": lambda d: d["Mean"].round().astype(int).apply(lambda x: f"{x:,}")})
+            st.dataframe(r1_df, use_container_width=True, hide_index=True)
 
-        with c2:
-            st.markdown(f"**Maximin-P05** (ultra-safe)  \nx={rmp['alloc'][0]}, y={rmp['alloc'][1]}, z={rmp['alloc'][2]}")
-            st.metric("Worst-case P05", f"{rmp['worst_case_p05_net']:,.0f}")
-            with st.expander("Per-scenario"):
-                r2_df = pd.DataFrame(
-                    rmp["per_scenario_p05_net"].items(),
-                    columns=["Scenario", "P05"],
-                ).assign(**{"P05": lambda d: d["P05"].round().astype(int).apply(lambda x: f"{x:,}")})
-                st.dataframe(r2_df, use_container_width=True, hide_index=True)
+    with c2:
+        st.markdown(f"**Maximin-P05** (ultra-safe)  \nx={rmp['alloc'][0]}, y={rmp['alloc'][1]}, z={rmp['alloc'][2]}")
+        st.metric("Worst-case P05", f"{rmp['worst_case_p05_net']:,.0f}")
+        with st.expander("Per-scenario"):
+            r2_df = pd.DataFrame(
+                rmp["per_scenario_p05_net"].items(),
+                columns=["Scenario", "P05"],
+            ).assign(**{"P05": lambda d: d["P05"].round().astype(int).apply(lambda x: f"{x:,}")})
+            st.dataframe(r2_df, use_container_width=True, hide_index=True)
 
-    # ========== TAB 4: Scenario Distributions ==========
-    with tab4:
-        st.markdown("### Competitor speed distributions")
-        st.caption("See how your speed (z) ranks against competitors in each scenario.")
+    # ========== SECTION 4: Scenario Distributions ==========
+    st.divider()
+    st.markdown("## 🎲 Scenario Distributions")
+    st.markdown("### Competitor speed distributions")
+    st.caption("See how your speed (z) ranks against competitors in each scenario.")
 
-        try:
-            from manual_optimiser import plotting as moplot
-            rng = np.random.default_rng(int(seed))
-            scen_tabs = st.tabs(names)
-            for i, n in enumerate(names):
-                with scen_tabs[i]:
-                    pop = moscen.ALL_SCENARIOS[n](rng)
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        st.plotly_chart(
-                            moplot.competitor_histogram(pop, your_z=50, title=f"{n} (z=50 example)"),
-                            use_container_width=True,
-                        )
-                    with col_b:
-                        st.plotly_chart(
-                            moplot.speed_curve(pop, highlight_z=50),
-                            use_container_width=True,
-                        )
-        except Exception as e:
-            st.warning(f"Could not load scenario charts: {e}")
+    try:
+        from manual_optimiser import plotting as moplot
+        rng = np.random.default_rng(int(seed))
+        scen_tabs = st.tabs(names)
+        for i, n in enumerate(names):
+            with scen_tabs[i]:
+                pop = moscen.ALL_SCENARIOS[n](rng)
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.plotly_chart(
+                        moplot.competitor_histogram(pop, your_z=50, title=f"{n} (z=50 example)"),
+                        use_container_width=True,
+                    )
+                with col_b:
+                    st.plotly_chart(
+                        moplot.speed_curve(pop, highlight_z=50),
+                        use_container_width=True,
+                    )
+    except Exception as e:
+        st.warning(f"Could not load scenario charts: {e}")

@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 # Identify Repo Root
 TOOLS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TOOLS_DIR.parent
-RESULTS_DIR = REPO_ROOT / "results" / "robust"
+RESULTS_DIR = REPO_ROOT / "ROUND 2" / "results" / "robust"
 
 # Add config to sys.path for datamodel
 # We'll prefer Round 2's config as it's the latest, but they should be the same
