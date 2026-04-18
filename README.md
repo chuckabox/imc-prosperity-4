@@ -19,6 +19,12 @@ Inside the UI, use **Round Folder** in the sidebar to switch between `ROUND *` d
 
 ## Backtesting
 
+### Unified Robust Backtester (Recommended)
+Run a single backtest against data from ALL rounds, real-world days, and synthetic scenarios:
+
+- `python tools/robust_backtester.py <trader_file>.py --quick`
+
+### Per-Round Backtesters (Legacy)
 Run robust backtests per round:
 
 - `python "ROUND 1/tools/robust_backtester.py" "ROUND 1/traders/<your_file>.py" --quick`
