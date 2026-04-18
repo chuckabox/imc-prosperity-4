@@ -1,0 +1,13 @@
+{
+    "osmium_active": true,
+    "pepper_active": true,
+    "osmium_limit": 17,
+    "pepper_limit": 17,
+    "emerald_active": true,
+    "tomato_active": true,
+    "emerald_limit": 18,
+    "tomato_limit": 18,
+    "target_spread": 2.85,
+    "mr_threshold": 3.15,
+    "selected_day": -1
+}
