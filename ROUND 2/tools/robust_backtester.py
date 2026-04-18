@@ -52,6 +52,79 @@ class BacktestResult:
     max_position: Dict[str, int] = field(default_factory=dict)
     trade_count: int = 0
     pnl_curve: List[float] = field(default_factory=list)
+    # --- trade-level stats (FIFO realized P&L per round-trip) ---
+    rt_wins: int = 0            # closed round-trip chunks with realized PnL > 0
+    rt_losses: int = 0          # closed round-trip chunks with realized PnL < 0
+    rt_pushes: int = 0          # exactly zero PnL (scratches)
+    avg_win: float = 0.0        # mean realized $ per winning round-trip
+    avg_loss: float = 0.0       # mean realized $ per losing round-trip (negative)
+
+    @property
+    def trade_win_rate(self) -> float:
+        """Win rate on CLOSED round-trips (pushes excluded). 0 if no closed trades."""
+        denom = self.rt_wins + self.rt_losses
+        return (self.rt_wins / denom) if denom > 0 else 0.0
+
+    @property
+    def profit_factor(self) -> float:
+        """Sum of winning $ / abs(sum of losing $). >1 = profitable system."""
+        gross_win = self.rt_wins * self.avg_win
+        gross_loss = abs(self.rt_losses * self.avg_loss)
+        return (gross_win / gross_loss) if gross_loss > 0 else float("inf") if gross_win > 0 else 0.0
+
+
+class _FifoBook:
+    """FIFO inventory tracker. Feed fills; it emits realized P&L per matched slice."""
+    __slots__ = ("long_q", "short_q", "wins", "losses", "pushes", "win_sum", "loss_sum")
+
+    def __init__(self):
+        # each queue element = [entry_price, qty_remaining]
+        self.long_q: List[List[float]] = []
+        self.short_q: List[List[float]] = []
+        self.wins = 0
+        self.losses = 0
+        self.pushes = 0
+        self.win_sum = 0.0
+        self.loss_sum = 0.0
+
+    def fill(self, price: float, qty: int) -> None:
+        """qty>0 = buy, qty<0 = sell."""
+        if qty > 0:
+            # close shorts first
+            while qty > 0 and self.short_q:
+                head = self.short_q[0]
+                matched = min(qty, head[1])
+                realized = (head[0] - price) * matched
+                self._record(realized)
+                head[1] -= matched
+                qty -= matched
+                if head[1] <= 0:
+                    self.short_q.pop(0)
+            if qty > 0:
+                self.long_q.append([price, qty])
+        elif qty < 0:
+            qty = -qty
+            while qty > 0 and self.long_q:
+                head = self.long_q[0]
+                matched = min(qty, head[1])
+                realized = (price - head[0]) * matched
+                self._record(realized)
+                head[1] -= matched
+                qty -= matched
+                if head[1] <= 0:
+                    self.long_q.pop(0)
+            if qty > 0:
+                self.short_q.append([price, qty])
+
+    def _record(self, realized: float) -> None:
+        if realized > 0:
+            self.wins += 1
+            self.win_sum += realized
+        elif realized < 0:
+            self.losses += 1
+            self.loss_sum += realized
+        else:
+            self.pushes += 1
 
 
 def load_trader(trader_file: str):
@@ -82,6 +155,7 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
 
     cash_per_product = {"ASH_COATED_OSMIUM": 0.0, "INTARIAN_PEPPER_ROOT": 0.0}
     positions = {"ASH_COATED_OSMIUM": 0, "INTARIAN_PEPPER_ROOT": 0}
+    fifo = {"ASH_COATED_OSMIUM": _FifoBook(), "INTARIAN_PEPPER_ROOT": _FifoBook()}
     pnl_history = []
     trade_count = 0
     max_pos = {"ASH_COATED_OSMIUM": 0, "INTARIAN_PEPPER_ROOT": 0}
@@ -145,6 +219,7 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
                             if fill > 0:
                                 positions[product] += fill
                                 cash_per_product[product] -= fill * ask
+                                fifo[product].fill(ask, fill)
                                 qty -= fill
                                 trade_count += 1
                 elif qty < 0:
@@ -155,6 +230,7 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
                             if fill > 0:
                                 positions[product] -= fill
                                 cash_per_product[product] += fill * bid
+                                fifo[product].fill(bid, -fill)
                                 qty += fill
                                 trade_count += 1
 
@@ -193,6 +269,15 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
     else:
         sharpe = sortino = calmar = 0
 
+    # aggregate FIFO round-trip stats across products
+    rt_wins   = sum(b.wins for b in fifo.values())
+    rt_losses = sum(b.losses for b in fifo.values())
+    rt_pushes = sum(b.pushes for b in fifo.values())
+    total_win_sum  = sum(b.win_sum for b in fifo.values())
+    total_loss_sum = sum(b.loss_sum for b in fifo.values())
+    avg_win  = (total_win_sum  / rt_wins)   if rt_wins   > 0 else 0.0
+    avg_loss = (total_loss_sum / rt_losses) if rt_losses > 0 else 0.0
+
     return BacktestResult(
         name=name,
         category=category,
@@ -206,6 +291,11 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
         max_position=max_pos,
         trade_count=trade_count,
         pnl_curve=pnl_history,
+        rt_wins=rt_wins,
+        rt_losses=rt_losses,
+        rt_pushes=rt_pushes,
+        avg_win=avg_win,
+        avg_loss=avg_loss,
     )
 
 
@@ -297,14 +387,46 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], 
         "p95_pnl": float(np.percentile(pnls, 95)),
         "mean_drawdown": float(np.mean(dds)),
         "worst_drawdown": float(np.max(dds)),
-        "win_rate": sum(1 for p in pnls if p > 0) / len(pnls),
+        # Dataset-level metric: what fraction of sessions ended profitable.
+        # Saturates at 100% for robust strategies and is NOT a skill signal
+        # once blow-ups are eliminated. Kept for backwards compatibility.
+        "positive_sessions_rate": sum(1 for p in pnls if p > 0) / len(pnls),
         "blow_up_rate": sum(1 for p in pnls if p < -10000) / len(pnls),
+        # --- Trade-level metrics (FIFO round-trip realized P&L) ---
+        # Aggregated across every closed round-trip in every session.
+        # This is the real "win rate": does the strategy close more winning
+        # round-trips than losers? A 50% rate with avg_win > |avg_loss| is a
+        # winning system.
+        "total_round_trips": sum(r.rt_wins + r.rt_losses + r.rt_pushes for r in results),
+        "total_rt_wins":    sum(r.rt_wins for r in results),
+        "total_rt_losses":  sum(r.rt_losses for r in results),
+        "total_rt_pushes":  sum(r.rt_pushes for r in results),
+        "trade_win_rate": (
+            sum(r.rt_wins for r in results)
+            / max(1, sum(r.rt_wins + r.rt_losses for r in results))
+        ),
+        "avg_win_pnl":  (
+            sum(r.rt_wins * r.avg_win for r in results)
+            / max(1, sum(r.rt_wins for r in results))
+        ),
+        "avg_loss_pnl": (
+            sum(r.rt_losses * r.avg_loss for r in results)
+            / max(1, sum(r.rt_losses for r in results))
+        ),
+        "profit_factor": (
+            sum(r.rt_wins * r.avg_win for r in results)
+            / max(1e-9, abs(sum(r.rt_losses * r.avg_loss for r in results)))
+        ),
         "by_category": {cat: {
             "count": len(vals),
             "mean": float(np.mean(vals)),
             "min": float(np.min(vals)),
             "max": float(np.max(vals)),
             "mean_sharpe": float(np.mean([r.sharpe_ratio for r in results if r.category == cat])),
+            "trade_win_rate": (
+                sum(r.rt_wins for r in results if r.category == cat)
+                / max(1, sum(r.rt_wins + r.rt_losses for r in results if r.category == cat))
+            ),
         } for cat, vals in by_category.items()},
     }
 
@@ -329,14 +451,24 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], 
     print(f"  Best PnL:      ${stats['max_pnl']:>12,.2f}")
     print(f"  5th %ile:      ${stats['p5_pnl']:>12,.2f}")
     print(f"  95th %ile:     ${stats['p95_pnl']:>12,.2f}")
-    print(f"  Win Rate:       {stats['win_rate']*100:>10.1f}%")
-    print(f"  Blow-up Rate:   {stats['blow_up_rate']*100:>10.1f}%")
+    print(f"  Positive Sessions:  {stats['positive_sessions_rate']*100:>6.1f}%  (sessions ending green; saturates at 100% for robust strats)")
+    print(f"  Blow-up Rate:       {stats['blow_up_rate']*100:>6.1f}%")
     print(f"  Worst DD:      ${stats['worst_drawdown']:>12,.2f}")
+    print()
+    print("Trade-Level Stats (FIFO round-trip realized P&L):")
+    print(f"  Round-trips:    {stats['total_round_trips']:>12,d}  "
+          f"(W:{stats['total_rt_wins']:,}  L:{stats['total_rt_losses']:,}  "
+          f"P:{stats['total_rt_pushes']:,})")
+    print(f"  Trade Win Rate: {stats['trade_win_rate']*100:>11.2f}%  <-- real edge signal")
+    print(f"  Avg Win:       ${stats['avg_win_pnl']:>12,.2f}")
+    print(f"  Avg Loss:      ${stats['avg_loss_pnl']:>12,.2f}")
+    print(f"  Profit Factor:  {stats['profit_factor']:>12.2f}  (>1 = winning system)")
     print()
     print("By Category:")
     for cat, cat_stats in stats["by_category"].items():
         print(f"  {cat:12s}: n={cat_stats['count']:>3d}  mean=${cat_stats['mean']:>10,.2f}  "
               f"Sharpe={cat_stats['mean_sharpe']:>6.2f}  "
+              f"trade_wr={cat_stats['trade_win_rate']*100:>5.1f}%  "
               f"range=[${cat_stats['min']:>10,.2f}, ${cat_stats['max']:>10,.2f}]")
     print("=" * 70)
 
@@ -360,6 +492,13 @@ def run_robust_backtest(trader_file: str, datasets: List[Tuple[str, str, str]], 
             "sortino": r.sortino_ratio,
             "calmar": r.calmar_ratio,
             "trade_count": r.trade_count,
+            "rt_wins": r.rt_wins,
+            "rt_losses": r.rt_losses,
+            "rt_pushes": r.rt_pushes,
+            "trade_win_rate": r.trade_win_rate,
+            "avg_win": r.avg_win,
+            "avg_loss": r.avg_loss,
+            "profit_factor": r.profit_factor,
         })
     pd.DataFrame(rows).to_csv(out_path, index=False)
     print(f"\nDetailed results saved to: {out_path}")
