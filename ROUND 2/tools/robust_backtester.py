@@ -13,6 +13,9 @@ Usage:
     python robust_backtester.py <trader_file> --imc-only
     python robust_backtester.py <trader_file> --scenarios-only
     python robust_backtester.py <trader_file> --quick
+    python robust_backtester.py <trader_file> --r2              # IMC: round 2 days only (+ real + scenarios)
+    python robust_backtester.py <trader_file> --r1 --imc-only  # IMC: round 1 days only (3 CSVs)
+    python robust_backtester.py <trader_file> --r1 --r2 --imc-only  # both rounds' IMC days (6 CSVs)
 """
 
 import sys
@@ -21,10 +24,11 @@ import json
 import math
 import argparse
 import importlib.util
+import re
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Set
 from dataclasses import dataclass, field
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -299,13 +303,31 @@ def run_backtest_on_csv(trader_file: str, csv_path: str, name: str, category: st
     )
 
 
-def discover_datasets(imc_only=False, scenarios_only=False, quick=False) -> List[Tuple[str, str, str]]:
+def _imc_round_from_path(p: Path) -> Optional[int]:
+    """Return 1 or 2 from ``prices_round_N_day_*.csv`` stem, else None."""
+    m = re.search(r"round_(\d+)_day_", p.name, re.I)
+    if not m:
+        return None
+    return int(m.group(1))
+
+
+def discover_datasets(
+    imc_only: bool = False,
+    scenarios_only: bool = False,
+    quick: bool = False,
+    imc_rounds: Optional[Set[int]] = None,
+) -> List[Tuple[str, str, str]]:
+    """Discover CSV paths. ``imc_rounds`` if set (e.g. {1}, {2}, {1,2}) filters IMC files by round number."""
     datasets = []
 
     if not scenarios_only:
         # Search for all IMC price files in DATA_DIR
         price_files = sorted(DATA_DIR.glob("prices_round_*_day_*.csv"))
         for p in price_files:
+            if imc_rounds is not None:
+                r = _imc_round_from_path(p)
+                if r is None or r not in imc_rounds:
+                    continue
             # Extract name like imc_round2_day_1
             name = p.stem.replace("prices_", "imc_")
             datasets.append((name, str(p), "imc"))
@@ -512,14 +534,44 @@ if __name__ == "__main__":
     parser.add_argument("--imc-only", action="store_true", help="Only test IMC historical data")
     parser.add_argument("--scenarios-only", action="store_true", help="Only test synthetic scenarios")
     parser.add_argument("--quick", action="store_true", help="Subset for speed (1 per regime)")
+    parser.add_argument(
+        "--r1",
+        action="store_true",
+        help="Include only Round 1 IMC days (prices_round_1_day_*.csv). Combine with --r2 for both.",
+    )
+    parser.add_argument(
+        "--r2",
+        action="store_true",
+        help="Include only Round 2 IMC days (prices_round_2_day_*.csv). Combine with --r1 for both.",
+    )
     parser.add_argument("--tag", type=str, default=None, help="Custom tag for this run (e.g. 'v4-beta')")
     args = parser.parse_args()
+
+    imc_rounds: Optional[Set[int]] = None
+    if args.r1 or args.r2:
+        imc_rounds = set()
+        if args.r1:
+            imc_rounds.add(1)
+        if args.r2:
+            imc_rounds.add(2)
 
     # Determine automatic tag if none provided
     if args.tag:
         run_tag = args.tag
     elif args.quick:
         run_tag = "quick"
+    elif args.imc_only and imc_rounds == {1}:
+        run_tag = "imc_r1"
+    elif args.imc_only and imc_rounds == {2}:
+        run_tag = "imc_r2"
+    elif args.imc_only and imc_rounds == {1, 2}:
+        run_tag = "imc_r1_r2"
+    elif imc_rounds == {1}:
+        run_tag = "r1"
+    elif imc_rounds == {2}:
+        run_tag = "r2"
+    elif imc_rounds == {1, 2}:
+        run_tag = "r1_r2"
     elif args.imc_only:
         run_tag = "imc"
     elif args.scenarios_only:
@@ -531,5 +583,12 @@ if __name__ == "__main__":
         imc_only=args.imc_only,
         scenarios_only=args.scenarios_only,
         quick=args.quick,
+        imc_rounds=imc_rounds,
     )
+    if imc_rounds is not None:
+        n_imc = sum(1 for _, _, c in datasets if c == "imc")
+        print(
+            f"IMC round filter {sorted(imc_rounds)}: {n_imc} historical day file(s); "
+            f"total datasets this run: {len(datasets)}"
+        )
     run_robust_backtest(args.trader, datasets, tag=run_tag)
