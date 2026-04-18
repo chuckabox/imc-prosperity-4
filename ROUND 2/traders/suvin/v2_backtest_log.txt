@@ -1,0 +1,40 @@
+
+Running 6 backtests for: ROUND 2/traders/suvin/trader_robust_suvin_v2.py
+======================================================================
+  [1/6] imc_round_1_day_-1                            PnL: $    8,474.00  DD: $1,599,530.00
+  [2/6] imc_round_1_day_-2                            PnL: $    5,058.00  DD: $1,599,553.00
+  [3/6] imc_round_1_day_0                             PnL: $    6,860.00  DD: $1,599,565.00
+  [4/6] imc_round_2_day_-1                            PnL: $    8,406.00  DD: $1,599,334.00
+  [5/6] imc_round_2_day_0                             PnL: $    6,738.00  DD: $1,599,640.00
+  [6/6] imc_round_2_day_1                             PnL: $    7,874.00  DD: $1,599,647.00
+
+======================================================================
+ROBUST BACKTEST SUMMARY
+======================================================================
+Trader:          ROUND 2/traders/suvin/trader_robust_suvin_v2.py
+Datasets tested: 6
+
+PnL Distribution:
+  Mean PnL:      $    7,235.00  <-- THE TARGET METRIC
+  Median PnL:    $    7,367.00
+  Std Dev:       $    1,186.15
+
+Risk-Adjusted Metrics (Averaged):
+  Mean Sharpe:          0.0003
+  Mean Sortino:         0.0003
+  Mean Calmar:          0.0045
+
+Risk Metrics:
+  Worst PnL:     $    5,058.00
+  Best PnL:      $    8,474.00
+  5th %ile:      $    5,478.00
+  95th %ile:     $    8,457.00
+  Win Rate:            100.0%
+  Blow-up Rate:          0.0%
+  Worst DD:      $1,599,647.00
+
+By Category:
+  imc         : n=  6  mean=$  7,235.00  Sharpe=  0.00  range=[$  5,058.00, $  8,474.00]
+======================================================================
+
+Detailed results saved to: /home/suvin/Desktop/GitHub/imc-prosperity-4/ROUND 2/results/robust/trader_robust_suvin_v2_quick_robust_results.csv
