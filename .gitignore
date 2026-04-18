@@ -20,7 +20,6 @@ env/
 .claude/
 graphify-out/
 .streamlit/
-results/
 logs/
 *.log
 
