@@ -18,7 +18,7 @@ import streamlit as st
 
 def _load_dashboard_module():
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    impl_path = os.path.join(repo_root, "ROUND 1", "tools", "dashboard.py")
+    impl_path = os.path.join(repo_root, "tools", "impl", "unified_dashboard.py")
     if not os.path.exists(impl_path):
         raise FileNotFoundError(
             f"Unified dashboard implementation not found at: {impl_path}"
