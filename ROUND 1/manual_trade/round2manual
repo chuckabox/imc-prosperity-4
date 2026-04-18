@@ -1,0 +1,60 @@
+You've been granted a substantial budget to expand your trading outpost. You have 50,000 XIRECs at your disposal to invest across three growth pillars: Research, Scale, and Speed.
+
+Investments in Research are directed toward quantitative research, data acquisition, machine learning infrastructure, backtesting systems, and related capabilities.
+
+Budget allocated to Scale supports traders, engineers, offices, exchange access, and other factors that allow your operations to expand.
+
+Investments in Speed are applied to technologies such as FPGA boards, colocation, RF towers, microwave links, and other latency-reducing infrastructure.
+
+This is a one-time opportunity and does not affect your algorithmic trading activities. Enter your submission below and click Submit to confirm.
+
+
+# **Manual trading challenge: “Invest & Expand”**
+
+You are expanding your outpost into a true market making firm with a budget of `50 000` XIRECs. You need to allocate this budget across three pillars:
+
+- **Research**
+- **Scale**
+- **Speed**
+
+You choose percentages for each pillar between 0–100%. Total allocation cannot exceed 100%. Your final PnL (Profit and Loss) score is:
+
+<aside>
+ℹ️
+
+PnL = (Research × Scale × Speed) − Budget_Used
+
+</aside>
+
+### **The pillars**
+
+**Research** determines how strong your trading edge is. It grows **logarithmically** from `0` (for `0` invested) to `200 000`  (for `100` invested). The exact formula is `research(x) = 200_000 * np.log(1 + x) / np.log(1 + 100)`. Here, `np.log` is a python function from NumPy package for natural logarithm.
+
+**Scale** determines how broadly you deploy your strategy across markets. It grows **linearly** from `0` (for `0` invested) to `7` (for `100` invested).
+
+**Speed** determines how often you win the trades you target. It is **rank-based** across all players:
+
+- Highest speed investment receives a `0.9` multiplier.
+- Lowest receives `0.1`.
+- Everyone in between is scaled linearly by rank, equal investments share the same rank.
+- For example, if people invested `70, 70, 70, 50, 40, 40, 30`, they get the following ranks: `1, 1, 1, 4, 5, 5, 7`. First three players get `0.9` for hit rate multiplier, last player gets `0.1`, and everybody in between gets linearly scaled between top and bottom rank. Another example, if you have three players investing `95, 20, 10`, their ranks are `1, 2, 3`, and their hit rates are `0.9, 0.5, 0.1`.
+
+Your Research, Scale, and Speed outcomes are multiplied together to form your gross PnL, after which the used part of your budget is deducted.
+
+Every decision you make reflects a real trade-off faced by modern market makers: capital is finite, competition is relentless, and edge alone is never enough. Good luck!
+
+### **Submit your orders**
+
+Choose the distribution of your budget by assigning percentages to the three pillars directly in the Manual Challenge Overview window and click the “Submit” button. You can re-submit new distributions until the end of the trading round. When the round ends, the last submitted distribution will be locked in and processed.
+
+
+YOUR investment
+Distribute your budget across the three pillars below.
+
+Research: _%
+Scale: _%
+Speed: _%
+
+Research forecast: 0 (This number represents the expected return on your investment)
+
+Scale forecast: x 0 (This multiplier represents the expected return on your investment)
