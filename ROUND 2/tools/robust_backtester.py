@@ -213,10 +213,13 @@ def discover_datasets(imc_only=False, scenarios_only=False, quick=False) -> List
     datasets = []
 
     if not scenarios_only:
-        for day in [-2, -1, 0]:
-            p = DATA_DIR / f"prices_round_1_day_{day}.csv"
-            if p.exists():
-                datasets.append((f"imc_day_{day}", str(p), "imc"))
+        # Search for all IMC price files in DATA_DIR
+        price_files = sorted(DATA_DIR.glob("prices_round_*_day_*.csv"))
+        for p in price_files:
+            # Extract name like imc_round2_day_1
+            name = p.stem.replace("prices_", "imc_")
+            datasets.append((name, str(p), "imc"))
+
 
     if imc_only:
         return datasets

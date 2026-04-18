@@ -22,10 +22,35 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import make_interp_spline
 
+CONFIG_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "config.json"))
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data_capsule"))
 
+def load_config():
+    defaults = {
+        "osmium_active": True,
+        "pepper_active": True,
+        "osmium_limit": 80,
+        "pepper_limit": 80,
+        "target_spread": 2,
+        "mr_threshold": 2,
+        "edge": 1.5,
+        "skew": 0.2
+    }
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            try:
+                config = json.load(f)
+                return {**defaults, **config}
+            except:
+                pass
+    return defaults
 
+def save_config(config):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=4)
 
 # Emergency stop removed per user request
+
 try:
     import optuna
     OPTUNA_AVAILABLE = True
@@ -448,33 +473,47 @@ def run_backtest_simulation(day):
 # Disable caching temporarily to ensure fresh data for every backtest
 # @st.cache_data
 def load_and_process_data(day):
-    days_to_load = [-2, -1, 0] if day == "All" else [day]
     all_prices = []
     all_trades = []
     
-    for d in days_to_load:
-        prices_file = os.path.join(DATA_DIR, f"prices_round_1_day_{d}.csv")
-        trades_file = os.path.join(DATA_DIR, f"trades_round_1_day_{d}.csv")
+    if day == "All":
+        # Discover all available day files in DATA_DIR
+        price_files = [f for f in os.listdir(DATA_DIR) if f.startswith("prices_round_") and f.endswith(".csv")]
+        days_to_load_files = [(f, f.replace("prices_", "trades_")) for f in price_files]
+    else:
+        # Look for the specific day in any round
+        price_files = [f for f in os.listdir(DATA_DIR) if f.startswith("prices_round_") and f.endswith(f"_day_{day}.csv")]
+        days_to_load_files = [(f, f.replace("prices_", "trades_")) for f in price_files]
+
+    for p_file, t_file in days_to_load_files:
+        prices_full_path = os.path.join(DATA_DIR, p_file)
+        trades_full_path = os.path.join(DATA_DIR, t_file)
         
-        if os.path.exists(prices_file):
-            df_p = pd.read_csv(prices_file, sep=";")
+        # Extract day and round from filename
+        match = re.search(r"round_(\d+)_day_(-?\d+)", p_file)
+        r_num = int(match.group(1)) if match else 1
+        d_num = int(match.group(2)) if match else 0
+
+        if os.path.exists(prices_full_path):
+            df_p = pd.read_csv(prices_full_path, sep=";")
             df_p = df_p.dropna(subset=["bid_price_1", "ask_price_1", "timestamp"])
-            # Offset timestamp for continuity if showing All
             if day == "All":
-                # days are -2, -1, 0 -> normalized to index 0, 1, 2 for continuous timeline
-                offset = (d + 2) * 1000000 
+                # offset for unique continuous timeline across rounds/days
+                offset = (r_num * 10 + d_num + 10) * 1000000 
                 df_p["timestamp"] = df_p["timestamp"] + offset
-            df_p["day"] = d
+            df_p["day"] = d_num
+            df_p["round"] = r_num
             all_prices.append(df_p)
             
-        if os.path.exists(trades_file):
-            df_t = pd.read_csv(trades_file, sep=";")
+        if os.path.exists(trades_full_path):
+            df_t = pd.read_csv(trades_full_path, sep=";")
             if "symbol" in df_t.columns:
                 df_t = df_t.rename(columns={"symbol": "product"})
             if day == "All":
-                offset = (d + 2) * 1000000
+                offset = (r_num * 10 + d_num + 10) * 1000000
                 df_t["timestamp"] = df_t["timestamp"] + offset
-            df_t["day"] = d
+            df_t["day"] = d_num
+            df_t["round"] = r_num
             all_trades.append(df_t)
 
     if not all_prices:
@@ -663,8 +702,8 @@ def main():
         The goal: **best average PnL across ANY situation**, not peak PnL on known data.
         """)
 
-        # Robust backtester outputs are now saved under ROUND 1/results/robust.
-        # Keep a fallback to ROUND 1/tools for older runs.
+        # Robust backtester outputs are now saved under results/robust.
+        # Keep a fallback to tools for older runs.
         robust_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "robust"))
         fallback_tools_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -833,10 +872,10 @@ def main():
                 with col_s1:
                     sel_trader = st.selectbox("Target Trader", trader_search, key="stress_trader", index=next((i for i, x in enumerate(trader_search) if "v2d" in x), 0))
                 with col_s2:
-                    sel_source = st.selectbox("Base Dataset", ["All (Round 1 Data)", -1, -2, 0], index=0)
+                    sel_source = st.selectbox("Base Dataset", ["All (Historical Data)", -1, -2, 0, 1], index=0)
 
                 if st.button("☣️ Run Destructive Mutation Suite", type="primary", use_container_width=True):
-                    source_key = "All" if sel_source == "All (Round 1 Data)" else sel_source
+                    source_key = "All" if sel_source == "All (Historical Data)" else sel_source
                     df_p, _ = load_and_process_data(source_key)
                     if df_p is None:
                         st.error("Base data not found!")
@@ -957,11 +996,13 @@ def main():
                             - **Shuffled**: Tests if trade timing/order matters.
                             - **Flat+Noise**: Tests if the bot over-trades (chops) in dead markets.
                             - **Amplified**: Tests if the bot can handle high volatility.
+                            - **Dampened**: Tests if the bot reacts to small moves.
                             """)
+
 
         else:
             st.warning("No robust results found. Run the robust backtester first:")
-            st.code("python ROUND 1/tools/robust_backtester.py ROUND 1/traders/trader_robust.py --quick")
+            st.code("python ROUND 2/tools/robust_backtester.py ROUND 2/traders/suvin/trader_robust_suvin_v1.py --quick")
 
 
     with tab_backtest:
@@ -972,7 +1013,7 @@ def main():
             def on_day_change():
                 run_backtest_simulation(st.session_state.day_radio)
 
-            day_options = ["All", -1, -2, 0]
+            day_options = ["All", -2, -1, 0, 1]
             selected_day = st.radio("Select Historical Data Day:", day_options,
                                      key="day_radio",
                                      index=0,
@@ -1015,6 +1056,9 @@ def main():
             st.markdown("#### 🌶️ INTARIAN PEPPER ROOT (Trend MM)")
             render_chart(df_prices, df_trades, "INTARIAN_PEPPER_ROOT", "#e74c3c", show_mean=False)
 
+            st.markdown("#### 🌎 Total Market Reconstruction")
+            render_total_chart(df_prices, df_trades)
+
 
     with tab_signals:
         st.header("📡 Signal Analytics & Regime Detection")
@@ -1053,7 +1097,9 @@ def main():
         # This scans the results/robust directory to build a grid of Day performance
         robust_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "robust"))
         if not os.path.exists(robust_results_dir):
-             robust_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ROUND 1", "results", "robust"))
+             # Try to find any results directory in the parent if the standard one is missing
+             robust_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "ROUND 1", "results", "robust"))
+
         
         if os.path.exists(robust_results_dir):
             all_files = [f for f in os.listdir(robust_results_dir) if f.endswith("_robust_results.csv")]
