@@ -1,6 +1,6 @@
 # Rust backtester in this repo
 
-The [prosperity_rust_backtester](https://github.com/GeyzsoN/prosperity_rust_backtester) clone lives under `external/prosperity_rust_backtester/`.
+The [prosperity_rust_backtester](https://github.com/GeyzsoN/prosperity_rust_backtester) sources live under `external/prosperity_rust_backtester/` as **normal tracked files** in this repo (vendored copy). If that folder used to look empty after `git clone`, it was because Git had stored only a **submodule pointer** (gitlink) without a `.gitmodules` file—clones do not download submodule contents unless configured. Vendoring avoids that.
 
 ## IMC Prosperity data layout here
 
