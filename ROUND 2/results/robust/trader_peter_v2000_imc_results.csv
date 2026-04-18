@@ -1,0 +1,4 @@
+name,category,final_pnl,max_drawdown,sharpe,trade_count,pnl_INTARIAN_PEPPER_ROOT,pnl_ASH_COATED_OSMIUM
+imc_r2_round_2_day_-1,round_2,533074.0,840.0,37.91758433531687,42263,145972.0,387102.0
+imc_r2_round_2_day_0,round_2,526013.0,948.0,35.05817897385355,42066,150768.0,375245.0
+imc_r2_round_2_day_1,round_2,541215.0,1008.0,33.44662096480181,42150,158822.0,382393.0
