@@ -10,8 +10,6 @@ import re
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import make_interp_spline
-from datamodel import Listing, OrderDepth, TradingState, Observation, Order
-
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 ROUND_DIRS = sorted(
@@ -19,6 +17,11 @@ ROUND_DIRS = sorted(
     if d.startswith("ROUND ") and os.path.isdir(os.path.join(REPO_ROOT, d))
 )
 DEFAULT_ROUND = ROUND_DIRS[0] if ROUND_DIRS else "ROUND 1"
+
+# Bootstrap datamodel path
+sys.path.insert(0, os.path.join(REPO_ROOT, DEFAULT_ROUND, "config"))
+
+from datamodel import Listing, OrderDepth, TradingState, Observation, Order
 
 def get_paths(round_name: str | None = None) -> dict:
     rn = round_name or st.session_state.get("active_round", DEFAULT_ROUND)
