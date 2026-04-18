@@ -14,15 +14,6 @@ env/
 *.swp
 *.swo
 
-# Project Specific
-.agent/
-.agents/
-.claude/
-graphify-out/
-.streamlit/
-logs/
-*.log
-
 # Backtester / Compiled
 backtester_rust/target/
 bin/

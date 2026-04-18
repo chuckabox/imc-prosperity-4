@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import ast; ast.parse\\(open\\('trader_robust_peter_v10_safe.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('trader_robust_peter_v6d.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('trader_robust_peter_v11.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('trader_robust_peter_v12.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('trader_robust_peter_v13.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Read(//c/Users/peter/.claude//**)",
+      "Read(//c/Users/peter/.claude/**)",
+      "Bash(python -c \"import graphifyy\")",
+      "Bash(graphify --help)",
+      "Bash(graphify update *)",
+      "Bash(python precompute.py --iter 1000)",
+      "Bash(python -c \"import json; d=json.load\\(open\\('optimum_config.json'\\)\\); print\\(json.dumps\\(d['optima'], indent=2\\)\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(python -)",
+      "Bash(python3 -c \"from trader_peter_v2 import Trader; t = Trader\\(\\); print\\('✓ Trader loads successfully'\\)\")",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '..'\\); from datamodel import Order; print\\('✓ datamodel imports OK'\\)\")",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '..'\\); from datamodel import Order; print\\('[OK] datamodel imports'\\)\")",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '..'\\); from trader_peter_v2 import Trader; t = Trader\\(\\); print\\('[OK] Trader v2 loads'\\)\")"
+    ]
+  }
+}
