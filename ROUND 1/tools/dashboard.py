@@ -1488,14 +1488,6 @@ def main():
             st.warning("No robust results found. Run the robust backtester first:")
             st.code("python ROUND 1/tools/robust_backtester.py ROUND 1/traders/trader_robust.py --quick")
 
-        sweep_dir = os.path.join(os.path.dirname(__file__), "sweep_results")
-        if os.path.exists(sweep_dir):
-            pngs = [f for f in os.listdir(sweep_dir) if f.endswith(".png")]
-            if pngs:
-                st.divider()
-                st.subheader("Parameter Sweep Visualizations")
-                for png in sorted(pngs):
-                    st.image(os.path.join(sweep_dir, png), caption=png.replace("_", " ").replace(".png", ""))
 
     with tab_backtest:
 
