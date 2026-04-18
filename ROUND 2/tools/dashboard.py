@@ -385,86 +385,33 @@ def run_backtest_simulation(day, round_filter="All"):
     }
     st.success(f"Simulation Complete! Final PnL: **{final_pnl:,.2f}**")
 
-    if st.session_state.trades_log:
-        st.divider()
-        st.subheader("☣️ Adverse Selection (Toxic Flow) Audit")
-        
-        # --- Toxicity Calculation ---
-        trades_df = pd.DataFrame(st.session_state.trades_log)
-        
+    # --- Toxicity Enrichment & Storage ---
+    trades_df = pd.DataFrame(st.session_state.trades_log)
+    if not trades_df.empty:
         # Fast lookup for future prices (T+10)
-        DELAY = 1000 # 1000ms = 10 ticks (if 100ms per tick) - Prosperity timestamps are in increments.
-        # Let's use 10 * steps. If timestamp is 0, 100, 200, then T+10 is T + 1000.
-        
+        DELAY = 1000 
         price_lookup = df_prices.set_index(["timestamp", "product"])["mid_price"].to_dict()
         
         def get_toxic_delta(row):
             future_ts = row["ts"] + DELAY
             future_mid = price_lookup.get((future_ts, row["product"]))
             if future_mid is None: return None
-            
             delta = future_mid - row["mid_fill"]
-            # BUY: toxic if price drops (delta < 0)
-            # SELL: toxic if price rises (delta > 0)
-            if row["side"] == "BUY":
-                return -delta # Positive value = bad for us
-            else:
-                return delta # Positive value = bad for us
+            return -delta if row["side"] == "BUY" else delta
 
         trades_df["adverse_delta"] = trades_df.apply(get_toxic_delta, axis=1)
         trades_df["is_toxic"] = trades_df["adverse_delta"] > 0
-        
-        col_t1, col_t2, col_t3 = st.columns(3)
-        valid_trades = trades_df.dropna(subset=["adverse_delta"])
-        
-        if not valid_trades.empty:
-            toxic_rate = valid_trades["is_toxic"].mean() * 100
-            mean_adv = valid_trades[valid_trades["is_toxic"]]["adverse_delta"].mean()
-            
-            col_t1.metric("Overall Toxicity Score", f"{toxic_rate:.1f}%", help="Percentage of fills where the market moved against you within 10 ticks.")
-            col_t2.metric("Mean Adverse Move", f"{mean_adv:.2f}", help="Average price move against you on toxic fills.")
-            col_t3.metric("Trade Count", len(trades_df))
-            
-            # --- Per-Product Breakdown ---
-            st.markdown("#### Per-Product Signal Quality")
-            prod_stats = valid_trades.groupby(["product", "side"]).agg(
-                toxicity=("is_toxic", "mean"),
-                avg_adverse=("adverse_delta", "mean"),
-                count=("ts", "count")
-            ).reset_index()
-            prod_stats["toxicity"] = (prod_stats["toxicity"] * 100).map("{:.1f}%".format)
-            st.table(prod_stats)
-            
-            # --- Histograms ---
-            st.markdown("#### Adverse Delta Distribution")
-            hist = alt.Chart(valid_trades).mark_bar().encode(
-                x=alt.X("adverse_delta:Q", bin=alt.Bin(maxbins=30), title="Adverse Move (Positive = Bad)"),
-                y="count()",
-                color=alt.Color("side:N", scale=alt.Scale(domain=["BUY", "SELL"], range=["#2ecc71", "#e74c3c"]))
-            ).properties(height=250).interactive()
-            st.altair_chart(hist, use_container_width=True)
-
-        with st.expander("📝 Detailed Trade Log", expanded=False):
-            st.dataframe(trades_df.sort_values("ts", ascending=False), use_container_width=True)
-
-        # --- NEW: Edge Efficiency Curve ---
-        st.subheader("🎯 Edge Efficiency Curve")
-        st.markdown("> **What it's for:** Finding the 'Sweet Spot' for your quoting distance. If your edge is too small, you get toxic fills; if it's too large, you never trade.  \n> **How to use:** Look for the peak in the PnL/Trade line. That's your optimal required edge for this asset.")
-        
         trades_df["edge"] = (trades_df["price"] - trades_df["mid_fill"]).abs()
-        edge_stats = trades_df.groupby(["product", "edge"]).agg(
-            count=("ts", "count"),
-            toxic_count=("is_toxic", "sum"),
-            avg_adv=("adverse_delta", "mean")
-        ).reset_index()
-        
-        edge_chart = alt.Chart(edge_stats).mark_line(point=True).encode(
-            x=alt.X("edge:Q", title="Offered Edge (Distance from Mid)"),
-            y=alt.Y("count:Q", title="Fill Count"),
-            color="product:N",
-            tooltip=["edge", "count", "toxic_count", "avg_adv"]
-        ).properties(height=300).interactive()
-        st.altair_chart(edge_chart, use_container_width=True)
+
+    final_pnl = pnl_history[-1] if pnl_history else 0
+    st.session_state.sim_result = {
+        "pnl": final_pnl, 
+        "day": day, 
+        "round": round_filter,
+        "trades": trades_df.to_dict('records') if not trades_df.empty else [],
+        "ticks": full_tick_data
+    }
+    st.success(f"Simulation Complete! Final PnL: **{final_pnl:,.2f}**")
 
     if pnl_history:
         pnl_df = pd.DataFrame({"Timestamp": range(len(pnl_history)), "PnL": pnl_history})
@@ -692,6 +639,77 @@ def render_reversal_chart(df, product, start_idx=0, window=1000):
     st.pyplot(fig, use_container_width=True)
 
 
+def render_toxic_audit_tab(res):
+    if not res or not res.get("trades"):
+        st.info("Run a Visual Backtest simulation first to see Toxic Flow data.")
+        return
+    
+    trades_df = pd.DataFrame(res["trades"])
+    if trades_df.empty:
+        st.warning("No trades recorded in the last simulation.")
+        return
+
+    st.subheader("☣️ Adverse Selection (Toxic Flow) Audit")
+    
+    col_t1, col_t2, col_t3 = st.columns(3)
+    valid_trades = trades_df.dropna(subset=["adverse_delta"])
+    
+    if not valid_trades.empty:
+        toxic_rate = valid_trades["is_toxic"].mean() * 100
+        mean_adv = valid_trades[valid_trades["is_toxic"]]["adverse_delta"].mean()
+        
+        col_t1.metric("Overall Toxicity Score", f"{toxic_rate:.1f}%", help="Percentage of fills where the market moved against you within 10 ticks.")
+        col_t2.metric("Mean Adverse Move", f"{mean_adv:.2f}", help="Average price move against you on toxic fills.")
+        col_t3.metric("Trade Count", len(trades_df))
+        
+        st.markdown("#### Per-Product Signal Quality")
+        prod_stats = valid_trades.groupby(["product", "side"]).agg(
+            toxicity=("is_toxic", "mean"),
+            avg_adverse=("adverse_delta", "mean"),
+            count=("ts", "count")
+        ).reset_index()
+        prod_stats["toxicity"] = (prod_stats["toxicity"] * 100).map("{:.1f}%".format)
+        st.table(prod_stats)
+        
+        st.markdown("#### Adverse Delta Distribution")
+        hist = alt.Chart(valid_trades).mark_bar().encode(
+            x=alt.X("adverse_delta:Q", bin=alt.Bin(maxbins=30), title="Adverse Move (Positive = Bad)"),
+            y="count()",
+            color=alt.Color("side:N", scale=alt.Scale(domain=["BUY", "SELL"], range=["#2ecc71", "#e74c3c"]))
+        ).properties(height=350).interactive()
+        st.altair_chart(hist, use_container_width=True)
+
+    with st.expander("📝 Detailed Trade Log", expanded=False):
+        st.dataframe(trades_df.sort_values("ts", ascending=False), use_container_width=True)
+
+def render_edge_efficiency_tab(res):
+    if not res or not res.get("trades"):
+        st.info("Run a Visual Backtest simulation first to see Edge Efficiency data.")
+        return
+    
+    trades_df = pd.DataFrame(res["trades"])
+    if trades_df.empty:
+        st.warning("No trades recorded in the last simulation.")
+        return
+
+    st.subheader("🎯 Edge Efficiency Curve")
+    st.markdown("> **What it's for:** Finding the 'Sweet Spot' for your quoting distance. If your edge is too small, you get toxic fills; if it's too large, you never trade.")
+    
+    edge_stats = trades_df.groupby(["product", "edge"]).agg(
+        count=("ts", "count"),
+        toxic_count=("is_toxic", "sum"),
+        avg_adv=("adverse_delta", "mean")
+    ).reset_index()
+    
+    edge_chart = alt.Chart(edge_stats).mark_line(point=True).encode(
+        x=alt.X("edge:Q", title="Offered Edge (Distance from Mid)"),
+        y=alt.Y("count:Q", title="Fill Count"),
+        color="product:N",
+        tooltip=["edge", "count", "toxic_count", "avg_adv"]
+    ).properties(height=400).interactive()
+    st.altair_chart(edge_chart, use_container_width=True)
+
+
 def main():
     st.set_page_config(
         page_title="P4 Control Center",
@@ -702,10 +720,12 @@ def main():
     st.title("📈 Prosperity 4: Operations Console")
 
     # Final tab layout
-    tab_backtest, tab_robust, tab_signals = st.tabs([
+    tab_backtest, tab_robust, tab_signals, tab_toxic, tab_edge = st.tabs([
         "📉 Visual Backtester",
         "🛡️ Robust Analysis",
-        "📡 Signal Analytics"
+        "📡 Signal Analytics",
+        "☣️ Toxic Flow Audit",
+        "🎯 Edge Efficiency"
     ])
 
 
@@ -1127,6 +1147,12 @@ def main():
                 st.info("Run a simulation with Pepper active to see Signal Lag diagnostics.")
         else:
             st.info("Run a Visual Backtest simulation first to populate Signal Analytics.")
+
+    with tab_toxic:
+        render_toxic_audit_tab(st.session_state.get("sim_result"))
+
+    with tab_edge:
+        render_edge_efficiency_tab(st.session_state.get("sim_result"))
 
 
 if __name__ == "__main__":
