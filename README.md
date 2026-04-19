@@ -26,6 +26,12 @@ Run the unified dashboard to visualize prices, execute backtests, and run the ma
 streamlit run "tools/dashboard.py"
 ```
 
+OR
+
+```bash
+python -m streamlit run tools/dashboard.py
+```
+
 _Note: The dashboard now defaults to **Round 2** but allows switching rounds via the sidebar._
 
 ### 2. Run Robust Backtests (CLI)
