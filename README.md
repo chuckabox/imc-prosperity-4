@@ -34,7 +34,7 @@ Test your traders against all available historical days, real-world data, and sy
 
 ```bash
 # Using the unified backtester (Consolidated results go to ROUND 2/results/robust)
-python tools/robust_backtester.py ROUND 2/traders/your_trader.py --quick
+python tools/robust_backtester.py "ROUND 2/traders/your_trader.py" --quick
 ```
 
 ---
