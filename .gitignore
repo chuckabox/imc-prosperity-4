@@ -14,11 +14,6 @@ env/
 *.swp
 *.swo
 
-# Backtester / Compiled
-backtester_rust/target/
-bin/
-obj/
-
 # OS/System
 .DS_Store
 Thumbs.db
