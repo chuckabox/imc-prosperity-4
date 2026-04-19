@@ -60,6 +60,12 @@ From the repo root this builds the vendored crate (release) if needed, then runs
 python "tools/run_rust_backtester.py"
 ```
 
+If Windows reports **`linker link.exe not found`**, either install **Visual Studio Build Tools** (C++ workload) or run the same script through **WSL** (Rust + `build-essential` installed inside Ubuntu):
+
+```powershell
+python "tools/run_rust_backtester.py" --use-wsl
+```
+
 Override trader or dataset, or pass extra flags to the Rust binary:
 
 ```powershell
@@ -68,7 +74,7 @@ python "tools/run_rust_backtester.py" -- --day -1
 python "tools/run_rust_backtester.py" --no-build
 ```
 
-Sources live in `external/prosperity_rust_backtester/`. You need **`cargo`** on PATH. On **Windows**, the first build needs the **MSVC linker** (Visual Studio Build Tools with “Desktop development with C++”) unless you use **WSL2**. More detail: **`external/README_IMC_PROSPERITY.md`**.
+Sources live in `external/prosperity_rust_backtester/`. Native Windows builds need **`cargo`** + MSVC linker; **`--use-wsl`** needs `wsl` on PATH and **`cargo`** inside the distro. More detail: **`external/README_IMC_PROSPERITY.md`**.
 
 ### 4. Real-world market fetcher (off by default)
 

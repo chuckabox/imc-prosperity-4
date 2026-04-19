@@ -8,6 +8,12 @@ The [prosperity_rust_backtester](https://github.com/GeyzsoN/prosperity_rust_back
 python tools/run_rust_backtester.py
 ```
 
+On **Windows**, if the build fails with **`link.exe` not found**, use WSL (Rust must be installed in Linux):
+
+```bash
+python tools/run_rust_backtester.py --use-wsl
+```
+
 This runs `cargo build --release` in `external/prosperity_rust_backtester/` (unless you pass `--no-build` and the binary already exists), then executes `rust_backtester` with default `--trader` / `--dataset` pointing at **Round 2** capsule CSVs. Extra CLI flags go after `--`, e.g. `python tools/run_rust_backtester.py -- --day -1`.
 
 ## IMC Prosperity data layout here
