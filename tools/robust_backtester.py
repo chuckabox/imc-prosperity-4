@@ -10,7 +10,9 @@ Usage:
     python tools/robust_backtester.py <trader_file>
     python tools/robust_backtester.py <trader_file> --quick
     python tools/robust_backtester.py <trader_file> --rounds 1 2
-    python tools/robust_backtester.py <trader_file> --imc  # Run only IMC historical days
+    python tools/robust_backtester.py <trader_file> --r1 --imc   # Round 1 IMC days only
+    python tools/robust_backtester.py <trader_file> --r2         # Round 2 capsule (+ real + scen for R2)
+    python tools/robust_backtester.py <trader_file> --imc        # IMC days for all --rounds
 """
 
 import sys
@@ -410,6 +412,16 @@ if __name__ == "__main__":
     parser.add_argument("trader", help="Path to trader .py file")
     parser.add_argument("extra_tag", nargs="?", help="Optional tag for results filename")
     parser.add_argument("--rounds", type=int, nargs="+", default=[1, 2], help="Rounds to include (default: 1 2)")
+    parser.add_argument(
+        "--r1",
+        action="store_true",
+        help="Shortcut: include only Round 1 (same as --rounds 1). Combine with --r2 for both.",
+    )
+    parser.add_argument(
+        "--r2",
+        action="store_true",
+        help="Shortcut: include only Round 2 (same as --rounds 2). Combine with --r1 for both.",
+    )
     parser.add_argument("--quick", action="store_true", help="Subset for speed")
     parser.add_argument("--tag", type=str, default=None, help="Tag for results file")
     parser.add_argument("--imc", action="store_true", help="Only run IMC historical days")
@@ -417,7 +429,16 @@ if __name__ == "__main__":
     parser.add_argument("--scen", action="store_true", help="Only run synthetic scenarios")
     args = parser.parse_args()
 
-    datasets = discover_datasets(args.rounds, quick=args.quick)
+    if args.r1 or args.r2:
+        rounds_list: List[int] = []
+        if args.r1:
+            rounds_list.append(1)
+        if args.r2:
+            rounds_list.append(2)
+    else:
+        rounds_list = list(args.rounds)
+
+    datasets = discover_datasets(rounds_list, quick=args.quick)
     
     # Filter by category if requested
     if args.imc or args.real or args.scen:
