@@ -60,7 +60,7 @@ def _release_binary_wsl_name() -> str:
 
 def _wslpath(p: Path) -> str:
     r = subprocess.run(
-        ["wsl", "wslpath", "-a", str(p.resolve())],
+        ["wsl", "wslpath", "-a", p.resolve().as_posix()],
         capture_output=True,
         text=True,
         timeout=30,

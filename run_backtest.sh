@@ -3,7 +3,7 @@
 
 # Get the absolute path of the backtester binary
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-BINARY="$SCRIPT_DIR/backtester/target/release/rust_backtester"
+BINARY="$SCRIPT_DIR/external/prosperity_rust_backtester/target/release/rust_backtester"
 
 # Check if running in WSL
 if grep -q Microsoft /proc/version; then
