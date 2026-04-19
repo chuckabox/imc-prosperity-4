@@ -12,7 +12,7 @@ A unified repository for strategy development, backtesting, and analysis, curren
 - **`tools/run_rust_backtester.py`**: One command to build and run the vendored Rust backtester against Round 2 capsule data.
 - **`tools/impl/`**: Core implementation of the Unified Dashboard.
 - **`requirements-dashboard.txt`**: Python dependencies for the Streamlit dashboard (install once from the repo root).
-- **`backtester/`**: High-performance [Rust backtester](https://github.com/GeyzsoN/prosperity_rust_backtester) (primary testing engine).
+- **`external/prosperity_rust_backtester/`**: High-performance [Rust backtester](https://github.com/GeyzsoN/prosperity_rust_backtester) (primary testing engine).
 - **`run_backtest.ps1` / `.sh`**: Convenient wrapper scripts for the Rust backtester (handles Windows/WSL pathing).
 - **`tools/manual_optimiser/`**: Advanced multi-scenario optimization for Round 2 manual challenges.
 - **`archive/`**: Retired rounds, legacy backtesters, and secondary tools.
@@ -90,6 +90,32 @@ python "tools/run_rust_backtester.py" -- --day -1
 ```
 
 Sources live in `external/prosperity_rust_backtester/`. For more detail on the engine, see [the original repo](https://github.com/GeyzsoN/prosperity_rust_backtester).
+
+### 🔍 Simple Backtesting Guide
+
+Follow these steps to test your latest trading strategy:
+
+1.  **Identify your trader script**: 
+    Most active strategies are in `ROUND 2/traders/peter/` or `ROUND 2/traders/suvin/`.
+    *Example: `ROUND 2/traders/peter/trader_peter_v2001.py`*
+
+2.  **Run the backtest**:
+    Use the following command to test your trader against the Round 2 data capsule:
+    ```powershell
+    python "tools/run_rust_backtester.py" --use-wsl --trader "ROUND 2/traders/peter/trader_peter_v2001.py"
+    ```
+
+3.  **Analyse the results**:
+    The backtester will output a PnL summary per product. Detailed logs are saved in:
+    `external/prosperity_rust_backtester/runs/<backtest-id>/`
+
+4.  **(Optional) Visual Analysis**:
+    Launch the dashboard to compare multiple runs:
+    ```powershell
+    streamlit run "tools/dashboard.py"
+    ```
+
+---
 
 
 ### 4. Real-world market fetcher (off by default)
