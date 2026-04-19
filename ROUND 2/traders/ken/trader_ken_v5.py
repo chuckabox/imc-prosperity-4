@@ -2,8 +2,9 @@
 trader_ken_v5.py — Round 2 hybrid final trader
 ==============================================
 
-Backbone: Holy_graill.py (v9) — AR(3) Osmium fair, Titan Shield, z-slope crash,
-          Holy_grail v8 aggressive Pepper.
+Backbone: Holy_graill.py (v9, two “l” after grai) — AR(3) Osmium fair, Titan Shield,
+          z-slope crash, Holy_grail v8 aggressive Pepper. Not Holy_grailll.py (v10 OBI,
+          three “l”) — that is a separate champion build.
 
 Additions (from peter_v1000 + plan):
   * bid() = 0 — skip MAF (no fee, standard 80% flow in backtests).
