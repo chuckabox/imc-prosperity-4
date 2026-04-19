@@ -95,7 +95,7 @@ for fpath in files:
         candidates[key] = fair - pdf["mid"]
     
     # VWAP + L1 OBI shift
-    for shift in [0.3, 0.5, 0.8]:
+    for shift in [0.3, 0.5, 0.8, 1.2, 1.5, 2.0, 2.5, 3.0]:
         key = f"vwap + L1*{shift}"
         fair = pdf["vwap_mid"] + pdf["obi_l1"] * shift
         candidates[key] = fair - pdf["mid"]
