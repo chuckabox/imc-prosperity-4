@@ -1077,9 +1077,15 @@ def render_rust_backtester_tab():
             try:
                 with open(metrics_path, "r") as f:
                     data = json.load(f)
-                    # Use parent folder name as run_id if missing or generic
+                    # Extract the base directory name to help with grouping
+                    run_folder = os.path.basename(root)
                     if not data.get("run_id") or data["run_id"] == "backtest":
-                         data["run_id"] = os.path.basename(root)
+                         data["run_id"] = run_folder
+                    
+                    # Extract the base prefix (removing -day-X) to group multi-day runs
+                    # backtest-1776586006173-data-capsule-day-1 -> backtest-1776586006173-data-capsule
+                    match = re.search(r"(backtest-\d+-[^/]+?)-day-", run_folder)
+                    data["base_run_id"] = match.group(1) if match else run_folder
                     runs.append(data)
             except:
                 pass
@@ -1088,9 +1094,49 @@ def render_rust_backtester_tab():
         st.info("No valid backtest metrics found in the runs directory.")
         return
         
-    df_runs = pd.DataFrame(runs)
-    if "generated_at" in df_runs.columns:
-        df_runs["generated_at"] = pd.to_datetime(df_runs["generated_at"])
+    df_raw = pd.DataFrame(runs)
+    if "generated_at" in df_raw.columns:
+        df_raw["generated_at"] = pd.to_datetime(df_raw["generated_at"])
+    
+    # Aggregation Logic: Group by base_run_id and trader_path to get a "Total" view
+    def aggregate_pnl_by_product(series):
+        merged = {}
+        for d in series:
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    merged[k] = merged.get(k, 0) + v
+        return merged
+
+    agg_cols = ["base_run_id", "trader_path"]
+    agg_map = {
+        "final_pnl_total": "sum",
+        "own_trade_count": "sum",
+        "generated_at": "max",
+        "day": lambda x: "Total (+All)" if len(x) > 1 else str(list(x)[0]),
+        "dataset_id": "first"
+    }
+    
+    # Store daily win info for later
+    daily_win_info = df_raw.groupby(agg_cols).apply(
+        lambda x: (x["final_pnl_total"] > 0).mean() * 100
+    ).to_dict()
+
+    if "final_pnl_by_product" in df_raw.columns:
+        agg_map["final_pnl_by_product"] = aggregate_pnl_by_product
+        
+    df_runs = df_raw.groupby(agg_cols).agg(agg_map).reset_index()
+    
+    # Map back the Win Rate %
+    df_runs["WinRateDays"] = df_runs.apply(lambda r: daily_win_info.get((r["base_run_id"], r["trader_path"]), 0), axis=1)
+    
+    # Calculate PnL per Trade (Efficiency)
+    df_runs["PnLPerTrade"] = df_runs["final_pnl_total"] / df_runs["own_trade_count"].replace(0, np.nan)
+    
+    # Use the base_run_id as the primary identifier now
+    df_runs["run_id"] = df_runs["base_run_id"]
+    
+    # Create the consolidated list for the deep dive lookup
+    consol_runs = df_runs.to_dict("records")
     
     # Enrich df with trader name for easier comparison
     if "trader_path" in df_runs.columns:
@@ -1109,10 +1155,11 @@ def render_rust_backtester_tab():
     # Create mapping for selectors
     label_to_id = dict(zip(df_runs["DisplayLabel"], df_runs["run_id"]))
     
+    all_labels = df_runs.sort_values("generated_at", ascending=False)["DisplayLabel"].tolist()
     selected_labels = st.multiselect(
         "Select traders/runs to compare",
-        options=df_runs.sort_values("generated_at", ascending=False)["DisplayLabel"].tolist(),
-        default=df_runs.sort_values("generated_at", ascending=False)["DisplayLabel"].tolist()[:5],
+        options=all_labels,
+        default=all_labels,
         help="Choose multiple backtest runs to see a side-by-side comparison."
     )
 
@@ -1126,12 +1173,14 @@ def render_rust_backtester_tab():
         
         # Comparison Metrics Table - simplified to essentials
         st.dataframe(
-            comp_df[["Rank", "DisplayLabel", "final_pnl_total", "own_trade_count"]],
+            comp_df[["Rank", "DisplayLabel", "final_pnl_total", "WinRateDays", "PnLPerTrade", "own_trade_count"]],
             column_config={
-                "Rank": st.column_config.NumberColumn("Rank", format="%d", help="Ordered by Total PnL"),
+                "Rank": st.column_config.NumberColumn("Rank", format="%d"),
                 "DisplayLabel": "Trader Run Details",
                 "final_pnl_total": st.column_config.NumberColumn("Total PnL", format="$%d"),
-                "own_trade_count": "Trades",
+                "WinRateDays": st.column_config.NumberColumn("Day Win %", format="%.0f%%", help="% of days that were profitable"),
+                "PnLPerTrade": st.column_config.NumberColumn("Efficiency", format="$%.2f/tr", help="Average PnL made per trade"),
+                "own_trade_count": "Total Trades",
             },
             use_container_width=True,
             hide_index=True
@@ -1159,7 +1208,7 @@ def render_rust_backtester_tab():
     )
     if selected_run_label:
         selected_run_id = label_to_id[selected_run_label]
-        run_data = next(r for r in runs if r["run_id"] == selected_run_id)
+        run_data = next(r for r in consol_runs if r["run_id"] == selected_run_id)
         
         c1, c2 = st.columns(2)
         with c1:
