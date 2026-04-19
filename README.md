@@ -68,21 +68,17 @@ You need **`cargo`** on the machine that actually compiles (Windows host or Linu
 #### Launchers
 
 **A. One-command Python launcher (recommended):**
-
-```powershell
-python "tools/run_rust_backtester.py"
-```
-
-Builds the release binary if needed, then runs against **Round 2** capsule data by default.
-
 ```powershell
 python "tools/run_rust_backtester.py" --use-wsl
-python "tools/run_rust_backtester.py" --trader "ROUND 2/traders/peter/trader_peter_v2001.py" --dataset "ROUND 2/data_capsule"
-python "tools/run_rust_backtester.py" -- --day -1
-python "tools/run_rust_backtester.py" --no-build
 ```
 
-**B. PowerShell wrapper (`run_backtest.ps1`):**
+**B. Comparative Backtester (Run multiple traders):**
+```powershell
+python "tools/compare_rust.py" --use-wsl "ROUND 2/traders/trader1.py" "ROUND 2/traders/trader2.py"
+```
+*Runs multiple traders sequentially and shows results in the Dashboard.*
+
+**C. PowerShell wrapper (`run_backtest.ps1`):**
 
 ```powershell
 .\run_backtest.ps1 -dataset tutorial
