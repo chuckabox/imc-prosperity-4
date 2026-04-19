@@ -8,7 +8,7 @@ param (
     [switch]$flat
 )
 
-$cmd = "/mnt/c/Users/peter/Desktop/IMC/imc-prosperity-4/backtester/target/release/rust_backtester"
+$cmd = "/mnt/c/Users/peter/Desktop/IMC/imc-prosperity-4/external/prosperity_rust_backtester/target/release/rust_backtester"
 
 if ($trader) {
     # Convert windows path to wsl path
