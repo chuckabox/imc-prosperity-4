@@ -60,6 +60,7 @@ The primary backtester is a Rust-based engine located in `external/prosperity_ru
 You need **`cargo`** on your PATH.
 *   **WSL2 (Recommended):** Best performance and easiest setup.
 *   **Native Windows:** Requires the MSVC linker (Visual Studio Build Tools).
+    If you see `linker link.exe not found`, use the **`--use-wsl`** flag with the Python launcher (requires Rust inside WSL Ubuntu).
 
 #### Launchers
 We provide multiple ways to run the backtester from the repo root:
@@ -68,25 +69,27 @@ We provide multiple ways to run the backtester from the repo root:
 ```powershell
 python "tools/run_rust_backtester.py"
 ```
-*Builds the binary if needed and runs against Round 2 data by default.*
+*Builds the binary if needed and runs against Round 2 data by default. Use `--use-wsl` if you lack native build tools.*
 
 **B. PowerShell wrapper (WSL optimized):**
 ```powershell
 .\run_backtest.ps1 -dataset tutorial
 ```
-*Handles path conversion to WSL automatically.*
+*Handles path conversion to WSL automatically and runs the pre-built binary.*
 
 #### Usage Examples
 ```powershell
 # Run tutorial data
 .\run_backtest.ps1 -dataset tutorial
 
-# Run latest Round 2 trader on Round 2 data
+# Run latest Round 2 trader on Round 2 data via Python
 python "tools/run_rust_backtester.py" --trader "ROUND 2/traders/peter/trader_peter_v2001.py" --dataset "ROUND 2/data_capsule"
 
 # Passing extra flags to the Rust binary
 python "tools/run_rust_backtester.py" -- --day -1
 ```
+
+Sources live in `external/prosperity_rust_backtester/`. For more detail on the engine, see [the original repo](https://github.com/GeyzsoN/prosperity_rust_backtester).
 
 
 ### 4. Real-world market fetcher (off by default)
