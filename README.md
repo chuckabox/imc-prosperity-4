@@ -9,11 +9,11 @@ A unified repository for strategy development, backtesting, and analysis, curren
 - **`ROUND 2/`**: Active development workspace containing traders, configurations, and results.
 - **`ROUND 1/`**: Legacy data and strategies for reference.
 - **`tools/dashboard.py`**: The main entry point for the visual console.
-- **`tools/run_rust_backtester.py`**: One command to build and run the vendored Rust backtester against Round 2 capsule data.
+- **`tools/run_rust_backtester.py`**: One command to build and run the vendored Rust backtester against Round 2 capsule data (supports `--use-wsl` on Windows).
 - **`tools/impl/`**: Core implementation of the Unified Dashboard.
 - **`requirements-dashboard.txt`**: Python dependencies for the Streamlit dashboard (install once from the repo root).
-- **`ROUND 2/tools/robust_backtester.py`**: Round 2 multi-session backtester (defaults to **IMC capsule days only** under `ROUND 2/data_capsule/`; scenarios and cached real-world CSVs are opt-in).
-- **`external/prosperity_rust_backtester/`**: Vendored [Rust backtester](https://github.com/GeyzsoN/prosperity_rust_backtester) (see `external/README_IMC_PROSPERITY.md`).
+- **`external/prosperity_rust_backtester/`**: Vendored [Rust backtester](https://github.com/GeyzsoN/prosperity_rust_backtester) (primary high-performance engine).
+- **`run_backtest.ps1`**: Optional PowerShell helper that shells into WSL (edit the hard-coded binary path inside the script for your machine).
 - **`tools/manual_optimiser/`**: Advanced multi-scenario optimization for Round 2 manual challenges.
 - **`archive/`**: Retired rounds, legacy backtesters, and secondary tools.
 - **`assets/`**: Visual assets and documentation images.
@@ -48,35 +48,49 @@ Or:
 python -m streamlit run "tools/dashboard.py"
 ```
 
-**Verified:** With dependencies installed, `tools/impl/unified_dashboard.py` imports cleanly and the app entrypoint is `tools/dashboard.py`.
+With dependencies installed, `tools/impl/unified_dashboard.py` is the implementation behind `tools/dashboard.py`.
 
 The UI defaults to **Round 2**; use the sidebar to switch rounds. The Robust Analysis tab reads CSVs from `ROUND N/results/robust/` (IMC-focused metrics by default).
 
-### 3. Optional: Rust CLI backtester (one command)
+### 3. Rust backtester (primary engine)
 
-**Do I need to install something?** Only for this Rust step. The Python dashboard and `ROUND 2/tools/robust_backtester.py` do **not** need Visual Studio. For Rust on Windows you either install **[Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)** once (MSVC linker), **or** skip that entirely and use **`python tools/run_rust_backtester.py --use-wsl`** after installing Rust + `build-essential` inside WSL/Ubuntu.
+**Do I need to install something?** Only for compiling and running **Rust** on Windows without WSL. The **Python dashboard** does **not** need Visual Studio. On Windows you either install **[Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)** once (MSVC linker), or use **`python tools/run_rust_backtester.py --use-wsl`** after installing Rust + `build-essential` inside WSL/Ubuntu.
 
-From the repo root this builds the vendored crate (release) if needed, then runs it against **Round 2** capsule data and the default Ken v6 trader:
+The crate lives in **`external/prosperity_rust_backtester/`**. More paths and WSL notes: **`external/README_IMC_PROSPERITY.md`**.
+
+#### Windows / WSL
+
+You need **`cargo`** on the machine that actually compiles (Windows host or Linux in WSL).
+
+- **WSL2:** Often the least painful path on Windows.
+- **Native Windows:** Default Rust target is MSVC; if you see `linker link.exe not found`, use **`--use-wsl`** with the Python launcher (Rust must be installed inside Ubuntu).
+
+#### Launchers
+
+**A. One-command Python launcher (recommended):**
 
 ```powershell
 python "tools/run_rust_backtester.py"
 ```
 
-If Windows reports **`linker link.exe not found`**, either install **Visual Studio Build Tools** (C++ workload) or run the same script through **WSL** (Rust + `build-essential` installed inside Ubuntu):
+Builds the release binary if needed, then runs against **Round 2** capsule data by default.
 
 ```powershell
 python "tools/run_rust_backtester.py" --use-wsl
-```
-
-Override trader or dataset, or pass extra flags to the Rust binary:
-
-```powershell
-python "tools/run_rust_backtester.py" --trader "ROUND 2/traders/trader.py" --dataset "ROUND 2/data_capsule"
+python "tools/run_rust_backtester.py" --trader "ROUND 2/traders/peter/trader_peter_v2001.py" --dataset "ROUND 2/data_capsule"
 python "tools/run_rust_backtester.py" -- --day -1
 python "tools/run_rust_backtester.py" --no-build
 ```
 
-Sources live in `external/prosperity_rust_backtester/`. Native Windows builds need **`cargo`** + MSVC linker; **`--use-wsl`** needs `wsl` on PATH and **`cargo`** inside the distro. More detail: **`external/README_IMC_PROSPERITY.md`**.
+**B. PowerShell wrapper (`run_backtest.ps1`):**
+
+```powershell
+.\run_backtest.ps1 -dataset tutorial
+```
+
+Opens WSL and runs `rust_backtester`; **edit the script** so the path to `rust_backtester` matches your clone (it ships with an example path).
+
+Upstream engine: [GeyzsoN/prosperity_rust_backtester](https://github.com/GeyzsoN/prosperity_rust_backtester).
 
 ### 4. Real-world market fetcher (off by default)
 
@@ -98,55 +112,9 @@ python "ROUND 2/tools/real_data_fetcher.py"
 
 Use `python "ROUND 2/tools/real_data_fetcher.py" --list` to inspect local cache without network access.
 
-### 5. Run robust backtests (CLI)
+### 5. Python multi-session harness
 
-Use either the **Round 2 capsule backtester** (one `data_capsule`) or the **unified repo-level backtester** (several `ROUND N` folders).
-
-#### Round 2 backtester (`ROUND 2/tools/robust_backtester.py`)
-
-**Default:** all `prices_round_*_day_*.csv` under `ROUND 2/data_capsule/` that match the capsule — **IMC historical sessions only** (no scenarios, no `real_world/normalized` unless you opt in). Results go to `ROUND 2/results/robust/`.
-
-```bash
-# Default: all IMC days in the capsule (recommended baseline)
-python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/your_trader.py"
-
-# Only Round 2 IMC files (e.g. three days when those CSVs exist)
-python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/your_trader.py" --r2
-
-# Round 1 filenames only (if those CSVs exist in the same capsule)
-python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/your_trader.py" --r1
-
-# Both rounds’ IMC filenames in the capsule
-python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/your_trader.py" --r1 --r2
-
-# Add synthetic scenarios (still no network)
-python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/your_trader.py" --with-scenarios
-
-# Previous “everything” mix: IMC + scenarios + local real_world cache (if present)
-python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/your_trader.py" --full-legacy
-
-# Faster run when scenarios/real are enabled: subsample real + one scenario per regime
-python "ROUND 2/tools/robust_backtester.py" "ROUND 2/traders/your_trader.py" --full-legacy --quick
-```
-
-Flags: `--imc-only` (same as default for scripts), `--scenarios-only`, `--with-scenarios`, `--with-real-world`, `--full-legacy`, `--quick`, `--r1`, `--r2`, `--tag NAME`. With no `--r1`/`--r2`, every matching IMC price file in the capsule is included.
-
-#### Unified backtester (`tools/robust_backtester.py`)
-
-Aggregates IMC days from `ROUND 1`, `ROUND 2`, … (default **IMC only**). Optional `--with-scenarios`, `--with-real-world`, or `--full-legacy` match the Round 2 tool. Results go to `ROUND 2/results/robust/`.
-
-```bash
-python tools/robust_backtester.py "ROUND 2/traders/your_trader.py" --quick
-
-python tools/robust_backtester.py "ROUND 2/traders/your_trader.py" --r2 --imc
-
-python tools/robust_backtester.py "ROUND 2/traders/your_trader.py" --rounds 1 2 --imc
-
-# Include scenarios across rounds (no network)
-python tools/robust_backtester.py "ROUND 2/traders/your_trader.py" --rounds 2 --with-scenarios
-```
-
-Unified flags: `--rounds`, `--r1`, `--r2`, `--quick`, `--imc`, `--real`, `--scen`, `--with-scenarios`, `--with-real-world`, `--full-legacy`, `--tag`.
+This branch focuses on the **Rust** engine above. Legacy **Python** `robust_backtester.py` scripts may still appear in **`archive/`** or older docs; the dashboard **Robust Analysis** tab plots whatever result CSVs you have under `ROUND N/results/robust/`.
 
 ---
 
