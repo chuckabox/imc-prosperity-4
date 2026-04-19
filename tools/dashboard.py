@@ -39,6 +39,14 @@ def main():
         if not hasattr(module, "main"):
             raise AttributeError("Dashboard module does not export `main()`.")
         module.main()
+    except ModuleNotFoundError as exc:
+        st.set_page_config(page_title="Dashboard Bootstrap Error", layout="wide")
+        st.error("Failed to start unified dashboard (missing dependency).")
+        st.exception(exc)
+        st.info(
+            "Install dashboard dependencies from the repo root:  "
+            "`pip install -r requirements-dashboard.txt`"
+        )
     except Exception as exc:
         st.set_page_config(page_title="Dashboard Bootstrap Error", layout="wide")
         st.error("Failed to start unified dashboard.")
