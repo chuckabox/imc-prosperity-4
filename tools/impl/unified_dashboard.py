@@ -36,6 +36,41 @@ ROUND_DIRS = ["Root"] + sorted(
 )
 DEFAULT_ROUND = "ROUND 2"
 
+# Round 2 datamodel uses 80; dashboard fills must match or simulation is meaningless.
+DEFAULT_SIM_POSITION_LIMIT = 80
+
+
+def _sim_position_limit(trader) -> int:
+    return int(getattr(trader, "LIMIT", DEFAULT_SIM_POSITION_LIMIT))
+
+
+def discover_trader_py_files(round_name: str | None = None) -> list[str]:
+    td = get_paths(round_name)["traders_dir"]
+    out: list[str] = []
+    if not os.path.isdir(td):
+        return out
+    for root, _, files in os.walk(td):
+        for f in files:
+            if f.endswith(".py") and not f.startswith("__"):
+                out.append(os.path.join(root, f))
+    return sorted(out)
+
+
+def load_trader_class_from_path(trader_py_path: str):
+    """Load ``Trader`` from an arbitrary ``*.py`` under the active round's ``traders/`` tree."""
+    sync_round_import_paths()
+    import importlib.util
+
+    tag = abs(hash(trader_py_path)) % (10**9)
+    spec = importlib.util.spec_from_file_location(f"dash_trader_{tag}", trader_py_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load trader spec: {trader_py_path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    if not hasattr(mod, "Trader"):
+        raise AttributeError(f"No class Trader in {trader_py_path}")
+    return mod.Trader
+
 
 def _gaussian_smooth_1d(y: np.ndarray, sigma: float = 15.0) -> np.ndarray:
     """1D Gaussian smoothing without scipy (convolution with normalized Gaussian kernel)."""
@@ -178,8 +213,8 @@ def execute_backtest_headless(day, trader_path, config_override=None):
                 setattr(trader, k, v)
 
     listings = {
-        "ASH_COATED_OSMIUM": Listing("ASH_COATED_OSMIUM", "ASH_COATED_OSMIUM", "XIRECS"),
-        "INTARIAN_PEPPER_ROOT": Listing("INTARIAN_PEPPER_ROOT", "INTARIAN_PEPPER_ROOT", "XIRECS")
+        "ASH_COATED_OSMIUM": Listing("ASH_COATED_OSMIUM", "ASH_COATED_OSMIUM", "SEASHELLS"),
+        "INTARIAN_PEPPER_ROOT": Listing("INTARIAN_PEPPER_ROOT", "INTARIAN_PEPPER_ROOT", "SEASHELLS"),
     }
 
     positions = {"ASH_COATED_OSMIUM": 0, "INTARIAN_PEPPER_ROOT": 0}
@@ -194,8 +229,10 @@ def execute_backtest_headless(day, trader_path, config_override=None):
         for _, row in group.iterrows():
             product = row["product"]
             depth = OrderDepth()
-            depth.buy_orders = {int(row["bid_price_1"]): 10}
-            depth.sell_orders = {int(row["ask_price_1"]): -10}
+            bv = int(row["bid_volume_1"]) if "bid_volume_1" in row and pd.notna(row.get("bid_volume_1")) else 10
+            av = int(row["ask_volume_1"]) if "ask_volume_1" in row and pd.notna(row.get("ask_volume_1")) else 10
+            depth.buy_orders = {int(row["bid_price_1"]): max(1, bv)}
+            depth.sell_orders = {int(row["ask_price_1"]): -max(1, av)}
             ts_depths[product] = (depth, row["ask_price_1"], row["bid_price_1"])
         price_map[ts] = ts_depths
 
@@ -206,13 +243,20 @@ def execute_backtest_headless(day, trader_path, config_override=None):
         state = TradingState(traderData=current_trader_data, timestamp=ts, listings=listings,
                              order_depths=order_depths, own_trades={}, market_trades={},
                              position=positions, observations=Observation({}, {}))
-        orders, _, new_trader_data = trader.run(state)
-        current_trader_data = new_trader_data
+        try:
+            orders, _, new_trader_data = trader.run(state)
+            current_trader_data = new_trader_data
+        except Exception:
+            orders = {}
+
+        if not isinstance(orders, dict):
+            orders = {}
 
         for product, order_list in orders.items():
             if product not in ts_data: continue
             _, curr_ask, curr_bid = ts_data[product]
-            limit = trader.limits.get(product, 20)
+            lim_attr = getattr(trader, "LIMIT", DEFAULT_SIM_POSITION_LIMIT)
+            limit = getattr(trader, "limits", {}).get(product, lim_attr)
             
             for order in order_list:
                 qty, price = order.quantity, order.price
@@ -243,7 +287,7 @@ def run_stress_backtest(trader_path, prices_dict, products, limits=80):
     spec.loader.exec_module(trader_mod)
     trader = trader_mod.Trader()
 
-    listings = {p: Listing(p, p, "XIRECS") for p in products}
+    listings = {p: Listing(p, p, "SEASHELLS") for p in products}
     positions = {p: 0 for p in products}
     cash = 0.0
     pnl_history = []
@@ -314,7 +358,7 @@ def run_stress_backtest(trader_path, prices_dict, products, limits=80):
         "final_pos": sum(abs(v) for v in positions.values())
     }
 
-def run_backtest_simulation(day):
+def run_backtest_simulation(day, trader_py_path: str | None = None):
     st.toast(f"Running simulation against Day {day}...")
 
     df_prices, df_trades = load_and_process_data(day)
@@ -322,19 +366,21 @@ def run_backtest_simulation(day):
         st.error("Missing data for simulation!")
         return
 
-    TraderClass = load_default_trader_class()
+    if trader_py_path and os.path.isfile(trader_py_path):
+        TraderClass = load_trader_class_from_path(trader_py_path)
+    else:
+        TraderClass = load_default_trader_class()
     trader = TraderClass()
-    # Initialize trader data if not present
-    if not hasattr(trader, 'traderData') or trader.traderData is None:
+    if not hasattr(trader, "traderData") or trader.traderData is None:
         trader.traderData = ""
 
-    # Mock symbols and listings
+    pos_limit = _sim_position_limit(trader)
+
     listings = {
-        "ASH_COATED_OSMIUM": Listing("ASH_COATED_OSMIUM", "ASH_COATED_OSMIUM", "XIRECS"),
-        "INTARIAN_PEPPER_ROOT": Listing("INTARIAN_PEPPER_ROOT", "INTARIAN_PEPPER_ROOT", "XIRECS")
+        "ASH_COATED_OSMIUM": Listing("ASH_COATED_OSMIUM", "ASH_COATED_OSMIUM", "SEASHELLS"),
+        "INTARIAN_PEPPER_ROOT": Listing("INTARIAN_PEPPER_ROOT", "INTARIAN_PEPPER_ROOT", "SEASHELLS"),
     }
 
-    total_pnl = 0.0
     positions = {"ASH_COATED_OSMIUM": 0, "INTARIAN_PEPPER_ROOT": 0}
     cash = 0.0
 
@@ -344,33 +390,40 @@ def run_backtest_simulation(day):
 
     pnl_history = []
     try:
-        # --- OPTIMIZATION: Pre-process data into efficient lookups ---
-        # Prices: timestamp -> {product: depth_obj}
         price_map = {}
         for ts, group in df_prices.groupby("timestamp"):
             ts_depths = {}
             for _, row in group.iterrows():
                 product = row["product"]
                 depth = OrderDepth()
-                depth.buy_orders = {int(row["bid_price_1"]): 10}
-                depth.sell_orders = {int(row["ask_price_1"]): -10}
+                bv = (
+                    int(row["bid_volume_1"])
+                    if "bid_volume_1" in row and pd.notna(row.get("bid_volume_1"))
+                    else 10
+                )
+                av = (
+                    int(row["ask_volume_1"])
+                    if "ask_volume_1" in row and pd.notna(row.get("ask_volume_1"))
+                    else 10
+                )
+                depth.buy_orders = {int(row["bid_price_1"]): max(1, bv)}
+                depth.sell_orders = {int(row["ask_price_1"]): -max(1, av)}
                 ts_depths[product] = (depth, row["ask_price_1"], row["bid_price_1"])
             price_map[ts] = ts_depths
 
-        # Trades: timestamp -> {product: [trade_rows]}
         trade_lookup = {}
         if df_trades is not None:
             for ts, group in df_trades.groupby("timestamp"):
                 ts_trades = {}
                 for product, p_group in group.groupby("product"):
-                    ts_trades[product] = p_group.to_dict('records')
+                    ts_trades[product] = p_group.to_dict("records")
                 trade_lookup[ts] = ts_trades
 
         timestamps = sorted(price_map.keys())
-        total_steps = len(timestamps)
+        total_steps = max(1, len(timestamps))
         progress_bar = st.progress(0)
 
-        trader_data_state = trader.traderData  # Track state separately
+        trader_data_state = trader.traderData
 
         for i, ts in enumerate(timestamps):
             if i % 500 == 0:
@@ -387,19 +440,22 @@ def run_backtest_simulation(day):
                 own_trades={},
                 market_trades={},
                 position=positions,
-                observations=Observation({}, {})
+                observations=Observation({}, {}),
             )
 
             try:
-                orders, conversions, trader_data = trader.run(state)
-                trader_data_state = trader_data  # Update state
+                orders, _conversions, trader_data = trader.run(state)
+                trader_data_state = trader_data
             except Exception as e:
                 st.warning(f"Trader failed at timestamp {ts}: {str(e)}")
-                continue
+                orders = {}
 
-            # --- Optimized Fill Logic ---
+            if not isinstance(orders, dict):
+                orders = {}
+
             for product, order_list in orders.items():
-                if product not in ts_data: continue
+                if product not in ts_data:
+                    continue
                 _, curr_ask, curr_bid = ts_data[product]
 
                 for order in order_list:
@@ -408,19 +464,23 @@ def run_backtest_simulation(day):
                     filled = False
 
                     if qty > 0 and price >= curr_ask:
-                        fill_qty = min(qty, 20 - positions[product])
+                        fill_qty = min(qty, pos_limit - positions[product])
                         if fill_qty > 0:
                             positions[product] += fill_qty
                             cash -= fill_qty * curr_ask
                             filled = True
-                            st.session_state.trades_log.append(f"TS {ts}: AGG BUY {fill_qty} {product} @ {curr_ask}")
+                            st.session_state.trades_log.append(
+                                f"TS {ts}: AGG BUY {fill_qty} {product} @ {curr_ask}"
+                            )
                     elif qty < 0 and price <= curr_bid:
-                        fill_qty = min(-qty, positions[product] + 20)
+                        fill_qty = min(-qty, positions[product] + pos_limit)
                         if fill_qty > 0:
                             positions[product] -= fill_qty
                             cash += fill_qty * curr_bid
                             filled = True
-                            st.session_state.trades_log.append(f"TS {ts}: AGG SELL {fill_qty} {product} @ {curr_bid}")
+                            st.session_state.trades_log.append(
+                                f"TS {ts}: AGG SELL {fill_qty} {product} @ {curr_bid}"
+                            )
 
                     if not filled and ts in trade_lookup:
                         mkt_trades = trade_lookup[ts].get(product, [])
@@ -429,21 +489,24 @@ def run_backtest_simulation(day):
                             trade_qty = 1
 
                             if qty > 0 and price >= trade_price:
-                                fill_qty = min(qty, 20 - positions[product], trade_qty)
+                                fill_qty = min(qty, pos_limit - positions[product], trade_qty)
                                 if fill_qty > 0:
                                     positions[product] += fill_qty
-                                    cash -= fill_qty * price
-                                    st.session_state.trades_log.append(f"TS {ts}: PASSIVE BUY {fill_qty} {product} @ {price}")
+                                    cash -= fill_qty * trade_price
+                                    st.session_state.trades_log.append(
+                                        f"TS {ts}: PASSIVE BUY {fill_qty} {product} @ {trade_price}"
+                                    )
                                     break
                             elif qty < 0 and price <= trade_price:
-                                fill_qty = min(-qty, positions[product] + 20, trade_qty)
+                                fill_qty = min(-qty, positions[product] + pos_limit, trade_qty)
                                 if fill_qty > 0:
                                     positions[product] -= fill_qty
-                                    cash += fill_qty * price
-                                    st.session_state.trades_log.append(f"TS {ts}: PASSIVE SELL {fill_qty} {product} @ {price}")
+                                    cash += fill_qty * trade_price
+                                    st.session_state.trades_log.append(
+                                        f"TS {ts}: PASSIVE SELL {fill_qty} {product} @ {trade_price}"
+                                    )
                                     break
 
-            # Mark-to-market
             mtm_pnl = cash
             for product, pos in positions.items():
                 if product in ts_data:
@@ -455,11 +518,16 @@ def run_backtest_simulation(day):
     except Exception as e:
         st.error(f"Error during simulation: {str(e)}")
         import traceback
+
         st.code(traceback.format_exc())
         return
 
     final_pnl = pnl_history[-1] if pnl_history else 0
-    st.session_state.sim_result = {"pnl": final_pnl, "day": day}
+    st.session_state.sim_result = {
+        "pnl": final_pnl,
+        "day": day,
+        "trader_path": trader_py_path or "",
+    }
     st.success(f"Simulation Complete! Final PnL: **{final_pnl:,.2f}**")
 
     if st.session_state.trades_log:
@@ -469,10 +537,9 @@ def run_backtest_simulation(day):
 
     if pnl_history:
         pnl_df = pd.DataFrame({"Timestamp": range(len(pnl_history)), "PnL": pnl_history})
-        # Downsample PnL chart for performance
         if len(pnl_df) > 1000:
-            pnl_df = pnl_df.iloc[::len(pnl_df)//1000]
-        st.line_chart(pnl_df.set_index("Timestamp"), width="stretch")
+            pnl_df = pnl_df.iloc[:: max(1, len(pnl_df) // 1000)]
+        st.line_chart(pnl_df.set_index("Timestamp"), use_container_width=True)
 
 # Disable caching temporarily to ensure fresh data for every backtest
 # @st.cache_data
@@ -1527,10 +1594,32 @@ def main():
 
     with tab_backtest:
 
+        paths_bt = discover_trader_py_files()
+        if paths_bt:
+            pref_idx = next((i for i, p in enumerate(paths_bt) if "trader_ken_v7.py" in p), None)
+            if pref_idx is None:
+                pref_idx = next(
+                    (i for i, p in enumerate(paths_bt) if os.path.basename(p) == "trader.py"),
+                    None,
+                )
+            if pref_idx is None:
+                pref_idx = 0
+            pref_idx = min(int(pref_idx), len(paths_bt) - 1)
+            st.selectbox(
+                "Backtest trader (`Trader` class)",
+                paths_bt,
+                index=pref_idx,
+                format_func=lambda p: os.path.relpath(p, REPO_ROOT),
+                key="dash_bt_trader_path",
+            )
+        else:
+            st.warning("No `*.py` traders found for this round.")
+
         def on_day_change():
             st.session_state.config["selected_day"] = st.session_state.day_radio
             save_config(st.session_state.config, st.session_state.active_round)
-            run_backtest_simulation(st.session_state.day_radio)
+            tp = st.session_state.get("dash_bt_trader_path")
+            run_backtest_simulation(st.session_state.day_radio, tp)
 
         available_days = discover_available_days(get_paths()["data_dir"])
         day_options = ["All"] + available_days
@@ -1538,14 +1627,28 @@ def main():
         if current_day not in day_options:
             current_day = day_options[0]
 
-        selected_day = st.radio("Select Historical Data Day:", day_options,
-                                 key="day_radio",
-                                 index=day_options.index(current_day),
-                                 horizontal=True,
-                                 on_change=on_day_change)
+        cday, crun = st.columns([4, 1])
+        with cday:
+            selected_day = st.radio(
+                "Select Historical Data Day:",
+                day_options,
+                key="day_radio",
+                index=day_options.index(current_day),
+                horizontal=True,
+                on_change=on_day_change,
+            )
+        with crun:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("▶ Run", help="Re-run simulation with the selected trader and day"):
+                tp = st.session_state.get("dash_bt_trader_path")
+                run_backtest_simulation(selected_day, tp)
 
-        if "sim_result" in st.session_state and st.session_state.sim_result["day"] == selected_day:
-            st.metric("Simulated PnL", f"${st.session_state.sim_result['pnl']:,.2f}", "+12%")
+        sim = st.session_state.get("sim_result", {})
+        if (
+            sim.get("day") == selected_day
+            and sim.get("trader_path", "") == st.session_state.get("dash_bt_trader_path", "")
+        ):
+            st.metric("Simulated PnL", f"${sim.get('pnl', 0):,.2f}")
 
         st.markdown("---")
 
