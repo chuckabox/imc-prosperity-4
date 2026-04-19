@@ -17,7 +17,7 @@ Open the **Rust Backtester** tab to see leaderboards and best/safest trader anal
 
 **Single trader** (Rust + prosperity4bt):
 ```bash
-python tools/run_rust_backtester.py --trader "ROUND 2/traders/ken/trader_ken_v6.py"
+python tools/run_rust_backtester.py --trader "ROUND 2/traders/ken/trader_ken_v6.py" --use-wsl
 ```
 
 **Compare multiple traders**:
