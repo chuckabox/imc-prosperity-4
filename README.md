@@ -9,11 +9,11 @@ A unified repository for strategy development, backtesting, and analysis, curren
 - **`ROUND 2/`**: Active development workspace containing traders, configurations, and results.
 - **`ROUND 1/`**: Legacy data and strategies for reference.
 - **`tools/dashboard.py`**: The main entry point for the visual console.
-- **`tools/run_rust_backtester.py`**: One command to build and run the vendored Rust backtester against Round 2 capsule data.
+- **`tools/run_rust_backtester.py`**: One command to build and run the vendored Rust backtester against Round 2 capsule data (supports `--use-wsl` on Windows).
 - **`tools/impl/`**: Core implementation of the Unified Dashboard.
 - **`requirements-dashboard.txt`**: Python dependencies for the Streamlit dashboard (install once from the repo root).
-- **`external/prosperity_rust_backtester/`**: High-performance [Rust backtester](https://github.com/GeyzsoN/prosperity_rust_backtester) (primary testing engine).
-- **`run_backtest.ps1` / `.sh`**: Convenient wrapper scripts for the Rust backtester (handles Windows/WSL pathing).
+- **`external/prosperity_rust_backtester/`**: Vendored [Rust backtester](https://github.com/GeyzsoN/prosperity_rust_backtester) (primary high-performance engine).
+- **`run_backtest.ps1`**: Optional PowerShell helper that shells into WSL (edit the hard-coded binary path inside the script for your machine).
 - **`tools/manual_optimiser/`**: Advanced multi-scenario optimization for Round 2 manual challenges.
 - **`archive/`**: Retired rounds, legacy backtesters, and secondary tools.
 - **`assets/`**: Visual assets and documentation images.
@@ -48,75 +48,49 @@ Or:
 python -m streamlit run "tools/dashboard.py"
 ```
 
-**Verified:** With dependencies installed, `tools/impl/unified_dashboard.py` imports cleanly and the app entrypoint is `tools/dashboard.py`.
+With dependencies installed, `tools/impl/unified_dashboard.py` is the implementation behind `tools/dashboard.py`.
 
 The UI defaults to **Round 2**; use the sidebar to switch rounds. The Robust Analysis tab reads CSVs from `ROUND N/results/robust/` (IMC-focused metrics by default).
 
-### 3. High-Performance Rust Backtester (Primary)
+### 3. Rust backtester (primary engine)
 
-The primary backtester is a Rust-based engine located in `external/prosperity_rust_backtester/`.
+**Do I need to install something?** Only for compiling and running **Rust** on Windows without WSL. The **Python dashboard** does **not** need Visual Studio. On Windows you either install **[Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)** once (MSVC linker), or use **`python tools/run_rust_backtester.py --use-wsl`** after installing Rust + `build-essential` inside WSL/Ubuntu.
 
-#### Windows Setup
-You need **`cargo`** on your PATH.
-*   **WSL2 (Recommended):** Best performance and easiest setup.
-*   **Native Windows:** Requires the MSVC linker (Visual Studio Build Tools).
-    If you see `linker link.exe not found`, use the **`--use-wsl`** flag with the Python launcher (requires Rust inside WSL Ubuntu).
+The crate lives in **`external/prosperity_rust_backtester/`**. More paths and WSL notes: **`external/README_IMC_PROSPERITY.md`**.
+
+#### Windows / WSL
+
+You need **`cargo`** on the machine that actually compiles (Windows host or Linux in WSL).
+
+- **WSL2:** Often the least painful path on Windows.
+- **Native Windows:** Default Rust target is MSVC; if you see `linker link.exe not found`, use **`--use-wsl`** with the Python launcher (Rust must be installed inside Ubuntu).
 
 #### Launchers
-We provide multiple ways to run the backtester from the repo root:
 
-**A. One-command Python launcher (cross-platform):**
+**A. One-command Python launcher (recommended):**
+
 ```powershell
 python "tools/run_rust_backtester.py"
 ```
-*Builds the binary if needed and runs against Round 2 data by default. Use `--use-wsl` if you lack native build tools.*
 
-**B. PowerShell wrapper (WSL optimized):**
+Builds the release binary if needed, then runs against **Round 2** capsule data by default.
+
 ```powershell
-.\run_backtest.ps1 -dataset tutorial
-```
-*Handles path conversion to WSL automatically and runs the pre-built binary.*
-
-#### Usage Examples
-```powershell
-# Run tutorial data
-.\run_backtest.ps1 -dataset tutorial
-
-# Run latest Round 2 trader on Round 2 data via Python
+python "tools/run_rust_backtester.py" --use-wsl
 python "tools/run_rust_backtester.py" --trader "ROUND 2/traders/peter/trader_peter_v2001.py" --dataset "ROUND 2/data_capsule"
-
-# Passing extra flags to the Rust binary
 python "tools/run_rust_backtester.py" -- --day -1
+python "tools/run_rust_backtester.py" --no-build
 ```
 
-Sources live in `external/prosperity_rust_backtester/`. For more detail on the engine, see [the original repo](https://github.com/GeyzsoN/prosperity_rust_backtester).
+**B. PowerShell wrapper (`run_backtest.ps1`):**
 
-### 🔍 Simple Backtesting Guide
+```powershell
+.\run_backtest.ps1 -dataset tutorial
+```
 
-Follow these steps to test your latest trading strategy:
+Opens WSL and runs `rust_backtester`; **edit the script** so the path to `rust_backtester` matches your clone (it ships with an example path).
 
-1.  **Identify your trader script**: 
-    Most active strategies are in `ROUND 2/traders/peter/` or `ROUND 2/traders/suvin/`.
-    *Example: `ROUND 2/traders/peter/trader_peter_v2001.py`*
-
-2.  **Run the backtest**:
-    Use the following command to test your trader against the Round 2 data capsule:
-    ```powershell
-    python "tools/run_rust_backtester.py" --use-wsl --trader "ROUND 2/traders/peter/trader_peter_v2001.py"
-    ```
-
-3.  **Analyse the results**:
-    The backtester will output a PnL summary per product. Detailed logs are saved in:
-    `external/prosperity_rust_backtester/runs/<backtest-id>/`
-
-4.  **(Optional) Visual Analysis**:
-    Launch the dashboard to compare multiple runs:
-    ```powershell
-    streamlit run "tools/dashboard.py"
-    ```
-
----
-
+Upstream engine: [GeyzsoN/prosperity_rust_backtester](https://github.com/GeyzsoN/prosperity_rust_backtester).
 
 ### 4. Real-world market fetcher (off by default)
 
@@ -138,9 +112,9 @@ python "ROUND 2/tools/real_data_fetcher.py"
 
 Use `python "ROUND 2/tools/real_data_fetcher.py" --list` to inspect local cache without network access.
 
-### 5. Legacy Backtesting (Removed)
+### 5. Python multi-session harness
 
-Legacy Python scripts (`robust_backtester.py`) have been removed in favor of the Rust engine. If you need to comparison-test against old logs, check the `archive/` or use the **Robust Analysis** tab in the dashboard.
+This branch focuses on the **Rust** engine above. Legacy **Python** `robust_backtester.py` scripts may still appear in **`archive/`** or older docs; the dashboard **Robust Analysis** tab plots whatever result CSVs you have under `ROUND N/results/robust/`.
 
 ---
 

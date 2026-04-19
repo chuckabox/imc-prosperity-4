@@ -7,6 +7,12 @@ venv/
 ENV/
 env/
 .env
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
 
 # IDEs
 .vscode/
@@ -17,3 +23,19 @@ env/
 # OS/System
 .DS_Store
 Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Streamlit (local secrets only; keep default config if you add it tracked)
+.streamlit/secrets.toml
+
+# Rust — build artifacts anywhere in the repo (vendored backtester, etc.)
+**/target/
+**/*.pdb
+
+# Real-world fetcher output (optional; not used for IMC-only workflows)
+**/data_capsule/real_world/
+
+# Cursor / local scratch
+uploads/
