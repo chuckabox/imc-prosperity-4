@@ -4,10 +4,10 @@ Unified dashboard entrypoint (repo-level).
 This keeps one stable launch path:
     streamlit run "tools/dashboard.py"
 
-The implementation currently lives in:
-    ROUND 1/tools/dashboard.py
+The implementation lives in:
+    tools/impl/unified_dashboard.py
 
-That module is now round-agnostic and can switch round folders from the UI.
+That module is round-agnostic and can switch round folders from the UI.
 """
 
 import importlib.util
