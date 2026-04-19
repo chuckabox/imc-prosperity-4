@@ -54,6 +54,8 @@ The UI defaults to **Round 2**; use the sidebar to switch rounds. The Robust Ana
 
 ### 3. Optional: Rust CLI backtester (one command)
 
+**Do I need to install something?** Only for this Rust step. The Python dashboard and `ROUND 2/tools/robust_backtester.py` do **not** need Visual Studio. For Rust on Windows you either install **[Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)** once (MSVC linker), **or** skip that entirely and use **`python tools/run_rust_backtester.py --use-wsl`** after installing Rust + `build-essential` inside WSL/Ubuntu.
+
 From the repo root this builds the vendored crate (release) if needed, then runs it against **Round 2** capsule data and the default Ken v6 trader:
 
 ```powershell
