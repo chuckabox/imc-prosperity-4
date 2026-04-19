@@ -9,6 +9,7 @@ A unified repository for strategy development, backtesting, and analysis, curren
 - **`ROUND 2/`**: Active development workspace containing traders, configurations, and results.
 - **`ROUND 1/`**: Legacy data and strategies for reference.
 - **`tools/dashboard.py`**: The main entry point for the visual console.
+- **`tools/run_rust_backtester.py`**: One command to build and run the vendored Rust backtester against Round 2 capsule data.
 - **`tools/impl/`**: Core implementation of the Unified Dashboard.
 - **`requirements-dashboard.txt`**: Python dependencies for the Streamlit dashboard (install once from the repo root).
 - **`backtester/`**: High-performance [Rust backtester](https://github.com/GeyzsoN/prosperity_rust_backtester) (primary testing engine).
@@ -53,15 +54,27 @@ The UI defaults to **Round 2**; use the sidebar to switch rounds. The Robust Ana
 
 ### 3. High-Performance Rust Backtester (Primary)
 
-The primary backtester is a Rust-based engine located in `backtester/`. It is optimized for speed and accuracy.
+The primary backtester is a Rust-based engine located in `external/prosperity_rust_backtester/`.
 
 #### Windows Setup
-This backtester runs fastest via **WSL2 (Ubuntu)**.
-1. Ensure WSL2 is installed: `wsl --install`
-2. Run the provided PowerShell wrapper from your root directory:
-   ```powershell
-   .\run_backtest.ps1 -dataset tutorial
-   ```
+You need **`cargo`** on your PATH.
+*   **WSL2 (Recommended):** Best performance and easiest setup.
+*   **Native Windows:** Requires the MSVC linker (Visual Studio Build Tools).
+
+#### Launchers
+We provide multiple ways to run the backtester from the repo root:
+
+**A. One-command Python launcher (cross-platform):**
+```powershell
+python "tools/run_rust_backtester.py"
+```
+*Builds the binary if needed and runs against Round 2 data by default.*
+
+**B. PowerShell wrapper (WSL optimized):**
+```powershell
+.\run_backtest.ps1 -dataset tutorial
+```
+*Handles path conversion to WSL automatically.*
 
 #### Usage Examples
 ```powershell
@@ -69,15 +82,12 @@ This backtester runs fastest via **WSL2 (Ubuntu)**.
 .\run_backtest.ps1 -dataset tutorial
 
 # Run latest Round 2 trader on Round 2 data
-.\run_backtest.ps1 -trader "ROUND 2/traders/peter/trader_peter_v2001.py" -dataset r2
+python "tools/run_rust_backtester.py" --trader "ROUND 2/traders/peter/trader_peter_v2001.py" --dataset "ROUND 2/data_capsule"
 
-# Custom options (persist logs, carry positions)
-.\run_backtest.ps1 -trader "path/to/trader.py" -dataset r2 -persist -carry
+# Passing extra flags to the Rust binary
+python "tools/run_rust_backtester.py" -- --day -1
 ```
 
-For more CLI options, run: `.\run_backtest.ps1 -h` (via WSL).
-
----
 
 ### 4. Real-world market fetcher (off by default)
 
