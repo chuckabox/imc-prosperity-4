@@ -152,6 +152,14 @@ def main() -> int:
         action="store_true",
         help="On Windows, run cargo + rust_backtester inside WSL (needs Rust inside the distro).",
     )
+    parser.add_argument(
+        "--also-prosperity4bt",
+        dest="also_p4bt",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="After the Rust run, also backtest on prosperity4bt for extra data (default: on). "
+             "Use --no-also-prosperity4bt to skip.",
+    )
     args, rust_argv = parser.parse_known_args()
 
     trader = (args.trader or _default_trader()).resolve()
@@ -198,7 +206,21 @@ def main() -> int:
 
     cmd = [str(exe), "--trader", str(trader), "--dataset", str(dataset), *rust_argv]
     print("Running:", " ".join(cmd), flush=True)
-    return subprocess.run(cmd, cwd=str(RUST_CRATE)).returncode
+    rust_rc = subprocess.run(cmd, cwd=str(RUST_CRATE)).returncode
+
+    if args.also_p4bt:
+        p4bt_script = Path(__file__).with_name("run_prosperity4bt.py")
+        if p4bt_script.is_file():
+            p4bt_cmd = [
+                sys.executable, str(p4bt_script),
+                "--trader", str(trader),
+                "--dataset", str(dataset),
+                "--no-progress",
+            ]
+            print("\nRunning prosperity4bt for extra data:", " ".join(p4bt_cmd), flush=True)
+            subprocess.run(p4bt_cmd, cwd=str(REPO_ROOT))
+
+    return rust_rc
 
 
 if __name__ == "__main__":
