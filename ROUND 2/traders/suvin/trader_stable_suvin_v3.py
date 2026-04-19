@@ -1,69 +1,118 @@
+"""
+trader_v7.py — Aggressive-Safe Frontier Push
+=============================================
+Goal: Push IMC Mean from ~$463k toward $550k+ while keeping
+      Full Mean ~$400k+ and Worst Day floor intact.
+
+Changes from v6 (all calibrated to push the scatter dot RIGHT
+without dropping it DOWN):
+
+OSMIUM — more spread capture & larger quotes
+--------------------------------------------
+1. TAKE EDGE: 0 (was 1) — captures the full spread at fair, not just beyond it.
+   This is the single biggest IMC driver: every time mid crosses a resting
+   order, we fill it instantly instead of waiting for 1-tick edge.
+2. QUOTE SIZES: front=35 (was 28), second=25 (was 20) — more inventory
+   turnover per tick = more realized spread PnL in IMC scenarios.
+3. SPREAD CLAMP: ±5 ticks (was ±4) — allows quoting further from fair when
+   the book is thin, capturing more spread without extra risk.
+4. TOXICITY: threshold stays at 35 but we now only skip the PASSIVE MM
+   quotes on toxicity, not the take logic — toxic flow often means the
+   price has moved to our favor for taking.
+5. EDGE_POS_STEP: 30 (was 25) — slightly slower widening as position grows,
+   so we keep taking even at moderate inventory levels.
+6. SIZE_SCALE: drift tolerance raised to 8 (was 5) — don't shrink quotes
+   until fair is really far from anchor.
+
+PEPPER — faster strong-regime entry
+-------------------------------------
+7. FAST_TRACK: 300 ticks (was 500) — enters strong-cap regime sooner in
+   short IMC back-tests where 500 ticks may be most of the run.
+8. SLOPE_STRONG fast-track threshold: 0.06 (was 0.08) — easier to trigger
+   strong cap early, capturing more of the Pepper trend.
+9. TAKE_STRONG: 25 (was 20) — more aggressive liquidity taking in strong
+   regime.
+10. PASSIVE_MAX: 50 (was 40) — larger passive orders fill more when book
+    has depth, without adding directional risk.
+11. SPREAD_PASSIVE_SCALE: 0.6 (was 0.4) — less aggressive cutback on
+    passive when spread widens; widening spread ≠ reversal.
+
+SAFETY — all v6 protections kept intact
+-----------------------------------------
+- Pepper stop/resume guard (breach_count=2, same thresholds)
+- Osmium circuit-breaker at ±58 → flatten to ±50
+- Osmium skew starts at pos=15 (early)
+- Hard skew boost at pos=35
+- VWAP-anchor blend (65/35) prevents runaway fair
+- Fair smoothing over last 5 ticks
+"""
+
 import json
 from typing import Dict, List
 
 from datamodel import Order, OrderDepth, TradingState, Symbol
 
 
+def _median(vals: list) -> float:
+    n = len(vals)
+    if n == 0:
+        return 0.0
+    s = sorted(vals)
+    mid = n // 2
+    return float(s[mid]) if n % 2 == 1 else (s[mid - 1] + s[mid]) / 2.0
+
+
 class Trader:
     LIMIT = 80
 
-    # ── PEPPER constants (Hyper-Conservative) ─────────────────────────────────
+    # ── PEPPER constants ──────────────────────────────────────────────────────
     PEPPER_WARMUP_TICKS      = 1200
-    PEPPER_FAST_TRACK_TICKS  = 300   
+    PEPPER_FAST_TRACK_TICKS  = 300   # v6: 500 → faster strong-regime entry
 
-    # Extreme slope requirements to enter a trend
-    PEPPER_SLOPE_STRONG_FAST = 0.09  
-    PEPPER_SLOPE_STRONG      = 0.06  
-    PEPPER_SLOPE_MODERATE    = 0.02
+    PEPPER_SLOPE_STRONG_FAST = 0.06  # v6: 0.08 → easier fast-track trigger
+    PEPPER_SLOPE_STRONG      = 0.04  # warmed-up strong threshold (same)
+    PEPPER_SLOPE_MODERATE    = 0.01
     PEPPER_SLOPE_WEAK        = -0.01
 
-    # Severely capped position sizes
-    PEPPER_CAP_STRONG    = 30       # Was 80
-    PEPPER_CAP_MODERATE  = 20
-    PEPPER_CAP_WEAK      = 10
+    PEPPER_CAP_STRONG    = 80
+    PEPPER_CAP_MODERATE  = 60
+    PEPPER_CAP_WEAK      = 30
     PEPPER_CAP_NEGATIVE  =  0
-    PEPPER_CAP_TENTATIVE = 10        
+    PEPPER_CAP_TENTATIVE = 25        # v6: 20 → slightly more tentative buying
 
-    PEPPER_TAKE_STRONG   = 10       # Tiny bites
-    PEPPER_TAKE_NORMAL   = 5        
-    PEPPER_PASSIVE_MAX   = 20        
+    PEPPER_TAKE_STRONG   = 25        # v6: 20 → more aggressive in strong cap
+    PEPPER_TAKE_NORMAL   = 14        # v6: 12
+    PEPPER_PASSIVE_MAX   = 50        # v6: 40 → larger passive fills
 
-    # SAFETY
-    PEPPER_STOP_BREACH_COUNT = 1    # Zero tolerance for drift stoppage
-    PEPPER_STOP_STRONG    = -10
-    PEPPER_STOP_MODERATE  = -8
-    PEPPER_STOP_WEAK      = -5
-    PEPPER_RESUME_STRONG  =   8
-    PEPPER_RESUME_MODERATE=   6
-    PEPPER_RESUME_WEAK    =   5
+    PEPPER_STOP_BREACH_COUNT = 2
+    PEPPER_STOP_STRONG    = -14
+    PEPPER_STOP_MODERATE  = -10
+    PEPPER_STOP_WEAK      =  -7
+    PEPPER_RESUME_STRONG  =   6
+    PEPPER_RESUME_MODERATE=   5
+    PEPPER_RESUME_WEAK    =   4
 
-    PEPPER_SPREAD_PASSIVE_SCALE = 0.2 # Instantly cut passive quotes on widening
+    PEPPER_SPREAD_PASSIVE_SCALE = 0.6  # v6: 0.4 → less cutback on widening spread
 
-    # ── OSMIUM constants (Hyper-Paranoid) ─────────────────────────────────────
+    # ── OSMIUM constants ──────────────────────────────────────────────────────
     OSMIUM_ANCHOR = 10_000
 
-    # Panic at the slightest imbalance
-    OSMIUM_TOXICITY_THRESHOLD = 15    
-    OSMIUM_TAKE_EDGE      = 0         
-    
-    # Punishingly fast edge widening
-    OSMIUM_EDGE_POS_STEP  = 10        
-    OSMIUM_TAKE_EDGE_MAX  = 4         
+    OSMIUM_TOXICITY_THRESHOLD = 35
+    OSMIUM_TAKE_EDGE      = 0         # v6: 1 → capture full spread at fair
+    OSMIUM_EDGE_POS_STEP  = 30        # v6: 25 → slower widening with position
+    OSMIUM_TAKE_EDGE_MAX  = 3         # hard cap on position-adjusted edge
 
-    # Hyper-aggressive inventory dumping
-    OSMIUM_SKEW_SOFT      = 5         
-    OSMIUM_SKEW_HARD      = 15        
-    
-    # SAFETY
-    OSMIUM_FLATTEN_HARD   = 30       # Flatten much earlier
-    OSMIUM_FLATTEN_TARGET = 15
+    OSMIUM_SKEW_SOFT      = 15
+    OSMIUM_SKEW_HARD      = 35
+    OSMIUM_FLATTEN_HARD   = 58
+    OSMIUM_FLATTEN_TARGET = 50
 
-    OSMIUM_QUOTE_FRONT    = 15       # Tiny quotes
-    OSMIUM_QUOTE_SECOND   = 10        
+    OSMIUM_QUOTE_FRONT    = 35        # v6: 28 → larger quotes
+    OSMIUM_QUOTE_SECOND   = 25        # v6: 20
 
-    OSMIUM_SPREAD_CLAMP   = 3        # Keep quotes tight to fair  
-    OSMIUM_VWAP_WEIGHT    = 0.80     # Lean heavier on actual traded volume
-    OSMIUM_DRIFT_SCALE_AT = 5
+    OSMIUM_SPREAD_CLAMP   = 5         # v6: 4 → quote further from fair
+    OSMIUM_VWAP_WEIGHT    = 0.65
+    OSMIUM_DRIFT_SCALE_AT = 8         # v6: 5 → tolerate more drift before shrinking
 
     def __init__(self):
         self.history: Dict = {}
