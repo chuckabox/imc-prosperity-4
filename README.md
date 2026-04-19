@@ -26,6 +26,12 @@ Run the unified dashboard to visualize prices, execute backtests, and run the ma
 streamlit run "tools/dashboard.py"
 ```
 
+OR
+
+```bash
+python -m streamlit run tools/dashboard.py
+```
+
 _Note: The dashboard now defaults to **Round 2** but allows switching rounds via the sidebar._
 
 ### 2. Run Robust Backtests (CLI)
@@ -34,7 +40,7 @@ Test your traders against all available historical days, real-world data, and sy
 
 ```bash
 # Using the unified backtester (Consolidated results go to ROUND 2/results/robust)
-python tools/robust_backtester.py ROUND 2/traders/your_trader.py --quick
+python tools/robust_backtester.py "ROUND 2/traders/your_trader.py" --quick
 ```
 
 ---

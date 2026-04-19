@@ -24,7 +24,13 @@ def render_manual_optimizer_tab():
     with need_col:
         st.metric("💰 Shortfall", "**27,000** XIRECs", "Profit needed")
     with mode_col:
-        mode = st.radio("Mode", ["🟢 Simple", "⚙️ Advanced"], horizontal=True, key="opt_mode", label_visibility="collapsed")
+        mode = st.radio(
+            "Mode",
+            ["🟢 Simple", "⚙️ Advanced", "💰 Partial Budget"],
+            horizontal=True,
+            key="opt_mode",
+            label_visibility="collapsed",
+        )
 
     # ========== SHARED SETUP ==========
     @st.cache_data(show_spinner=False)
@@ -37,8 +43,10 @@ def render_manual_optimizer_tab():
 
     if mode == "🟢 Simple":
         render_simple_mode(_get_sim_data)
-    else:
+    elif mode == "⚙️ Advanced":
         render_advanced_mode(_get_sim_data)
+    else:
+        render_partial_budget_mode(_get_sim_data)
 
 
 # ============================================================================
@@ -532,3 +540,215 @@ def render_advanced_mode(get_sim_data):
                     )
     except Exception as e:
         st.warning(f"Could not load scenario charts: {e}")
+
+
+# ============================================================================
+# PARTIAL BUDGET MODE — free sliders, Net Profit focus, frontier view
+# ============================================================================
+def render_partial_budget_mode(get_sim_data):
+    """Don't force x+y+z=100. Optimise Net Profit and expose the
+    best-achievable curve at each spend level so the user can see when
+    extra budget stops buying extra profit."""
+    import numpy as np
+    import pandas as pd
+    import plotly.graph_objects as go
+    import streamlit as st
+    import manual_optimiser as mo
+    from manual_optimiser import plotting as moplot
+    from manual_optimiser import engine as moeng
+
+    st.markdown("---")
+    st.markdown("""
+    ### 💰 Partial-Budget Profit Optimiser
+    Every % point costs **500 XIRECs**. Total allocation can be anywhere
+    in 0–100%. We score on **Net Profit = Gross − Budget_Used** and
+    flag allocations below a user-set threshold as not worth playing.
+    """)
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        n_iter = st.slider("MC iterations", 200, 3000, 1000, 100, key="pb_iter")
+    with c2:
+        seed = st.number_input("Seed", 0, 10_000, 42, key="pb_seed")
+    with c3:
+        safety_thr = st.slider("Safety threshold", 0.1, 0.9, 0.5, 0.05, key="pb_thr")
+    with c4:
+        min_profit = st.number_input(
+            "Min profit (XIRECs)",
+            0, 500_000, 50_000, step=5_000, key="pb_min_profit",
+            help="Playing is only 'worth it' above this. Default 50k = full budget.",
+        )
+
+    out = get_sim_data(int(n_iter), int(seed), float(safety_thr))
+    sims = out["sims"]
+    scen_names = list(sims.keys())
+
+    scen = st.selectbox("Competitor scenario", scen_names, index=0, key="pb_scen")
+    sim = sims[scen]
+    grid = sim["grid"]
+    mean_net = sim["mean_net"]
+    p05_net = sim["p05_net"]
+    cost_arr = sim["cost"]
+    totals_grid = grid.sum(axis=1)
+
+    # ---------- Free sliders (clamped to sum <= 100) ----------
+    st.session_state.setdefault("pb_x", 15)
+    st.session_state.setdefault("pb_y", 43)
+    st.session_state.setdefault("pb_z", 42)
+
+    def _clamp(last_key: str):
+        tx = st.session_state.pb_x
+        ty = st.session_state.pb_y
+        tz = st.session_state.pb_z
+        if tx + ty + tz <= 100:
+            return
+        others = (tx + ty + tz) - st.session_state[last_key]
+        st.session_state[last_key] = max(0, 100 - others)
+
+    sx, sy, sz = st.columns(3)
+    with sx:
+        st.slider("Research x", 0, 100, key="pb_x", on_change=_clamp, args=("pb_x",))
+    with sy:
+        st.slider("Scale y", 0, 100, key="pb_y", on_change=_clamp, args=("pb_y",))
+    with sz:
+        st.slider("Speed z", 0, 100, key="pb_z", on_change=_clamp, args=("pb_z",))
+
+    x = int(st.session_state.pb_x)
+    y = int(st.session_state.pb_y)
+    z = int(st.session_state.pb_z)
+    total = x + y + z
+
+    # Look up current alloc stats from the precomputed grid
+    row = np.where((grid[:, 0] == x) & (grid[:, 1] == y) & (grid[:, 2] == z))[0]
+    if row.size:
+        i = int(row[0])
+        cur_mean = float(mean_net[i])
+        cur_p05 = float(p05_net[i])
+        cur_cost = float(cost_arr[i])
+    else:
+        # fall back to deterministic (uses scenario-agnostic pop)
+        cur_cost = moeng.COST_PER_POINT * total
+        cur_mean = cur_p05 = 0.0
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total allocation", f"{total}%", f"{100 - total}% unused")
+    m2.metric("Budget used", f"{int(cur_cost):,}", f"{int(moeng.BUDGET_TOTAL - cur_cost):,} saved")
+    m3.metric("Mean Net Profit", f"{cur_mean:,.0f}", delta=f"{cur_mean - min_profit:,.0f} vs {int(min_profit):,}")
+    m4.metric("P05 Net Profit", f"{cur_p05:,.0f}")
+
+    if cur_mean <= 0:
+        st.error(f"Don't play — mean Net Profit {cur_mean:,.0f}. You'd burn budget.")
+    elif cur_mean < min_profit:
+        st.warning(f"Mean Net Profit {cur_mean:,.0f} below {int(min_profit):,} threshold.")
+    else:
+        st.success(f"Mean Net Profit clears threshold by {cur_mean - min_profit:,.0f}.")
+
+    # ---------- Optimiser picks ----------
+    st.markdown("### Optimiser picks (for selected scenario)")
+
+    def _apply(alloc: np.ndarray, key: str):
+        if st.button("Apply", key=f"pb_apply_{key}"):
+            st.session_state.pb_x = int(alloc[0])
+            st.session_state.pb_y = int(alloc[1])
+            st.session_state.pb_z = int(alloc[2])
+            st.rerun()
+
+    def _summary(idx: int) -> dict:
+        a = grid[idx]
+        return {
+            "alloc": [int(v) for v in a],
+            "total_pct": int(a.sum()),
+            "budget_used": int(cost_arr[idx]),
+            "mean_net_profit": round(float(mean_net[idx])),
+            "p05_net_profit": round(float(p05_net[idx])),
+        }
+
+    oc1, oc2, oc3 = st.columns(3)
+    with oc1:
+        st.markdown("**🎯 Max Net Profit**")
+        gi = int(np.argmax(mean_net))
+        st.json(_summary(gi))
+        _apply(grid[gi], "max")
+    with oc2:
+        st.markdown(f"**💸 Cheapest ≥ {int(min_profit):,}**")
+        mask = mean_net >= min_profit
+        if mask.any():
+            passing = np.where(mask)[0]
+            ci = int(passing[np.argmin(cost_arr[passing])])
+            st.json(_summary(ci))
+            _apply(grid[ci], "cheap")
+        else:
+            st.info("No allocation clears threshold here.")
+    with oc3:
+        st.markdown("**📈 Max profit / XIREC**")
+        with np.errstate(divide="ignore", invalid="ignore"):
+            eff = np.where(cost_arr > 0, mean_net / np.maximum(cost_arr, 1.0), -np.inf)
+        ei = int(np.argmax(eff))
+        payload = _summary(ei)
+        payload["profit_per_xirec"] = round(float(eff[ei]), 3)
+        st.json(payload)
+        _apply(grid[ei], "eff")
+
+    # ---------- Partial-budget frontier ----------
+    st.markdown("### Partial-budget frontier")
+    st.caption("Best achievable Net Profit at each total spend level. Flat/declining tail = extra spend not buying extra profit.")
+
+    frontier_totals = np.arange(0, 101, 5)
+    best_mean = []
+    best_p5 = []
+    best_allocs = []
+    for t in frontier_totals:
+        m = totals_grid == t
+        if m.any():
+            idxs = np.where(m)[0]
+            bi = int(idxs[np.argmax(mean_net[idxs])])
+            best_mean.append(float(mean_net[bi]))
+            best_p5.append(float(p05_net[bi]))
+            best_allocs.append(tuple(int(v) for v in grid[bi]))
+        else:
+            best_mean.append(0.0); best_p5.append(0.0); best_allocs.append((0, 0, 0))
+
+    df_front = pd.DataFrame({
+        "Total %": frontier_totals,
+        "Budget used": frontier_totals * int(moeng.COST_PER_POINT),
+        "Mean Net Profit": best_mean,
+        "P05 Net Profit": best_p5,
+        "Best (x,y,z)": [str(a) for a in best_allocs],
+    })
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df_front["Budget used"], y=df_front["Mean Net Profit"],
+        mode="lines+markers", name="Mean Net Profit",
+        hovertext=df_front["Best (x,y,z)"],
+        hovertemplate="spend=%{x:,}<br>mean=%{y:,.0f}<br>alloc=%{hovertext}<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=df_front["Budget used"], y=df_front["P05 Net Profit"],
+        mode="lines+markers", name="P05 Net Profit", line={"dash": "dot"},
+    ))
+    fig.add_hline(y=0, line_color="red", line_dash="dash", annotation_text="Break-even")
+    fig.add_hline(y=min_profit, line_color="green", line_dash="dash",
+                  annotation_text=f"{int(min_profit):,} threshold")
+    fig.update_layout(
+        xaxis_title="Budget used (XIRECs)", yaxis_title="Net Profit (XIRECs)",
+        height=420, hovermode="x unified",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.dataframe(df_front, use_container_width=True, hide_index=True)
+
+    # ---------- Cross-scenario robustness for current alloc ----------
+    with st.expander("Current allocation across all 8 scenarios"):
+        rows = []
+        for n in scen_names:
+            s = sims[n]
+            m = (s["grid"][:, 0] == x) & (s["grid"][:, 1] == y) & (s["grid"][:, 2] == z)
+            if m.any():
+                j = int(np.where(m)[0][0])
+                rows.append({
+                    "Scenario": n,
+                    "Mean Net": f"{float(s['mean_net'][j]):,.0f}",
+                    "P05 Net": f"{float(s['p05_net'][j]):,.0f}",
+                    "Clears threshold": "✅" if s['mean_net'][j] >= min_profit else "❌",
+                })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
