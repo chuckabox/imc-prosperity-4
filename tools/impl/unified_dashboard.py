@@ -1375,11 +1375,11 @@ def main():
 
     # Final tab layout
 
-    tab_backtest, tab_rust, tab_robust, tab_manual = st.tabs([
+    tab_backtest, tab_rust, tab_manual, tab_archive = st.tabs([
         "📉 Visual Backtester",
         "🦀 Rust Backtester",
-        "🛡️ Robust Analysis",
-        "♟️ Manual Optimizer"
+        "♟️ Manual Optimizer",
+        "📦 Archive"
     ])
 
     # Content for the remaining tabs
@@ -1389,8 +1389,11 @@ def main():
 
 
 
-    with tab_robust:
-        st.header("🛡️ Robust Multi-Scenario Analysis")
+    with tab_archive:
+        tab_robust, tab_stress_lab = st.tabs(["🛡️ Robust Analysis", "🔬 Stress Test Lab"])
+        
+        with tab_robust:
+            st.header("🛡️ Robust Multi-Scenario Analysis")
         st.markdown("""
         Compare **IMC Prosperity** backtest CSVs (per-session PnL). Default workflows use **IMC capsule days only**;
         scenario or real-world rows appear only if you generated those runs (e.g. ``--with-scenarios`` / ``--full-legacy`` on the backtester).
