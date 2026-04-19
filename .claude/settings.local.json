@@ -18,7 +18,28 @@
       "Bash(python3 -c \"from trader_peter_v2 import Trader; t = Trader\\(\\); print\\('✓ Trader loads successfully'\\)\")",
       "Bash(python -c \"import sys; sys.path.insert\\(0, '..'\\); from datamodel import Order; print\\('✓ datamodel imports OK'\\)\")",
       "Bash(python -c \"import sys; sys.path.insert\\(0, '..'\\); from datamodel import Order; print\\('[OK] datamodel imports'\\)\")",
-      "Bash(python -c \"import sys; sys.path.insert\\(0, '..'\\); from trader_peter_v2 import Trader; t = Trader\\(\\); print\\('[OK] Trader v2 loads'\\)\")"
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '..'\\); from trader_peter_v2 import Trader; t = Trader\\(\\); print\\('[OK] Trader v2 loads'\\)\")",
+      "Bash(pip show *)",
+      "Bash(python -c \"import prosperity4bt; print\\(prosperity4bt.__file__\\)\")",
+      "Bash(pip list *)",
+      "Bash(pip install *)",
+      "Bash(prosperity4bt --help)",
+      "Bash(prosperity4bt \"c:/Users/peter/Desktop/IMC/imc-prosperity-4/ROUND 2/traders/ken/trader_ken_v6.py\" 2-1 --no-progress --no-out)",
+      "Bash(python -c \"import prosperity4bt; import os; print\\(os.path.dirname\\(prosperity4bt.__file__\\)\\)\")",
+      "Bash(python -c \"import prosperity4bt, pkgutil; print\\(list\\(pkgutil.iter_modules\\(prosperity4bt.__path__\\)\\)\\)\")",
+      "Read(//c/Users/peter/anaconda3/Lib/site-packages/prosperity4bt/resources/**)",
+      "Bash(python -c \"from prosperity4bt.runner import run_backtest; help\\(run_backtest\\)\")",
+      "Bash(python -c \"from prosperity4bt.models import BacktestResult; import dataclasses; [print\\(f.name, f.type\\) for f in dataclasses.fields\\(BacktestResult\\)]\")",
+      "Bash(python -c \"from prosperity4bt.models import ActivityLogRow, TradeRow; import dataclasses; print\\('A:', [f.name for f in dataclasses.fields\\(ActivityLogRow\\)]\\); print\\('T:', [f.name for f in dataclasses.fields\\(TradeRow\\)]\\)\")",
+      "Bash(python -c \"from prosperity4bt.runner import run_backtest; import inspect; print\\(inspect.getsource\\(run_backtest\\)\\)\")",
+      "Bash(python -c \"import prosperity4bt.__main__ as m; import inspect; src=inspect.getsource\\(m\\); print\\(src\\)\")",
+      "Bash(python -c \"from prosperity4bt.file_reader import FileSystemReader; import inspect; print\\(inspect.getsource\\(FileSystemReader\\)\\)\")",
+      "Bash(python -c \"from prosperity4bt.data import has_day_data, read_day_data; import inspect; print\\(inspect.getsource\\(has_day_data\\)\\); print\\('---'\\); print\\(inspect.getsource\\(read_day_data\\)\\)\")",
+      "Bash(python -c \"from prosperity4bt import datamodel; print\\([x for x in dir\\(datamodel\\) if not x.startswith\\('_'\\)]\\)\")",
+      "Bash(python tools/run_prosperity4bt.py --day 1 --no-progress)",
+      "Bash(python -c \"from prosperity4bt.data import LIMITS; print\\(LIMITS\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('tools/impl/unified_dashboard.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python tools/run_prosperity4bt.py --trader \"ROUND 2/traders/ken/trader_ken_v5.py\" --no-progress --day 0)"
     ]
   }
 }

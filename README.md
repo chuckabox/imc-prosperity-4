@@ -1,56 +1,43 @@
-# 📈 IMC Prosperity 4 Trading Suite
+# IMC Prosperity 4
 
-Unified workspace for strategy development, high-performance backtesting, and analysis.
-
----
-
-## ⚡ Quick Start
-
-### 1. Setup Environment
-```powershell
+## Setup
+```bash
 pip install -r requirements-dashboard.txt
 ```
 
-### 2. Launch Console
-```powershell
-python -m streamlit run "tools/dashboard.py"
+## Dashboard
+```bash
+python -m streamlit run tools/dashboard.py
+```
+Open the **Rust Backtester** tab to see leaderboards and best/safest trader analysis.
+
+---
+
+## Backtest a Trader
+
+**Single trader** (Rust + prosperity4bt):
+```bash
+python tools/run_rust_backtester.py --trader "ROUND 2/traders/ken/trader_ken_v6.py"
 ```
 
----
-
-## 🦀 Rust Backtesting
-
-The **Rust Backtester** is our primary high-performance engine for Round 2. It automatically aggregates 3-day results for easy comparison.
-
-### 🔥 Run a Backtest
-To run a specific trader (e.g., Suvin v2) against the Round 2 data:
-```powershell
-python "tools/run_rust_backtester.py" --use-wsl --trader "ROUND 2/traders/suvin/trader_stable_suvin_v2.py" --dataset "ROUND 2/data_capsule"
-```
-*Note: Use `--use-wsl` if you are on Windows and don't have Visual Studio Build Tools installed.*
-
-### ⚔️ Compare Multiple Traders
-Run multiple versions side-by-side:
-```powershell
-python "tools/compare_rust.py" --use-wsl "ROUND 2/traders/trader1.py" "ROUND 2/traders/trader2.py"
+**Compare multiple traders**:
+```bash
+python tools/compare_rust.py "ROUND 2/traders/ken/trader_ken_v6.py" "ROUND 2/traders/suvin/trader_v2.py"
 ```
 
----
+**Flags:**
+- `--use-wsl` — Windows without Visual Studio Build Tools
+- `--no-build` — skip recompiling Rust (faster if already built)
+- `--rust-only` / `--p4bt-only` — run only one engine
+- `--day 1` — single day instead of all days
 
-## 📊 Analysis Dashboard
-
-Open the **"🦀 Rust Backtester"** tab in the dashboard to:
-1. **Compare Traders**: Select multiple runs to see a side-by-side leaderboard.
-2. **View Winners**: Automatically identifies the best-performing script across all days.
-3. **Deep Dive**: Inspect PnL by product and trade execution details.
-
----
-
-## 📂 Project Structure
-
-- **`ROUND 2/`**: Active traders and training data.
-- **`tools/`**: Entry points for Dashboard and Backtester wrappers.
-- **`external/prosperity_rust_backtester/`**: The core backtesting engine.
-- **`runs/`**: (Generated) Output logs and metrics from your tests.
+Results land in `external/prosperity_rust_backtester/runs/` and appear automatically in the dashboard.
 
 ---
+
+## Structure
+```
+ROUND 2/        active traders + data
+tools/          backtester launchers, dashboard
+external/       Rust engine source
+```

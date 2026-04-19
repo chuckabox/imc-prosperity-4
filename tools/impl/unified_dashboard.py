@@ -1058,147 +1058,226 @@ def render_manual_optimizer_tab():
 
 
 def render_rust_backtester_tab():
-    st.header("🦀 Rust Backtester Results")
-    st.markdown("""
-    Explore high-performance backtest results from the Rust engine. 
-    Results are automatically loaded from `external/prosperity_rust_backtester/runs/`.
-    """)
-    
+    st.header("🦀 Backtester Results (Rust + prosperity4bt)")
+    st.markdown(
+        "Leaderboard merges native Rust runs **and** [`prosperity4bt`](https://pypi.org/project/prosperity4bt/) runs from "
+        "`external/prosperity_rust_backtester/runs/`. Use `tools/compare_rust.py` to generate new data."
+    )
+
     rust_runs_dir = os.path.join(REPO_ROOT, "external", "prosperity_rust_backtester", "runs")
     if not os.path.isdir(rust_runs_dir):
-        st.info("No Rust backtester runs found. Use the CLI or `run_backtest.ps1` to generate results first.")
+        st.info("No backtester runs found. Run `python tools/compare_rust.py <trader.py>` to generate some.")
         return
-        
+
     runs = []
-    # Walk to find all metrics.json even in subdirectories
-    for root, dirs, files in os.walk(rust_runs_dir):
-        if "metrics.json" in files:
-            metrics_path = os.path.join(root, "metrics.json")
-            try:
-                with open(metrics_path, "r") as f:
-                    data = json.load(f)
-                    # Extract the base directory name to help with grouping
-                    run_folder = os.path.basename(root)
-                    if not data.get("run_id") or data["run_id"] == "backtest":
-                         data["run_id"] = run_folder
-                    
-                    # Extract the base prefix (removing -day-X) to group multi-day runs
-                    # backtest-1776586006173-data-capsule-day-1 -> backtest-1776586006173-data-capsule
-                    match = re.search(r"(backtest-\d+-[^/]+?)-day-", run_folder)
-                    data["base_run_id"] = match.group(1) if match else run_folder
-                    runs.append(data)
-            except:
-                pass
-                
+    for root, _dirs, files in os.walk(rust_runs_dir):
+        if "metrics.json" not in files:
+            continue
+        metrics_path = os.path.join(root, "metrics.json")
+        try:
+            with open(metrics_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        run_folder = os.path.basename(root)
+        if not data.get("run_id") or data["run_id"] == "backtest":
+            data["run_id"] = run_folder
+        if not data.get("engine"):
+            # Heuristic: prosperity4bt runner writes folders starting with p4bt-
+            data["engine"] = "prosperity4bt" if run_folder.startswith("p4bt-") else "rust"
+        match = re.search(r"(.+?)-day-(-?\d+)$", run_folder)
+        data["base_run_id"] = match.group(1) if match else run_folder
+        runs.append(data)
+
     if not runs:
         st.info("No valid backtest metrics found in the runs directory.")
         return
-        
+
     df_raw = pd.DataFrame(runs)
     if "generated_at" in df_raw.columns:
-        df_raw["generated_at"] = pd.to_datetime(df_raw["generated_at"])
-    
-    # Aggregation Logic: Group by base_run_id and trader_path to get a "Total" view
+        df_raw["generated_at"] = pd.to_datetime(df_raw["generated_at"], errors="coerce", utc=True)
+    for col in ("final_pnl_total", "own_trade_count"):
+        if col in df_raw.columns:
+            df_raw[col] = pd.to_numeric(df_raw[col], errors="coerce")
+    df_raw["Trader"] = df_raw.get("trader_path", pd.Series([None] * len(df_raw))).apply(
+        lambda x: os.path.basename(x) if isinstance(x, str) else "Unknown"
+    )
+
     def aggregate_pnl_by_product(series):
-        merged = {}
+        merged: dict = {}
         for d in series:
             if isinstance(d, dict):
                 for k, v in d.items():
                     merged[k] = merged.get(k, 0) + v
         return merged
 
-    agg_cols = ["base_run_id", "trader_path"]
+    agg_cols = ["base_run_id", "trader_path", "engine"]
     agg_map = {
         "final_pnl_total": "sum",
         "own_trade_count": "sum",
         "generated_at": "max",
         "day": lambda x: "Total (+All)" if len(x) > 1 else str(list(x)[0]),
-        "dataset_id": "first"
+        "dataset_id": "first",
     }
-    
-    # Store daily win info for later
     daily_win_info = df_raw.groupby(agg_cols).apply(
         lambda x: (x["final_pnl_total"] > 0).mean() * 100
     ).to_dict()
-
     if "final_pnl_by_product" in df_raw.columns:
         agg_map["final_pnl_by_product"] = aggregate_pnl_by_product
-        
-    df_runs = df_raw.groupby(agg_cols).agg(agg_map).reset_index()
-    
-    # Map back the Win Rate %
-    df_runs["WinRateDays"] = df_runs.apply(lambda r: daily_win_info.get((r["base_run_id"], r["trader_path"]), 0), axis=1)
-    
-    # Calculate PnL per Trade (Efficiency)
-    df_runs["PnLPerTrade"] = df_runs["final_pnl_total"] / df_runs["own_trade_count"].replace(0, np.nan)
-    
-    # Use the base_run_id as the primary identifier now
-    df_runs["run_id"] = df_runs["base_run_id"]
-    
-    # Create the consolidated list for the deep dive lookup
-    consol_runs = df_runs.to_dict("records")
-    
-    # Enrich df with trader name for easier comparison
-    if "trader_path" in df_runs.columns:
-        df_runs["Trader"] = df_runs["trader_path"].apply(lambda x: os.path.basename(x))
-    else:
-        df_runs["Trader"] = "Unknown"
 
-    # Create a nice label combining trader name and timestamp
+    df_runs = df_raw.groupby(agg_cols).agg(agg_map).reset_index()
+    df_runs["WinRateDays"] = df_runs.apply(
+        lambda r: daily_win_info.get((r["base_run_id"], r["trader_path"], r["engine"]), 0), axis=1
+    )
+    df_runs["PnLPerTrade"] = df_runs["final_pnl_total"] / df_runs["own_trade_count"].replace(0, np.nan)
+    df_runs["run_id"] = df_runs["base_run_id"]
+    df_runs["Trader"] = df_runs["trader_path"].apply(lambda x: os.path.basename(x) if isinstance(x, str) else "Unknown")
     df_runs["DisplayLabel"] = df_runs.apply(
-        lambda r: f"{r['Trader']} | Day {r.get('day', '?')} | {r['generated_at'].strftime('%H:%M:%S') if pd.notna(r['generated_at']) else '??'}", 
-        axis=1
+        lambda r: f"{r['Trader']} [{r['engine']}] | Day {r.get('day', '?')} | "
+                  f"{r['generated_at'].strftime('%H:%M:%S') if pd.notna(r['generated_at']) else '??'}",
+        axis=1,
+    )
+    consol_runs = df_runs.to_dict("records")
+
+    # ---------- Best & Safest composite ranking ----------
+    st.subheader("🥇 Best & Safest Trader")
+    st.caption(
+        "Each trader is scored across every per-day run we have (Rust **and** prosperity4bt count as "
+        "independent observations). Ranking is a z-score blend — higher is better on every column."
     )
 
-    st.subheader("🏁 Trader Comparison Leaderboard")
-    
-    # Create mapping for selectors
+    per_day = df_raw.dropna(subset=["final_pnl_total"]).copy()
+    if per_day.empty:
+        st.info("Not enough per-day data to rank traders yet.")
+    else:
+        grouped = per_day.groupby("Trader")
+        rank_rows = []
+        for trader, g in grouped:
+            pnls = g["final_pnl_total"].astype(float)
+            mean_pnl = pnls.mean()
+            std_pnl = pnls.std(ddof=0) if len(pnls) > 1 else 0.0
+            min_pnl = pnls.min()
+            win_rate = (pnls > 0).mean() * 100
+            trades = g["own_trade_count"].astype(float).sum() if "own_trade_count" in g else 0
+            total_pnl = pnls.sum()
+            sharpe = mean_pnl / std_pnl if std_pnl > 0 else (float("inf") if mean_pnl > 0 else 0.0)
+            rank_rows.append({
+                "Trader": trader,
+                "Engines": ", ".join(sorted(g["engine"].dropna().unique())),
+                "Runs": int(len(g)),
+                "TotalPnL": total_pnl,
+                "MeanDayPnL": mean_pnl,
+                "StdDayPnL": std_pnl,
+                "WorstDayPnL": min_pnl,
+                "WinRate": win_rate,
+                "Sharpe": sharpe,
+                "Trades": int(trades),
+            })
+        rank_df = pd.DataFrame(rank_rows)
+
+        def _z(series: pd.Series) -> pd.Series:
+            s = series.replace([np.inf, -np.inf], np.nan)
+            mu, sd = s.mean(), s.std(ddof=0)
+            if not sd or np.isnan(sd):
+                return pd.Series(0.0, index=series.index)
+            return ((s - mu) / sd).fillna(0.0)
+
+        rank_df["z_total"] = _z(rank_df["TotalPnL"])
+        rank_df["z_sharpe"] = _z(rank_df["Sharpe"])
+        rank_df["z_worst"] = _z(rank_df["WorstDayPnL"])
+        rank_df["z_winrate"] = _z(rank_df["WinRate"])
+        rank_df["z_eff"] = _z(rank_df["TotalPnL"] / rank_df["Trades"].replace(0, np.nan))
+
+        # Composite: reward PnL, risk-adjusted return, and downside resilience.
+        rank_df["Score"] = (
+            0.30 * rank_df["z_total"]
+            + 0.25 * rank_df["z_sharpe"]
+            + 0.20 * rank_df["z_worst"]
+            + 0.15 * rank_df["z_winrate"]
+            + 0.10 * rank_df["z_eff"]
+        )
+        rank_df = rank_df.sort_values("Score", ascending=False).reset_index(drop=True)
+        rank_df["Rank"] = rank_df.index + 1
+
+        best_row = rank_df.iloc[0]
+        safest_row = rank_df.sort_values(["WorstDayPnL", "StdDayPnL"], ascending=[False, True]).iloc[0]
+        most_consistent = rank_df.sort_values("StdDayPnL", ascending=True).iloc[0] if len(rank_df) > 1 else best_row
+
+        c1, c2, c3 = st.columns(3)
+        c1.success(f"🏆 **Best overall:** `{best_row['Trader']}`\n\nScore **{best_row['Score']:.2f}**  ·  Total PnL **${best_row['TotalPnL']:,.0f}**")
+        c2.info(f"🛡️ **Safest (best worst-day):** `{safest_row['Trader']}`\n\nWorst day **${safest_row['WorstDayPnL']:,.0f}**  ·  Win rate **{safest_row['WinRate']:.0f}%**")
+        c3.info(f"📏 **Most consistent:** `{most_consistent['Trader']}`\n\nσ(day PnL) **${most_consistent['StdDayPnL']:,.0f}**  ·  Sharpe **{most_consistent['Sharpe']:.2f}**")
+
+        st.dataframe(
+            rank_df[["Rank", "Trader", "Engines", "Runs", "TotalPnL", "MeanDayPnL", "StdDayPnL", "WorstDayPnL", "WinRate", "Sharpe", "Score"]],
+            column_config={
+                "Rank": st.column_config.NumberColumn("Rank", format="%d"),
+                "Trader": "Trader",
+                "Engines": st.column_config.TextColumn("Engines", help="Which backtesters fed this row."),
+                "Runs": st.column_config.NumberColumn("Day-Runs", help="Total per-day observations (Rust + p4bt combined)."),
+                "TotalPnL": st.column_config.NumberColumn("Total PnL", format="$%d"),
+                "MeanDayPnL": st.column_config.NumberColumn("Mean Day PnL", format="$%d"),
+                "StdDayPnL": st.column_config.NumberColumn("σ Day PnL", format="$%d", help="Lower = more consistent."),
+                "WorstDayPnL": st.column_config.NumberColumn("Worst Day", format="$%d", help="Safety proxy — higher = less downside."),
+                "WinRate": st.column_config.NumberColumn("Win Rate", format="%.0f%%"),
+                "Sharpe": st.column_config.NumberColumn("Mean/σ", format="%.2f", help="Risk-adjusted return."),
+                "Score": st.column_config.NumberColumn("Composite", format="%.2f", help="0.30·PnL + 0.25·Sharpe + 0.20·Worst + 0.15·Win% + 0.10·PnL/trade (all z-scored)."),
+            },
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        with st.expander("How the composite score is built"):
+            st.markdown(
+                "- **Total PnL (30%)** — raw profit across all day-runs.\n"
+                "- **Sharpe-like mean/σ (25%)** — penalises volatile day-to-day results.\n"
+                "- **Worst Day (20%)** — downside safety; a trader that never crashes on any engine/day scores well.\n"
+                "- **Win Rate (15%)** — fraction of day-runs that finished green.\n"
+                "- **PnL per Trade (10%)** — edge efficiency, keeps a churny trader from gaming raw PnL.\n\n"
+                "Each column is z-scored across traders, so the score is *relative* to the other traders you've backtested."
+            )
+
+    st.divider()
+    st.subheader("🏁 Per-Run Leaderboard")
+
     label_to_id = dict(zip(df_runs["DisplayLabel"], df_runs["run_id"]))
-    
     all_labels = df_runs.sort_values("generated_at", ascending=False)["DisplayLabel"].tolist()
+    engines_avail = sorted(df_runs["engine"].dropna().unique().tolist())
+    engine_filter = st.multiselect("Engines", options=engines_avail, default=engines_avail, help="Rust and/or prosperity4bt runs.")
     selected_labels = st.multiselect(
         "Select traders/runs to compare",
         options=all_labels,
         default=all_labels,
-        help="Choose multiple backtest runs to see a side-by-side comparison."
+        help="Choose multiple backtest runs to see a side-by-side comparison.",
     )
 
     if selected_labels:
         selected_ids = [label_to_id[l] for l in selected_labels]
-        comp_df = df_runs[df_runs["run_id"].isin(selected_ids)].copy()
-        
-        # Sort and Rank
+        comp_df = df_runs[df_runs["run_id"].isin(selected_ids) & df_runs["engine"].isin(engine_filter)].copy()
         comp_df = comp_df.sort_values("final_pnl_total", ascending=False).reset_index(drop=True)
         comp_df["Rank"] = comp_df.index + 1
-        
-        # Comparison Metrics Table - simplified to essentials
+
         st.dataframe(
-            comp_df[["Rank", "DisplayLabel", "final_pnl_total", "WinRateDays", "PnLPerTrade", "own_trade_count"]],
+            comp_df[["Rank", "DisplayLabel", "engine", "final_pnl_total", "WinRateDays", "PnLPerTrade", "own_trade_count"]],
             column_config={
                 "Rank": st.column_config.NumberColumn("Rank", format="%d"),
                 "DisplayLabel": "Trader Run Details",
+                "engine": "Engine",
                 "final_pnl_total": st.column_config.NumberColumn("Total PnL", format="$%d"),
                 "WinRateDays": st.column_config.NumberColumn("Day Win %", format="%.0f%%", help="% of days that were profitable"),
                 "PnLPerTrade": st.column_config.NumberColumn("Efficiency", format="$%.2f/tr", help="Average PnL made per trade"),
                 "own_trade_count": "Total Trades",
             },
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
         )
 
-        # Highlight Winner
-        winner = comp_df.iloc[0]
-        st.success(f"🏆 **Winner:** {winner['Trader']} with **${winner['final_pnl_total']:,.0f}** PnL (Day {winner.get('day', '?')})")
-
-        # Comparative Chart
-        st.write("#### PnL Performance Comparison")
-        bar_chart = alt.Chart(comp_df).mark_bar().encode(
-            x=alt.X("final_pnl_total:Q", title="Final PnL ($)"),
-            y=alt.Y("DisplayLabel:N", sort="-x", title="Trader Run"),
-            color=alt.Color("Trader:N", title="Trader Script"),
-            tooltip=["Trader", "run_id", "final_pnl_total", "own_trade_count"]
-        ).properties(height=max(200, len(comp_df) * 40))
-        st.altair_chart(bar_chart, use_container_width=True)
+        if not comp_df.empty:
+            winner = comp_df.iloc[0]
+            st.success(
+                f"🏆 **Top run:** {winner['Trader']} ({winner['engine']}) — "
+                f"**${winner['final_pnl_total']:,.0f}** on day {winner.get('day', '?')}"
+            )
 
     st.divider()
     st.subheader("🔍 Individual Run Deep Dive")
