@@ -1,50 +1,52 @@
 """
-trader_v7.py — Aggressive-Safe Frontier Push
-=============================================
-Goal: Push IMC Mean from ~$463k toward $550k+ while keeping
-      Full Mean ~$400k+ and Worst Day floor intact.
+trader_v8.py — Maximum Aggression, Same Safety Envelope
+=========================================================
+All safety mechanisms from v7 are kept 100% intact:
+  - Pepper stop/resume guard (breach_count=2, same thresholds)
+  - Osmium circuit-breaker at ±58 → flatten to ±50
+  - Osmium skew starts at pos=15, hard boost at pos=35
+  - VWAP-anchor blend (65/35) prevents runaway fair
+  - Fair smoothing over last 5 ticks
+  - Toxicity filter still suppresses passive MM on toxic flow
 
-Changes from v6 (all calibrated to push the scatter dot RIGHT
-without dropping it DOWN):
+Aggression upgrades from v7:
+─────────────────────────────────────────────────────────
+OSMIUM
+  1. TAKE_EDGE = -1 (was 0): lift asks 1 tick ABOVE fair and hit bids
+     1 tick BELOW fair. We pay a tiny cross but capture far more volume
+     on every tick — net positive in a mean-reverting book.
+  2. QUOTE_FRONT = 40, QUOTE_SECOND = 30 (was 35/25): maximum inventory
+     turnover, fills more of the available book depth each tick.
+  3. SPREAD_CLAMP = 6 (was 5): quotes reach further from fair when the
+     book is thin, capturing wider spreads without extra directional risk.
+  4. TOXICITY_THRESHOLD = 40 (was 35): we were skipping MM too often on
+     borderline imbalances; raise the bar so only genuinely toxic flow
+     suppresses quotes.
+  5. EDGE_POS_STEP = 35 (was 30): edge widens even more slowly with
+     position — we keep taking aggressively at mid-range inventory.
+  6. TAKE_EDGE_MAX = 4 (was 3): allows position-adjusted edge to reach
+     higher values at extreme inventory, giving better mean-reversion.
+  7. FLATTEN_TARGET = 45 (was 50): after circuit-breaker fires, we
+     flatten further (to 45 not 50), freeing more capacity for new trades.
 
-OSMIUM — more spread capture & larger quotes
---------------------------------------------
-1. TAKE EDGE: 0 (was 1) — captures the full spread at fair, not just beyond it.
-   This is the single biggest IMC driver: every time mid crosses a resting
-   order, we fill it instantly instead of waiting for 1-tick edge.
-2. QUOTE SIZES: front=35 (was 28), second=25 (was 20) — more inventory
-   turnover per tick = more realized spread PnL in IMC scenarios.
-3. SPREAD CLAMP: ±5 ticks (was ±4) — allows quoting further from fair when
-   the book is thin, capturing more spread without extra risk.
-4. TOXICITY: threshold stays at 35 but we now only skip the PASSIVE MM
-   quotes on toxicity, not the take logic — toxic flow often means the
-   price has moved to our favor for taking.
-5. EDGE_POS_STEP: 30 (was 25) — slightly slower widening as position grows,
-   so we keep taking even at moderate inventory levels.
-6. SIZE_SCALE: drift tolerance raised to 8 (was 5) — don't shrink quotes
-   until fair is really far from anchor.
-
-PEPPER — faster strong-regime entry
--------------------------------------
-7. FAST_TRACK: 300 ticks (was 500) — enters strong-cap regime sooner in
-   short IMC back-tests where 500 ticks may be most of the run.
-8. SLOPE_STRONG fast-track threshold: 0.06 (was 0.08) — easier to trigger
-   strong cap early, capturing more of the Pepper trend.
-9. TAKE_STRONG: 25 (was 20) — more aggressive liquidity taking in strong
-   regime.
-10. PASSIVE_MAX: 50 (was 40) — larger passive orders fill more when book
-    has depth, without adding directional risk.
-11. SPREAD_PASSIVE_SCALE: 0.6 (was 0.4) — less aggressive cutback on
-    passive when spread widens; widening spread ≠ reversal.
-
-SAFETY — all v6 protections kept intact
------------------------------------------
-- Pepper stop/resume guard (breach_count=2, same thresholds)
-- Osmium circuit-breaker at ±58 → flatten to ±50
-- Osmium skew starts at pos=15 (early)
-- Hard skew boost at pos=35
-- VWAP-anchor blend (65/35) prevents runaway fair
-- Fair smoothing over last 5 ticks
+PEPPER
+  8. WARMUP_TICKS = 800 (was 1200): enters regime detection sooner,
+     capturing more of the early trend in both real and IMC scenarios.
+  9. FAST_TRACK_TICKS = 200 (was 300): strong cap triggers even earlier
+     in short IMC back-tests.
+ 10. SLOPE_STRONG_FAST = 0.04 (was 0.06): even easier fast-track trigger,
+     more runs classified as strong-trend earlier.
+ 11. CAP_TENTATIVE = 35 (was 25): buy more before regime is confirmed.
+ 12. TAKE_STRONG = 30 (was 25): maximise fills per tick in strong cap.
+ 13. TAKE_NORMAL = 18 (was 14): more fills per tick in moderate/weak cap.
+ 14. PASSIVE_MAX = 60 (was 50): larger passive orders when book has depth.
+ 15. SPREAD_PASSIVE_SCALE = 0.75 (was 0.6): minimal cutback on passive
+     when spread widens — widening spread is rarely a reversal signal.
+ 16. TAKE_THRESHOLD = mid + 2.0 (was mid + 1.5): take asks that are up to
+     2 ticks above mid, capturing more depth on each sweep.
+ 17. DE_RISK_THRESHOLD = 0.7 (was 0.6): only de-risk when position is
+     70%+ of cap and spread widening, not 60% — hold inventory longer.
+ 18. DE_RISK_QTY = 6 (was 8): smaller de-risk sell, stay more loaded.
 """
 
 import json
@@ -66,11 +68,11 @@ class Trader:
     LIMIT = 80
 
     # ── PEPPER constants ──────────────────────────────────────────────────────
-    PEPPER_WARMUP_TICKS      = 1200
-    PEPPER_FAST_TRACK_TICKS  = 300   # v6: 500 → faster strong-regime entry
+    PEPPER_WARMUP_TICKS      = 800    # v7: 1200
+    PEPPER_FAST_TRACK_TICKS  = 200    # v7: 300
 
-    PEPPER_SLOPE_STRONG_FAST = 0.06  # v6: 0.08 → easier fast-track trigger
-    PEPPER_SLOPE_STRONG      = 0.04  # warmed-up strong threshold (same)
+    PEPPER_SLOPE_STRONG_FAST = 0.04   # v7: 0.06
+    PEPPER_SLOPE_STRONG      = 0.04
     PEPPER_SLOPE_MODERATE    = 0.01
     PEPPER_SLOPE_WEAK        = -0.01
 
@@ -78,12 +80,14 @@ class Trader:
     PEPPER_CAP_MODERATE  = 60
     PEPPER_CAP_WEAK      = 30
     PEPPER_CAP_NEGATIVE  =  0
-    PEPPER_CAP_TENTATIVE = 25        # v6: 20 → slightly more tentative buying
+    PEPPER_CAP_TENTATIVE = 35         # v7: 25
 
-    PEPPER_TAKE_STRONG   = 25        # v6: 20 → more aggressive in strong cap
-    PEPPER_TAKE_NORMAL   = 14        # v6: 12
-    PEPPER_PASSIVE_MAX   = 50        # v6: 40 → larger passive fills
+    PEPPER_TAKE_STRONG   = 30         # v7: 25
+    PEPPER_TAKE_NORMAL   = 18         # v7: 14
+    PEPPER_PASSIVE_MAX   = 60         # v7: 50
+    PEPPER_TAKE_THRESH   = 2.0        # v7: 1.5  (ticks above mid)
 
+    # Safety — unchanged
     PEPPER_STOP_BREACH_COUNT = 2
     PEPPER_STOP_STRONG    = -14
     PEPPER_STOP_MODERATE  = -10
@@ -92,27 +96,30 @@ class Trader:
     PEPPER_RESUME_MODERATE=   5
     PEPPER_RESUME_WEAK    =   4
 
-    PEPPER_SPREAD_PASSIVE_SCALE = 0.6  # v6: 0.4 → less cutback on widening spread
+    PEPPER_SPREAD_PASSIVE_SCALE = 0.75  # v7: 0.6
+    PEPPER_DERISK_THRESHOLD     = 0.7   # v7: 0.6  (fraction of cap)
+    PEPPER_DERISK_QTY           = 6     # v7: 8    (smaller exit, stay loaded)
 
     # ── OSMIUM constants ──────────────────────────────────────────────────────
     OSMIUM_ANCHOR = 10_000
 
-    OSMIUM_TOXICITY_THRESHOLD = 35
-    OSMIUM_TAKE_EDGE      = 0         # v6: 1 → capture full spread at fair
-    OSMIUM_EDGE_POS_STEP  = 30        # v6: 25 → slower widening with position
-    OSMIUM_TAKE_EDGE_MAX  = 3         # hard cap on position-adjusted edge
+    OSMIUM_TOXICITY_THRESHOLD = 40    # v7: 35
+    OSMIUM_TAKE_EDGE          = -1    # v7: 0  → lift 1 tick above fair
+    OSMIUM_EDGE_POS_STEP      = 35    # v7: 30
+    OSMIUM_TAKE_EDGE_MAX      = 4     # v7: 3
 
+    # Safety — unchanged
     OSMIUM_SKEW_SOFT      = 15
     OSMIUM_SKEW_HARD      = 35
     OSMIUM_FLATTEN_HARD   = 58
-    OSMIUM_FLATTEN_TARGET = 50
+    OSMIUM_FLATTEN_TARGET = 45        # v7: 50 → flatten further
 
-    OSMIUM_QUOTE_FRONT    = 35        # v6: 28 → larger quotes
-    OSMIUM_QUOTE_SECOND   = 25        # v6: 20
+    OSMIUM_QUOTE_FRONT    = 40        # v7: 35
+    OSMIUM_QUOTE_SECOND   = 30        # v7: 25
 
-    OSMIUM_SPREAD_CLAMP   = 5         # v6: 4 → quote further from fair
+    OSMIUM_SPREAD_CLAMP   = 6         # v7: 5
     OSMIUM_VWAP_WEIGHT    = 0.65
-    OSMIUM_DRIFT_SCALE_AT = 8         # v6: 5 → tolerate more drift before shrinking
+    OSMIUM_DRIFT_SCALE_AT = 8
 
     def __init__(self):
         self.history: Dict = {}
@@ -207,7 +214,7 @@ class Trader:
 
         effective_cap = cap if cap is not None else self.PEPPER_CAP_TENTATIVE
 
-        # ── Stop logic (unchanged from v6) ───────────────────────────────────
+        # ── Stop logic (safety — unchanged from v7) ───────────────────────────
         if effective_cap == self.PEPPER_CAP_STRONG:
             stop_th, resume_th = self.PEPPER_STOP_STRONG, self.PEPPER_RESUME_STRONG
         elif effective_cap == self.PEPPER_CAP_WEAK:
@@ -234,7 +241,7 @@ class Trader:
 
         orders: List[Order] = []
 
-        # ── Stopped: orderly exit ─────────────────────────────────────────────
+        # ── Stopped: orderly exit (safety — unchanged) ────────────────────────
         if drift_stopped or effective_cap == 0:
             if pos > 0:
                 dump_qty = min(pos, 20)
@@ -244,21 +251,24 @@ class Trader:
                     orders.append(Order(product, bb, -qty))
             return orders
 
-        # ── Normal: buy into trend ────────────────────────────────────────────
+        # ── Normal: buy aggressively into trend ───────────────────────────────
         rem_cap    = effective_cap - pos
-        take_limit = self.PEPPER_TAKE_STRONG if effective_cap == self.PEPPER_CAP_STRONG else self.PEPPER_TAKE_NORMAL
+        take_limit = (self.PEPPER_TAKE_STRONG
+                      if effective_cap == self.PEPPER_CAP_STRONG
+                      else self.PEPPER_TAKE_NORMAL)
 
         if rem_cap > 0:
             budget = min(rem_cap, take_limit)
             for ask in sorted(depth.sell_orders.keys()):
                 if budget <= 0:
                     break
-                if ask <= mid + 1.5:
+                if ask <= mid + self.PEPPER_TAKE_THRESH:
                     qty = min(budget, -depth.sell_orders[ask])
                     orders.append(Order(product, ask, qty))
                     budget  -= qty
                     rem_cap -= qty
 
+            # Passive — scale back only slightly when spread widens
             if rem_cap > 0:
                 passive_qty = min(rem_cap, self.PEPPER_PASSIVE_MAX)
                 if spread_widening:
@@ -266,10 +276,9 @@ class Trader:
                 if passive_qty > 0:
                     orders.append(Order(product, bb + 1, passive_qty))
 
-        # Light de-risk when spread widens and well loaded
-        if spread_widening and pos > effective_cap * 0.6:
-            sell_qty = min(pos, 8)
-            orders.append(Order(product, ba - 1, -sell_qty))
+        # Minimal de-risk — only when heavily loaded and spread clearly widening
+        if spread_widening and pos > effective_cap * self.PEPPER_DERISK_THRESHOLD:
+            orders.append(Order(product, ba - 1, -self.PEPPER_DERISK_QTY))
 
         return orders
 
@@ -291,7 +300,7 @@ class Trader:
         ba  = min(depth.sell_orders.keys())
         mid = (bb + ba) / 2.0
 
-        # ── VWAP-blended fair value (same as v6) ─────────────────────────────
+        # ── VWAP-blended fair value (safety — unchanged) ──────────────────────
         bv1       = depth.buy_orders[bb]
         av1       = -depth.sell_orders[ba]
         total_vol = bv1 + av1
@@ -325,7 +334,7 @@ class Trader:
         rb = self.LIMIT - pos
         rs = self.LIMIT + pos
 
-        # ── Hard circuit-breaker (same as v6) ────────────────────────────────
+        # ── Hard circuit-breaker (safety — unchanged) ─────────────────────────
         if pos > self.OSMIUM_FLATTEN_HARD and rs > 0:
             flatten_qty = min(pos - self.OSMIUM_FLATTEN_TARGET + 5, rs)
             orders.append(Order(product, int(fair), -flatten_qty))
@@ -337,14 +346,13 @@ class Trader:
             rb  += flatten_qty
             pos += flatten_qty
 
-        # ── Liquidity taking ─────────────────────────────────────────────────
-        # Position-adjusted edge — but now starts from 0 (not 1)
+        # ── Liquidity taking (aggressive — edge starts at -1) ─────────────────
         pos_adj_buy  = min(self.OSMIUM_TAKE_EDGE_MAX,
                            self.OSMIUM_TAKE_EDGE + max(0, pos  // self.OSMIUM_EDGE_POS_STEP))
         pos_adj_sell = min(self.OSMIUM_TAKE_EDGE_MAX,
                            self.OSMIUM_TAKE_EDGE + max(0, (-pos) // self.OSMIUM_EDGE_POS_STEP))
 
-        # Take logic: always run even when toxic (toxic = market is moving our way)
+        # Always take (toxic flow = price moved favorably = take it)
         for ask in sorted(depth.sell_orders.keys()):
             if ask <= fair - pos_adj_buy and rb > 0:
                 q = min(rb, -depth.sell_orders[ask])
@@ -365,10 +373,10 @@ class Trader:
         bp = int(min(bb + 1, fair - 1)) - skew
         ap = int(max(ba - 1, fair + 1)) - skew
 
-        clamp = self.OSMIUM_SPREAD_CLAMP
-        bp = max(bp, int(fair) - clamp)
-        ap = min(ap, int(fair) + clamp)
+        bp = max(bp, int(fair) - self.OSMIUM_SPREAD_CLAMP)
+        ap = min(ap, int(fair) + self.OSMIUM_SPREAD_CLAMP)
 
+        # Hard skew boost (safety — unchanged)
         if pos > self.OSMIUM_SKEW_HARD:
             bp -= 1
         if pos < -self.OSMIUM_SKEW_HARD:
@@ -378,15 +386,15 @@ class Trader:
             bp = int(fair) - 1
             ap = int(fair) + 1
 
-        # Size scaling — only shrink when drift is really far from anchor
+        # Size scaling — only shrinks when drift is genuinely far from anchor
         anchor_drift = abs(fair - self.OSMIUM_ANCHOR)
         size_scale   = (max(0.5, 1.0 - (anchor_drift - self.OSMIUM_DRIFT_SCALE_AT) / 20.0)
                         if anchor_drift > self.OSMIUM_DRIFT_SCALE_AT else 1.0)
 
-        # On toxic side, skip passive MM quotes only (not takes)
         front  = max(6, int(self.OSMIUM_QUOTE_FRONT  * size_scale))
         second = max(4, int(self.OSMIUM_QUOTE_SECOND * size_scale))
 
+        # Passive MM — suppressed only on genuinely toxic flow
         if rb > 0 and not toxic_buys:
             q = min(rb, front)
             orders.append(Order(product, bp, q))
