@@ -7,6 +7,8 @@ Round 1 workspace for strategy iterations, data analysis, and robust validation.
 - This folder is now consumed by the unified dashboard at repo root.
 - Prefer launching dashboard from:
   - `streamlit run "tools/dashboard.py"`
+
+  - `python -m streamlit run tools/dashboard.py`
 - In the dashboard, choose `ROUND 1` via the **Round Folder** selector.
 
 ## Structure
