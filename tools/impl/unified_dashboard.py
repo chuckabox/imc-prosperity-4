@@ -796,24 +796,35 @@ def _build_cross_round_comparison(
     return comp.sort_values(["Rank", "AutoScore", "IMC Mean"], ascending=[True, False, False]).reset_index(drop=True)
 
 
+def _matplotlib_available() -> bool:
+    """``pandas.Styler.background_gradient`` delegates to matplotlib; avoid hard crash if missing."""
+    try:
+        import matplotlib  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 def _style_comparison_table(comp_df: pd.DataFrame) -> "pd.io.formats.style.Styler":
     money_cols = ["IMC Mean", "IMC Worst", "Real Mean", "Scen Mean", "Scen Worst", "Full Mean", "Worst Day"]
     pct_cols = ["Real Win%", "Win%", "Blow-up%", "AutoScore"]
     low_is_good_cols = ["Blow-up%"]
 
     styler = comp_df.style
-    for col in money_cols:
-        if col in comp_df.columns:
-            styler = styler.background_gradient(
-                cmap="RdYlGn",
-                subset=[col],
-                vmin=comp_df[col].min(skipna=True),
-                vmax=comp_df[col].max(skipna=True),
-            )
-    for col in pct_cols:
-        if col in comp_df.columns:
-            cmap = "RdYlGn_r" if col in low_is_good_cols else "RdYlGn"
-            styler = styler.background_gradient(cmap=cmap, subset=[col])
+    if _matplotlib_available():
+        for col in money_cols:
+            if col in comp_df.columns:
+                styler = styler.background_gradient(
+                    cmap="RdYlGn",
+                    subset=[col],
+                    vmin=comp_df[col].min(skipna=True),
+                    vmax=comp_df[col].max(skipna=True),
+                )
+        for col in pct_cols:
+            if col in comp_df.columns:
+                cmap = "RdYlGn_r" if col in low_is_good_cols else "RdYlGn"
+                styler = styler.background_gradient(cmap=cmap, subset=[col])
 
     return styler.format({
         "Rank": "{:.0f}",
@@ -1309,18 +1320,26 @@ def main():
                             "Edge Blow-up%",
                         ]
                         pair_view = pair_df[edge_cols].copy().sort_values("Edge Full Mean", ascending=False)
-                        pair_styler = pair_view.style.background_gradient(cmap="RdYlGn", subset=["Edge IMC Mean", "Edge Full Mean", "Edge Worst Day", "Edge Win%", "Edge Blow-up%"]).format({
-                            "IMC Mean": "${:,.0f}",
-                            "Full Mean": "${:,.0f}",
-                            "Worst Day": "${:,.0f}",
-                            "Win%": "{:.1f}%",
-                            "Blow-up%": "{:.1f}%",
-                            "Edge IMC Mean": "{:+,.0f}",
-                            "Edge Full Mean": "{:+,.0f}",
-                            "Edge Worst Day": "{:+,.0f}",
-                            "Edge Win%": "{:+.1f}pp",
-                            "Edge Blow-up%": "{:+.1f}pp",
-                        })
+                        pair_styler = pair_view.style
+                        if _matplotlib_available():
+                            pair_styler = pair_styler.background_gradient(
+                                cmap="RdYlGn",
+                                subset=["Edge IMC Mean", "Edge Full Mean", "Edge Worst Day", "Edge Win%", "Edge Blow-up%"],
+                            )
+                        pair_styler = pair_styler.format(
+                            {
+                                "IMC Mean": "${:,.0f}",
+                                "Full Mean": "${:,.0f}",
+                                "Worst Day": "${:,.0f}",
+                                "Win%": "{:.1f}%",
+                                "Blow-up%": "{:.1f}%",
+                                "Edge IMC Mean": "{:+,.0f}",
+                                "Edge Full Mean": "{:+,.0f}",
+                                "Edge Worst Day": "{:+,.0f}",
+                                "Edge Win%": "{:+.1f}pp",
+                                "Edge Blow-up%": "{:+.1f}pp",
+                            }
+                        )
                         st.dataframe(pair_styler, use_container_width=True, hide_index=True)
                     else:
                         st.info("No comparable rows found in selected files.")
