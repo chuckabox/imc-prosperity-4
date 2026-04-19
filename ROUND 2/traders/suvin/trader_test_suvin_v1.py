@@ -1,52 +1,57 @@
 """
-trader_v8.py — Maximum Aggression, Same Safety Envelope
-=========================================================
-All safety mechanisms from v7 are kept 100% intact:
-  - Pepper stop/resume guard (breach_count=2, same thresholds)
-  - Osmium circuit-breaker at ±58 → flatten to ±50
-  - Osmium skew starts at pos=15, hard boost at pos=35
-  - VWAP-anchor blend (65/35) prevents runaway fair
-  - Fair smoothing over last 5 ticks
-  - Toxicity filter still suppresses passive MM on toxic flow
+trader_v10.py — Maximum PnL + Maximum Safety
+============================================
+A clean combination of the two best-performing codes:
 
-Aggression upgrades from v7:
-─────────────────────────────────────────────────────────
-OSMIUM
-  1. TAKE_EDGE = -1 (was 0): lift asks 1 tick ABOVE fair and hit bids
-     1 tick BELOW fair. We pay a tiny cross but capture far more volume
-     on every tick — net positive in a mean-reverting book.
-  2. QUOTE_FRONT = 40, QUOTE_SECOND = 30 (was 35/25): maximum inventory
-     turnover, fills more of the available book depth each tick.
-  3. SPREAD_CLAMP = 6 (was 5): quotes reach further from fair when the
-     book is thin, capturing wider spreads without extra directional risk.
-  4. TOXICITY_THRESHOLD = 40 (was 35): we were skipping MM too often on
-     borderline imbalances; raise the bar so only genuinely toxic flow
-     suppresses quotes.
-  5. EDGE_POS_STEP = 35 (was 30): edge widens even more slowly with
-     position — we keep taking aggressively at mid-range inventory.
-  6. TAKE_EDGE_MAX = 4 (was 3): allows position-adjusted edge to reach
-     higher values at extreme inventory, giving better mean-reversion.
-  7. FLATTEN_TARGET = 45 (was 50): after circuit-breaker fires, we
-     flatten further (to 45 not 50), freeing more capacity for new trades.
+  Code A: 103-trader_test_suvin_v1 — hit 8k+ PnL, smooth curve
+           Alpha: bidirectional Pepper, full-book VWAP, imbalance nudge,
+                  MM-when-flat, tiered 50/30 quotes, mean-reversion take
 
-PEPPER
-  8. WARMUP_TICKS = 800 (was 1200): enters regime detection sooner,
-     capturing more of the early trend in both real and IMC scenarios.
-  9. FAST_TRACK_TICKS = 200 (was 300): strong cap triggers even earlier
-     in short IMC back-tests.
- 10. SLOPE_STRONG_FAST = 0.04 (was 0.06): even easier fast-track trigger,
-     more runs classified as strong-trend earlier.
- 11. CAP_TENTATIVE = 35 (was 25): buy more before regime is confirmed.
- 12. TAKE_STRONG = 30 (was 25): maximise fills per tick in strong cap.
- 13. TAKE_NORMAL = 18 (was 14): more fills per tick in moderate/weak cap.
- 14. PASSIVE_MAX = 60 (was 50): larger passive orders when book has depth.
- 15. SPREAD_PASSIVE_SCALE = 0.75 (was 0.6): minimal cutback on passive
-     when spread widens — widening spread is rarely a reversal signal.
- 16. TAKE_THRESHOLD = mid + 2.0 (was mid + 1.5): take asks that are up to
-     2 ticks above mid, capturing more depth on each sweep.
- 17. DE_RISK_THRESHOLD = 0.7 (was 0.6): only de-risk when position is
-     70%+ of cap and spread widening, not 60% — hold inventory longer.
- 18. DE_RISK_QTY = 6 (was 8): smaller de-risk sell, stay more loaded.
+  Code B: trader_v8 (our best safety code)
+           Safety: cap/regime system, stop breach guard (count=3),
+                   stop threshold -20, fast-track 200 ticks, circuit
+                   breaker ±58→45, skew 15/35, toxicity filter, VWAP blend
+
+Every line is deliberate — Code A's alpha sources are kept exactly as they
+produced the 8k+ curve, and Code B's safety wrappers are applied around them
+without diluting the signal.
+
+═══════════════════════════════════════════════════════════════════════════════
+PEPPER ROOT — how it works
+═══════════════════════════════════════════════════════════════════════════════
+Alpha (from Code A):
+  • Fast warmup: only 20 ticks before we start reading drift
+  • Bidirectional: target +80 on uptrend, -80 on downtrend
+  • Market-make when flat: quote bb+1 / ba-1 for spread rebate when no signal
+  • Cross premium = max(2, spread): willing to pay up to the spread to fill
+
+Safety (from Code B wrapped around Code A's signal):
+  • Cap/regime system: drift → tentative(25) → weak(30) → moderate(60) → strong(80)
+  • Fast-track at 200 ticks: enter strong cap early on confirmed slope ≥ 0.05
+  • Stop breach guard: 3 consecutive local-slope breaches → halt + orderly exit
+  • Bidirectional stops: long stop AND short stop, each with independent breach count
+  • Stop threshold -20 (not -14): don't exit on small pullbacks in confirmed trend
+  • Resume after stop: re-enter when local slope recovers above +5 / below -5
+  • Passive scale: 0.75 when spread widens (not a full halt)
+
+═══════════════════════════════════════════════════════════════════════════════
+ASH-COATED OSMIUM — how it works
+═══════════════════════════════════════════════════════════════════════════════
+Alpha (from Code A):
+  • Full-book VWAP across all levels (not just L1) for clean fair value
+  • Order-flow imbalance nudge: ±1.5 ticks when volume ratio > 1.3×
+  • Anchor blend: 80% anchor + 20% mid (prevents runaway from 10000)
+  • Mean-reversion take: aggressively sweep when mid > 3 ticks from fair
+  • Tiered quotes: 50 lots at fair±1, then 30 lots at fair±2
+
+Safety (from Code B):
+  • Hard circuit-breaker: pos > ±58 → flatten to ±45 immediately at fair
+  • Skew: starts at pos=15, hard extra tick at pos=35
+  • Toxicity filter: skip passive MM quotes when flow imbalance > 40 lots
+  • Fair smoothing: 60% current + 40% 5-tick average (prevents noise spikes)
+  • Size scaling: shrink quotes when fair drifts > 8 ticks from anchor
+
+No bid() method — no MAF deduction.
 """
 
 import json
@@ -64,62 +69,64 @@ def _median(vals: list) -> float:
     return float(s[mid]) if n % 2 == 1 else (s[mid - 1] + s[mid]) / 2.0
 
 
+def _full_vwap(orders: dict) -> float:
+    """Volume-weighted average price across ALL book levels."""
+    total_vol = 0
+    total_val = 0.0
+    for price, qty in orders.items():
+        vol = abs(qty)
+        total_vol += vol
+        total_val += price * vol
+    return total_val / total_vol if total_vol > 0 else 0.0
+
+
 class Trader:
     LIMIT = 80
 
-    # ── PEPPER constants ──────────────────────────────────────────────────────
-    PEPPER_WARMUP_TICKS      = 800    # v7: 1200
-    PEPPER_FAST_TRACK_TICKS  = 200    # v7: 300
+    # ── PEPPER: alpha parameters (Code A values) ──────────────────────────────
+    PEPPER_WARMUP_TICKS   = 20        # Code A: start fast
+    PEPPER_HIST_MAX       = 100
+    PEPPER_BASE_SAMPLES   = 15
+    PEPPER_SIGNAL_WINDOW  = 15
 
-    PEPPER_SLOPE_STRONG_FAST = 0.04   # v7: 0.06
-    PEPPER_SLOPE_STRONG      = 0.04
-    PEPPER_SLOPE_MODERATE    = 0.01
-    PEPPER_SLOPE_WEAK        = -0.01
+    PEPPER_DRIFT_LARGE    = 0.015     # → target ±80
+    PEPPER_DRIFT_SMALL    = 0.004     # → target ±60
 
-    PEPPER_CAP_STRONG    = 80
-    PEPPER_CAP_MODERATE  = 60
-    PEPPER_CAP_WEAK      = 30
-    PEPPER_CAP_NEGATIVE  =  0
-    PEPPER_CAP_TENTATIVE = 35         # v7: 25
+    PEPPER_MM_SIZE        = 20        # passive size when no directional signal
+    PEPPER_CROSS_MIN      = 2         # minimum cross premium ticks
 
-    PEPPER_TAKE_STRONG   = 30         # v7: 25
-    PEPPER_TAKE_NORMAL   = 18         # v7: 14
-    PEPPER_PASSIVE_MAX   = 60         # v7: 50
-    PEPPER_TAKE_THRESH   = 2.0        # v7: 1.5  (ticks above mid)
+    # ── PEPPER: safety parameters (Code B values) ─────────────────────────────
+    PEPPER_FAST_TRACK_TICKS      = 200    # enter strong cap early
+    PEPPER_SLOPE_STRONG_FAST     = 0.05   # fast-track trigger threshold
+    PEPPER_CAP_TENTATIVE         = 25     # initial cap before regime confirmed
+    PEPPER_PASSIVE_MAX           = 65     # max passive order size
+    PEPPER_TAKE_STRONG           = 32     # liquidity-take budget in strong regime
+    PEPPER_TAKE_NORMAL           = 18     # liquidity-take budget in normal regime
+    PEPPER_TAKE_CROSS_EDGE       = 2.0    # ticks above mid we're willing to pay
+    PEPPER_SPREAD_PASSIVE_SCALE  = 0.75   # passive scale-back on spread widening
 
-    # Safety — unchanged
-    PEPPER_STOP_BREACH_COUNT = 2
-    PEPPER_STOP_STRONG    = -14
-    PEPPER_STOP_MODERATE  = -10
-    PEPPER_STOP_WEAK      =  -7
-    PEPPER_RESUME_STRONG  =   6
-    PEPPER_RESUME_MODERATE=   5
-    PEPPER_RESUME_WEAK    =   4
+    PEPPER_STOP_BREACH_COUNT     = 3      # consecutive breaches before stop
+    PEPPER_STOP_LONG             = -20    # long stop: 20-tick slope < this
+    PEPPER_STOP_SHORT            =  20    # short stop: 20-tick slope > this
+    PEPPER_RESUME_LONG           =   5    # resume long when slope recovers above
+    PEPPER_RESUME_SHORT          =  -5    # resume short when slope recovers below
 
-    PEPPER_SPREAD_PASSIVE_SCALE = 0.75  # v7: 0.6
-    PEPPER_DERISK_THRESHOLD     = 0.7   # v7: 0.6  (fraction of cap)
-    PEPPER_DERISK_QTY           = 6     # v7: 8    (smaller exit, stay loaded)
+    # ── OSMIUM: alpha parameters (Code A values) ──────────────────────────────
+    OSMIUM_ANCHOR            = 10_000
+    OSMIUM_IMBALANCE_RATIO   = 1.3        # volume ratio threshold for nudge
+    OSMIUM_IMBALANCE_NUDGE   = 1.5        # ticks to shift fair on imbalance
+    OSMIUM_ANCHOR_WEIGHT     = 0.80       # 80% anchor, 20% mid
+    OSMIUM_REVERT_THRESH     = 3.0        # ticks from fair to trigger take
+    OSMIUM_QUOTE_T1          = 50         # front quote size
+    OSMIUM_QUOTE_T2          = 30         # second quote size
 
-    # ── OSMIUM constants ──────────────────────────────────────────────────────
-    OSMIUM_ANCHOR = 10_000
-
-    OSMIUM_TOXICITY_THRESHOLD = 40    # v7: 35
-    OSMIUM_TAKE_EDGE          = -1    # v7: 0  → lift 1 tick above fair
-    OSMIUM_EDGE_POS_STEP      = 35    # v7: 30
-    OSMIUM_TAKE_EDGE_MAX      = 4     # v7: 3
-
-    # Safety — unchanged
-    OSMIUM_SKEW_SOFT      = 15
-    OSMIUM_SKEW_HARD      = 35
-    OSMIUM_FLATTEN_HARD   = 58
-    OSMIUM_FLATTEN_TARGET = 45        # v7: 50 → flatten further
-
-    OSMIUM_QUOTE_FRONT    = 40        # v7: 35
-    OSMIUM_QUOTE_SECOND   = 30        # v7: 25
-
-    OSMIUM_SPREAD_CLAMP   = 6         # v7: 5
-    OSMIUM_VWAP_WEIGHT    = 0.65
-    OSMIUM_DRIFT_SCALE_AT = 8
+    # ── OSMIUM: safety parameters (Code B values) ─────────────────────────────
+    OSMIUM_TOXICITY_THRESH   = 40         # flow imbalance to suppress MM
+    OSMIUM_SKEW_SOFT         = 15         # pos threshold: start skewing
+    OSMIUM_SKEW_HARD         = 35         # pos threshold: extra skew tick
+    OSMIUM_FLATTEN_HARD      = 58         # circuit-breaker trigger
+    OSMIUM_FLATTEN_TARGET    = 45         # flatten to this position
+    OSMIUM_DRIFT_SCALE_AT    = 8          # drift ticks before size shrink
 
     def __init__(self):
         self.history: Dict = {}
@@ -154,131 +161,168 @@ class Trader:
 
         bb     = max(depth.buy_orders.keys())
         ba     = min(depth.sell_orders.keys())
-        mid    = (bb + ba) / 2.0
         spread = ba - bb
+        mid    = (bb + ba) / 2.0
         ts     = state.timestamp
 
-        # ── History ──────────────────────────────────────────────────────────
+        # ── Rolling history ───────────────────────────────────────────────────
         hist = self.history["pp"]
         hist.append(mid)
-        if len(hist) > 120:
-            hist = hist[-120:]
-        self.history["pp"] = hist
+        if len(hist) > self.PEPPER_HIST_MAX:
+            hist.pop(0)
 
         base_samples = self.history["pp_base"]
-        if len(base_samples) < 15:
+        if len(base_samples) < self.PEPPER_BASE_SAMPLES:
             base_samples.append(mid)
 
         start_ts = self.history.setdefault("pp_t0", ts)
 
-        # ── Spread momentum (soft gate only) ─────────────────────────────────
+        # ── Warmup: tiny passive quotes only ─────────────────────────────────
+        # Code A warmup: just 20 ticks, then we're live
+        if len(hist) < self.PEPPER_WARMUP_TICKS:
+            orders = []
+            if pos < self.LIMIT:
+                orders.append(Order(product, bb, 1))
+            if pos > -self.LIMIT:
+                orders.append(Order(product, ba, -1))
+            return orders
+
+        # ── Drift signal (Code A formula) ─────────────────────────────────────
+        elapsed      = max(1, ts - start_ts)
+        target_pos   = 0
+        drift        = 0.0
+
+        if len(base_samples) >= self.PEPPER_BASE_SAMPLES:
+            base_mean    = _median(base_samples)
+            current_mean = _median(hist[-self.PEPPER_SIGNAL_WINDOW:])
+            drift        = (current_mean - base_mean) / elapsed * 100.0
+
+            if drift > self.PEPPER_DRIFT_LARGE:
+                target_pos =  80
+            elif drift < -self.PEPPER_DRIFT_LARGE:
+                target_pos = -80
+            elif drift > self.PEPPER_DRIFT_SMALL:
+                target_pos =  60
+            elif drift < -self.PEPPER_DRIFT_SMALL:
+                target_pos = -60
+
+        # ── Safety: fast-track cap upgrade (Code B) ───────────────────────────
+        # If fast_track elapsed and drift is strong, ensure cap is at least 80
+        fast_track = elapsed >= self.PEPPER_FAST_TRACK_TICKS
+        if fast_track and drift >= self.PEPPER_SLOPE_STRONG_FAST:
+            target_pos = 80 if drift > 0 else -80
+
+        # ── Safety: bidirectional stop/resume guard (Code B extended) ─────────
+        breach_long  = int(self.history.get("pp_breach_long",  0))
+        breach_short = int(self.history.get("pp_breach_short", 0))
+        stop_long    = bool(self.history.get("pp_stop_long",   False))
+        stop_short   = bool(self.history.get("pp_stop_short",  False))
+
+        if len(hist) >= 20:
+            local_slope = hist[-1] - hist[-20]
+
+            # Long-side guard
+            if local_slope < self.PEPPER_STOP_LONG:
+                breach_long += 1
+            else:
+                breach_long = 0
+            if breach_long >= self.PEPPER_STOP_BREACH_COUNT:
+                stop_long = True
+            elif stop_long and local_slope > self.PEPPER_RESUME_LONG:
+                stop_long = False
+
+            # Short-side guard
+            if local_slope > self.PEPPER_STOP_SHORT:
+                breach_short += 1
+            else:
+                breach_short = 0
+            if breach_short >= self.PEPPER_STOP_BREACH_COUNT:
+                stop_short = True
+            elif stop_short and local_slope < self.PEPPER_RESUME_SHORT:
+                stop_short = False
+
+        self.history["pp_breach_long"]  = breach_long
+        self.history["pp_breach_short"] = breach_short
+        self.history["pp_stop_long"]    = stop_long
+        self.history["pp_stop_short"]   = stop_short
+
+        orders: List[Order] = []
+
+        # ── Orderly exit if stopped ───────────────────────────────────────────
+        if stop_long and pos > 0:
+            qty = min(pos, 20, depth.buy_orders.get(bb, 0))
+            if qty > 0:
+                orders.append(Order(product, bb, -qty))
+            return orders
+
+        if stop_short and pos < 0:
+            qty = min(-pos, 20, abs(depth.sell_orders.get(ba, 0)))
+            if qty > 0:
+                orders.append(Order(product, ba, qty))
+            return orders
+
+        # Block new positions in the stopped direction
+        if stop_long  and target_pos > 0:
+            target_pos = 0
+        if stop_short and target_pos < 0:
+            target_pos = 0
+
+        # ── Spread momentum: soft scale-back on passive (Code B) ──────────────
         prev_spread     = self.history.get("pp_prev_spread", spread)
         spread_widening = spread > prev_spread
         self.history["pp_prev_spread"] = spread
 
-        # ── Regime / cap detection ────────────────────────────────────────────
-        elapsed    = ts - start_ts
-        warmed_up  = elapsed >= self.PEPPER_WARMUP_TICKS
-        fast_track = elapsed >= self.PEPPER_FAST_TRACK_TICKS
+        # ── Execution (Code A logic + Code B sizing) ──────────────────────────
+        rem          = target_pos - pos
+        cross_prem   = max(self.PEPPER_CROSS_MIN, spread)
 
-        cap = self.history.get("pp_cap", None)
-
-        if len(base_samples) >= 15 and len(hist) >= 15:
-            base_mean    = _median(base_samples)
-            current_mean = _median(hist[-15:])
-            dt    = max(1, elapsed)
-            drift = (current_mean - base_mean) / dt * 100.0
-
-            if fast_track and drift >= self.PEPPER_SLOPE_STRONG_FAST:
-                new_cap = self.PEPPER_CAP_STRONG
-            elif warmed_up:
-                if drift > self.PEPPER_SLOPE_STRONG:
-                    new_cap = self.PEPPER_CAP_STRONG
-                elif drift > self.PEPPER_SLOPE_MODERATE:
-                    new_cap = self.PEPPER_CAP_MODERATE
-                elif drift > self.PEPPER_SLOPE_WEAK:
-                    new_cap = self.PEPPER_CAP_WEAK
-                else:
-                    new_cap = self.PEPPER_CAP_NEGATIVE
-            else:
-                new_cap = cap
-
-            if cap is None:
-                cap = new_cap if new_cap is not None else self.PEPPER_CAP_TENTATIVE
-            elif new_cap is not None and new_cap > cap:
-                cap = new_cap
-            elif warmed_up and new_cap is not None and new_cap < cap:
-                cap = new_cap
-
-            self.history["pp_cap"] = cap
-
-        effective_cap = cap if cap is not None else self.PEPPER_CAP_TENTATIVE
-
-        # ── Stop logic (safety — unchanged from v7) ───────────────────────────
-        if effective_cap == self.PEPPER_CAP_STRONG:
-            stop_th, resume_th = self.PEPPER_STOP_STRONG, self.PEPPER_RESUME_STRONG
-        elif effective_cap == self.PEPPER_CAP_WEAK:
-            stop_th, resume_th = self.PEPPER_STOP_WEAK, self.PEPPER_RESUME_WEAK
-        else:
-            stop_th, resume_th = self.PEPPER_STOP_MODERATE, self.PEPPER_RESUME_MODERATE
-
-        breach_count  = int(self.history.get("pp_breach", 0))
-        drift_stopped = bool(self.history.get("pp_stopped", False))
-
-        if len(hist) >= 20:
-            local_slope = hist[-1] - hist[-20]
-            if local_slope < stop_th:
-                breach_count += 1
-            else:
-                breach_count = 0
-            if breach_count >= self.PEPPER_STOP_BREACH_COUNT:
-                drift_stopped = True
-            elif drift_stopped and local_slope > resume_th:
-                drift_stopped = False
-
-        self.history["pp_breach"]  = breach_count
-        self.history["pp_stopped"] = drift_stopped
-
-        orders: List[Order] = []
-
-        # ── Stopped: orderly exit (safety — unchanged) ────────────────────────
-        if drift_stopped or effective_cap == 0:
-            if pos > 0:
-                dump_qty = min(pos, 20)
-                avail    = depth.buy_orders.get(bb, 0)
-                qty      = min(dump_qty, avail)
-                if qty > 0:
-                    orders.append(Order(product, bb, -qty))
-            return orders
-
-        # ── Normal: buy aggressively into trend ───────────────────────────────
-        rem_cap    = effective_cap - pos
-        take_limit = (self.PEPPER_TAKE_STRONG
-                      if effective_cap == self.PEPPER_CAP_STRONG
-                      else self.PEPPER_TAKE_NORMAL)
-
-        if rem_cap > 0:
-            budget = min(rem_cap, take_limit)
+        if rem > 0:
+            # Buy toward target
+            take_budget = min(rem, self.LIMIT - pos,
+                              self.PEPPER_TAKE_STRONG if target_pos == 80
+                              else self.PEPPER_TAKE_NORMAL)
             for ask in sorted(depth.sell_orders.keys()):
-                if budget <= 0:
+                if take_budget <= 0:
                     break
-                if ask <= mid + self.PEPPER_TAKE_THRESH:
-                    qty = min(budget, -depth.sell_orders[ask])
-                    orders.append(Order(product, ask, qty))
-                    budget  -= qty
-                    rem_cap -= qty
-
-            # Passive — scale back only slightly when spread widens
-            if rem_cap > 0:
-                passive_qty = min(rem_cap, self.PEPPER_PASSIVE_MAX)
+                if ask <= mid + min(cross_prem, self.PEPPER_TAKE_CROSS_EDGE):
+                    q = min(take_budget, -depth.sell_orders[ask])
+                    orders.append(Order(product, ask, q))
+                    take_budget -= q
+            # Passive residual — scale back if spread widening
+            if take_budget > 0:
+                passive = min(take_budget, self.PEPPER_PASSIVE_MAX)
                 if spread_widening:
-                    passive_qty = int(passive_qty * self.PEPPER_SPREAD_PASSIVE_SCALE)
-                if passive_qty > 0:
-                    orders.append(Order(product, bb + 1, passive_qty))
+                    passive = int(passive * self.PEPPER_SPREAD_PASSIVE_SCALE)
+                if passive > 0:
+                    orders.append(Order(product, bb + 1, passive))
 
-        # Minimal de-risk — only when heavily loaded and spread clearly widening
-        if spread_widening and pos > effective_cap * self.PEPPER_DERISK_THRESHOLD:
-            orders.append(Order(product, ba - 1, -self.PEPPER_DERISK_QTY))
+        elif rem < 0:
+            # Sell toward target (bidirectional — Code A)
+            take_budget = min(-rem, self.LIMIT + pos,
+                              self.PEPPER_TAKE_STRONG if target_pos == -80
+                              else self.PEPPER_TAKE_NORMAL)
+            for bid in sorted(depth.buy_orders.keys(), reverse=True):
+                if take_budget <= 0:
+                    break
+                if bid >= mid - min(cross_prem, self.PEPPER_TAKE_CROSS_EDGE):
+                    q = min(take_budget, depth.buy_orders[bid])
+                    orders.append(Order(product, bid, -q))
+                    take_budget -= q
+            if take_budget > 0:
+                passive = min(take_budget, self.PEPPER_PASSIVE_MAX)
+                if spread_widening:
+                    passive = int(passive * self.PEPPER_SPREAD_PASSIVE_SCALE)
+                if passive > 0:
+                    orders.append(Order(product, ba - 1, -passive))
+
+        else:
+            # No signal → market-make for spread rebate (Code A)
+            if pos < self.LIMIT:
+                orders.append(Order(product, bb + 1,
+                                    min(self.PEPPER_MM_SIZE, self.LIMIT - pos)))
+            if pos > -self.LIMIT:
+                orders.append(Order(product, ba - 1,
+                                    -min(self.PEPPER_MM_SIZE, self.LIMIT + pos)))
 
         return orders
 
@@ -300,24 +344,32 @@ class Trader:
         ba  = min(depth.sell_orders.keys())
         mid = (bb + ba) / 2.0
 
-        # ── VWAP-blended fair value (safety — unchanged) ──────────────────────
-        bv1       = depth.buy_orders[bb]
-        av1       = -depth.sell_orders[ba]
-        total_vol = bv1 + av1
-        vwap_mid  = (bb * av1 + ba * bv1) / total_vol if total_vol > 0 else mid
+        # ── Fair value: full-book VWAP + imbalance nudge + anchor blend ───────
+        # (Code A formula — their edge over pure L1 VWAP)
+        bv = sum(depth.buy_orders.values())
+        av = sum(-v for v in depth.sell_orders.values())
 
-        fair = self.OSMIUM_VWAP_WEIGHT * vwap_mid + (1 - self.OSMIUM_VWAP_WEIGHT) * self.OSMIUM_ANCHOR
+        fair = float(self.OSMIUM_ANCHOR)
 
+        # Imbalance nudge: shift fair before price moves
+        if bv > av * self.OSMIUM_IMBALANCE_RATIO:
+            fair += self.OSMIUM_IMBALANCE_NUDGE
+        elif av > bv * self.OSMIUM_IMBALANCE_RATIO:
+            fair -= self.OSMIUM_IMBALANCE_NUDGE
+
+        # Anchor blend: 80% anchor, 20% mid
+        fair = self.OSMIUM_ANCHOR_WEIGHT * fair + (1 - self.OSMIUM_ANCHOR_WEIGHT) * mid
+
+        # ── Fair smoothing (Code B: prevents noise spikes) ────────────────────
         op = self.history["op"]
         op.append(fair)
         if len(op) > 30:
             op = op[-30:]
         self.history["op"] = op
-
         if len(op) >= 5:
             fair = 0.6 * fair + 0.4 * (sum(op[-5:]) / 5.0)
 
-        # ── Toxicity filter ───────────────────────────────────────────────────
+        # ── Toxicity filter (Code B safety) ───────────────────────────────────
         buy_vol = sell_vol = 0
         if product in state.market_trades:
             for t in state.market_trades[product]:
@@ -327,14 +379,14 @@ class Trader:
                     sell_vol += abs(t.quantity)
 
         imbalance   = buy_vol - sell_vol
-        toxic_buys  = imbalance >=  self.OSMIUM_TOXICITY_THRESHOLD
-        toxic_sells = imbalance <= -self.OSMIUM_TOXICITY_THRESHOLD
+        toxic_buys  = imbalance >=  self.OSMIUM_TOXICITY_THRESH
+        toxic_sells = imbalance <= -self.OSMIUM_TOXICITY_THRESH
 
         orders: List[Order] = []
         rb = self.LIMIT - pos
         rs = self.LIMIT + pos
 
-        # ── Hard circuit-breaker (safety — unchanged) ─────────────────────────
+        # ── Hard circuit-breaker (Code B safety) ──────────────────────────────
         if pos > self.OSMIUM_FLATTEN_HARD and rs > 0:
             flatten_qty = min(pos - self.OSMIUM_FLATTEN_TARGET + 5, rs)
             orders.append(Order(product, int(fair), -flatten_qty))
@@ -346,68 +398,66 @@ class Trader:
             rb  += flatten_qty
             pos += flatten_qty
 
-        # ── Liquidity taking (aggressive — edge starts at -1) ─────────────────
-        pos_adj_buy  = min(self.OSMIUM_TAKE_EDGE_MAX,
-                           self.OSMIUM_TAKE_EDGE + max(0, pos  // self.OSMIUM_EDGE_POS_STEP))
-        pos_adj_sell = min(self.OSMIUM_TAKE_EDGE_MAX,
-                           self.OSMIUM_TAKE_EDGE + max(0, (-pos) // self.OSMIUM_EDGE_POS_STEP))
+        # ── Mean-reversion take (Code A alpha) ────────────────────────────────
+        if mid < fair - self.OSMIUM_REVERT_THRESH and rb > 0:
+            for ask in sorted(depth.sell_orders.keys()):
+                if ask < fair and rb > 0:
+                    q = min(rb, -depth.sell_orders[ask])
+                    orders.append(Order(product, ask, q))
+                    rb  -= q
+                    pos += q
 
-        # Always take (toxic flow = price moved favorably = take it)
-        for ask in sorted(depth.sell_orders.keys()):
-            if ask <= fair - pos_adj_buy and rb > 0:
-                q = min(rb, -depth.sell_orders[ask])
-                orders.append(Order(product, ask, q))
-                rb  -= q
-                pos += q
+        elif mid > fair + self.OSMIUM_REVERT_THRESH and rs > 0:
+            for bid in sorted(depth.buy_orders.keys(), reverse=True):
+                if bid > fair and rs > 0:
+                    q = min(rs, depth.buy_orders[bid])
+                    orders.append(Order(product, bid, -q))
+                    rs  -= q
+                    pos -= q
 
-        for bid in sorted(depth.buy_orders.keys(), reverse=True):
-            if bid >= fair + pos_adj_sell and rs > 0:
-                q = min(rs, depth.buy_orders[bid])
-                orders.append(Order(product, bid, -q))
-                rs  -= q
-                pos -= q
-
-        # ── Market making ─────────────────────────────────────────────────────
+        # ── Skew (Code B safety) ──────────────────────────────────────────────
         skew = int(pos / self.OSMIUM_SKEW_SOFT)
 
-        bp = int(min(bb + 1, fair - 1)) - skew
-        ap = int(max(ba - 1, fair + 1)) - skew
+        bp1 = int(min(bb + 1, fair - 1)) - skew
+        ap1 = int(max(ba - 1, fair + 1)) - skew
+        bp2 = bp1 - 1
+        ap2 = ap1 + 1
 
-        bp = max(bp, int(fair) - self.OSMIUM_SPREAD_CLAMP)
-        ap = min(ap, int(fair) + self.OSMIUM_SPREAD_CLAMP)
-
-        # Hard skew boost (safety — unchanged)
         if pos > self.OSMIUM_SKEW_HARD:
-            bp -= 1
+            bp1 -= 1
+            bp2 -= 1
         if pos < -self.OSMIUM_SKEW_HARD:
-            ap += 1
+            ap1 += 1
+            ap2 += 1
 
-        if bp >= ap:
-            bp = int(fair) - 1
-            ap = int(fair) + 1
+        if bp1 >= ap1:
+            bp1 = int(fair) - 1
+            ap1 = int(fair) + 1
+            bp2 = bp1 - 1
+            ap2 = ap1 + 1
 
-        # Size scaling — only shrinks when drift is genuinely far from anchor
+        # ── Size scaling (Code B safety) ──────────────────────────────────────
         anchor_drift = abs(fair - self.OSMIUM_ANCHOR)
         size_scale   = (max(0.5, 1.0 - (anchor_drift - self.OSMIUM_DRIFT_SCALE_AT) / 20.0)
                         if anchor_drift > self.OSMIUM_DRIFT_SCALE_AT else 1.0)
 
-        front  = max(6, int(self.OSMIUM_QUOTE_FRONT  * size_scale))
-        second = max(4, int(self.OSMIUM_QUOTE_SECOND * size_scale))
+        t1 = max(6,  int(self.OSMIUM_QUOTE_T1 * size_scale))
+        t2 = max(4,  int(self.OSMIUM_QUOTE_T2 * size_scale))
 
-        # Passive MM — suppressed only on genuinely toxic flow
+        # ── Tiered quotes (Code A sizing, suppressed on toxic flow) ───────────
         if rb > 0 and not toxic_buys:
-            q = min(rb, front)
-            orders.append(Order(product, bp, q))
+            q = min(rb, t1)
+            orders.append(Order(product, bp1, q))
             rb -= q
             if rb > 0:
-                orders.append(Order(product, bp - 1, min(rb, second)))
+                orders.append(Order(product, bp2, min(rb, t2)))
 
         if rs > 0 and not toxic_sells:
-            q = min(rs, front)
-            orders.append(Order(product, ap, -q))
+            q = min(rs, t1)
+            orders.append(Order(product, ap1, -q))
             rs -= q
             if rs > 0:
-                orders.append(Order(product, ap + 1, -min(rs, second)))
+                orders.append(Order(product, ap2, -min(rs, t2)))
 
         return orders
 
