@@ -1057,6 +1057,139 @@ def render_manual_optimizer_tab():
     _impl()
 
 
+def render_rust_backtester_tab():
+    st.header("🦀 Rust Backtester Results")
+    st.markdown("""
+    Explore high-performance backtest results from the Rust engine. 
+    Results are automatically loaded from `external/prosperity_rust_backtester/runs/`.
+    """)
+    
+    rust_runs_dir = os.path.join(REPO_ROOT, "external", "prosperity_rust_backtester", "runs")
+    if not os.path.isdir(rust_runs_dir):
+        st.info("No Rust backtester runs found. Use the CLI or `run_backtest.ps1` to generate results first.")
+        return
+        
+    runs = []
+    # Walk to find all metrics.json even in subdirectories
+    for root, dirs, files in os.walk(rust_runs_dir):
+        if "metrics.json" in files:
+            metrics_path = os.path.join(root, "metrics.json")
+            try:
+                with open(metrics_path, "r") as f:
+                    data = json.load(f)
+                    # Use parent folder name as run_id if missing or generic
+                    if not data.get("run_id") or data["run_id"] == "backtest":
+                         data["run_id"] = os.path.basename(root)
+                    runs.append(data)
+            except:
+                pass
+                
+    if not runs:
+        st.info("No valid backtest metrics found in the runs directory.")
+        return
+        
+    df_runs = pd.DataFrame(runs)
+    if "generated_at" in df_runs.columns:
+        df_runs["generated_at"] = pd.to_datetime(df_runs["generated_at"])
+    
+    # Enrich df with trader name for easier comparison
+    if "trader_path" in df_runs.columns:
+        df_runs["Trader"] = df_runs["trader_path"].apply(lambda x: os.path.basename(x))
+    else:
+        df_runs["Trader"] = "Unknown"
+
+    # Create a nice label combining trader name and timestamp
+    df_runs["DisplayLabel"] = df_runs.apply(
+        lambda r: f"{r['Trader']} | Day {r.get('day', '?')} | {r['generated_at'].strftime('%H:%M:%S') if pd.notna(r['generated_at']) else '??'}", 
+        axis=1
+    )
+
+    st.subheader("🏁 Trader Comparison Leaderboard")
+    
+    # Create mapping for selectors
+    label_to_id = dict(zip(df_runs["DisplayLabel"], df_runs["run_id"]))
+    
+    selected_labels = st.multiselect(
+        "Select traders/runs to compare",
+        options=df_runs.sort_values("generated_at", ascending=False)["DisplayLabel"].tolist(),
+        default=df_runs.sort_values("generated_at", ascending=False)["DisplayLabel"].tolist()[:5],
+        help="Choose multiple backtest runs to see a side-by-side comparison."
+    )
+
+    if selected_labels:
+        selected_ids = [label_to_id[l] for l in selected_labels]
+        comp_df = df_runs[df_runs["run_id"].isin(selected_ids)].copy()
+        
+        # Sort and Rank
+        comp_df = comp_df.sort_values("final_pnl_total", ascending=False).reset_index(drop=True)
+        comp_df["Rank"] = comp_df.index + 1
+        
+        # Comparison Metrics Table - simplified to essentials
+        st.dataframe(
+            comp_df[["Rank", "DisplayLabel", "final_pnl_total", "own_trade_count"]],
+            column_config={
+                "Rank": st.column_config.NumberColumn("Rank", format="%d", help="Ordered by Total PnL"),
+                "DisplayLabel": "Trader Run Details",
+                "final_pnl_total": st.column_config.NumberColumn("Total PnL", format="$%d"),
+                "own_trade_count": "Trades",
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # Highlight Winner
+        winner = comp_df.iloc[0]
+        st.success(f"🏆 **Winner:** {winner['Trader']} with **${winner['final_pnl_total']:,.0f}** PnL (Day {winner.get('day', '?')})")
+
+        # Comparative Chart
+        st.write("#### PnL Performance Comparison")
+        bar_chart = alt.Chart(comp_df).mark_bar().encode(
+            x=alt.X("final_pnl_total:Q", title="Final PnL ($)"),
+            y=alt.Y("DisplayLabel:N", sort="-x", title="Trader Run"),
+            color=alt.Color("Trader:N", title="Trader Script"),
+            tooltip=["Trader", "run_id", "final_pnl_total", "own_trade_count"]
+        ).properties(height=max(200, len(comp_df) * 40))
+        st.altair_chart(bar_chart, use_container_width=True)
+
+    st.divider()
+    st.subheader("🔍 Individual Run Deep Dive")
+    selected_run_label = st.selectbox(
+        "Select a single run for full details", 
+        df_runs.sort_values("generated_at", ascending=False)["DisplayLabel"].tolist()
+    )
+    if selected_run_label:
+        selected_run_id = label_to_id[selected_run_label]
+        run_data = next(r for r in runs if r["run_id"] == selected_run_id)
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Total PnL", f"${run_data.get('final_pnl_total', 0):,.2f}")
+            st.write("**Dataset:**", run_data.get("dataset_id", "N/A"))
+            st.write("**Executed At:**", run_data.get("generated_at", "N/A"))
+        with c2:
+            st.metric("Total Trades", f"{run_data.get('own_trade_count', 0):,}")
+            st.write("**Trader:**", run_data.get("trader_path", "N/A"))
+            st.write("**Day:**", run_data.get("day", "N/A"))
+            
+        if "final_pnl_by_product" in run_data:
+            st.write("#### PnL by Product")
+            pnl_items = run_data["final_pnl_by_product"].items()
+            pnl_df = pd.DataFrame(pnl_items, columns=["Product", "PnL"]).sort_values("PnL", ascending=False)
+            
+            # Simple bar chart
+            chart = alt.Chart(pnl_df).mark_bar().encode(
+                x=alt.X("PnL:Q", title="PnL ($)"),
+                y=alt.Y("Product:N", sort="-x", title=""),
+                color=alt.condition(
+                    alt.datum.PnL > 0,
+                    alt.value("#2ecc71"),  # green
+                    alt.value("#e74c3c")   # red
+                ),
+                tooltip=["Product", "PnL"]
+            ).properties(height=max(100, len(pnl_df) * 30))
+            st.altair_chart(chart, use_container_width=True)
+
+
 def main():
     st.set_page_config(
         page_title="P4 Control Center",
@@ -1114,8 +1247,9 @@ def main():
 
     # Final tab layout
 
-    tab_backtest, tab_robust, tab_manual = st.tabs([
+    tab_backtest, tab_rust, tab_robust, tab_manual = st.tabs([
         "📉 Visual Backtester",
+        "🦀 Rust Backtester",
         "🛡️ Robust Analysis",
         "♟️ Manual Optimizer"
     ])
@@ -1750,6 +1884,9 @@ def main():
             round_num = _active_round_number() or "?"
             st.warning(f"Could not locate data for Day {selected_day} at: {data_dir}")
             st.code(f"Looking for pattern: prices_round_{round_num}_day_{selected_day}.csv")
+
+    with tab_rust:
+        render_rust_backtester_tab()
 
     with tab_manual:
         render_manual_optimizer_tab()
