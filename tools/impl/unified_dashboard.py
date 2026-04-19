@@ -1394,541 +1394,541 @@ def main():
         
         with tab_robust:
             st.header("🛡️ Robust Multi-Scenario Analysis")
-        st.markdown("""
-        Compare **IMC Prosperity** backtest CSVs (per-session PnL). Default workflows use **IMC capsule days only**;
-        scenario or real-world rows appear only if you generated those runs (e.g. ``--with-scenarios`` / ``--full-legacy`` on the backtester).
-        Leaderboard metrics emphasize **IMC days** and worst-case behavior, not peak PnL on a single session.
-        """)
+            st.markdown("""
+            Compare **IMC Prosperity** backtest CSVs (per-session PnL). Default workflows use **IMC capsule days only**;
+            scenario or real-world rows appear only if you generated those runs (e.g. ``--with-scenarios`` / ``--full-legacy`` on the backtester).
+            Leaderboard metrics emphasize **IMC days** and worst-case behavior, not peak PnL on a single session.
+            """)
 
-        with st.expander("Optional: Rust backtester (external clone)", expanded=False):
-            st.markdown(
-                "See `external/README_IMC_PROSPERITY.md`. Example once `rust_backtester` is on your PATH (often via WSL); "
-                "paths use POSIX form for copy-paste into a Linux shell."
-            )
-            _caps = (Path(REPO_ROOT) / "ROUND 2" / "data_capsule").resolve()
-            _tr = (Path(REPO_ROOT) / "ROUND 2" / "traders" / "ken" / "trader_ken_v6.py").resolve()
-            st.code(
+            with st.expander("Optional: Rust backtester (external clone)", expanded=False):
+                st.markdown(
+                    "See `external/README_IMC_PROSPERITY.md`. Example once `rust_backtester` is on your PATH (often via WSL); "
+                    "paths use POSIX form for copy-paste into a Linux shell."
+                )
+                _caps = (Path(REPO_ROOT) / "ROUND 2" / "data_capsule").resolve()
+                _tr = (Path(REPO_ROOT) / "ROUND 2" / "traders" / "ken" / "trader_ken_v6.py").resolve()
+                st.code(
                 f'rust_backtester --trader "{_tr.as_posix()}" --dataset "{_caps.as_posix()}"',
                 language="bash",
             )
 
-        # Robust backtester outputs are now saved under ROUND 2/results/robust.
-        # Keep a fallback to ROUND 2/tools for older runs.
-        robust_results_dir = get_paths()["results_robust_dir"]
-        fallback_tools_dir = get_paths()["tools_dir"]
-
-        robust_csvs: list[str] = []
-        if os.path.isdir(robust_results_dir):
-            robust_csvs = robust_results_csv_filenames(robust_results_dir)
-        if not robust_csvs and os.path.isdir(fallback_tools_dir):
-            robust_results_dir = fallback_tools_dir
-            robust_csvs = robust_results_csv_filenames(robust_results_dir)
-
-        if robust_csvs:
-            col_f, col_spacer = st.columns([1, 2])
-            with col_f:
-                p_filter = st.radio("Product Filter", ["All", "Osmium", "Root"], horizontal=True, key="robust_product_filter")
-            
-            p_col_map = {"All": "final_pnl", "Osmium": "pnl_osmium", "Root": "pnl_pepper"}
-            target_col = p_col_map[p_filter]
-
-            tab_lead, tab_inspect, tab_stress = st.tabs(["🏆 Leaderboard & Comparison", "📊 Individual Inspection", "🔬 Anti-Overfit Stress Lab"])
-
-            # Pre-load all data for leaderboard and comparison
-            all_leaderboard_data = []
-            all_dfs = []
-            for f in robust_csvs:
-                df = pd.read_csv(os.path.join(robust_results_dir, f))
-                name = robust_csv_trader_label(f)
+            # Robust backtester outputs are now saved under ROUND 2/results/robust.
+            # Keep a fallback to ROUND 2/tools for older runs.
+            robust_results_dir = get_paths()["results_robust_dir"]
+            fallback_tools_dir = get_paths()["tools_dir"]
+    
+            robust_csvs: list[str] = []
+            if os.path.isdir(robust_results_dir):
+                robust_csvs = robust_results_csv_filenames(robust_results_dir)
+            if not robust_csvs and os.path.isdir(fallback_tools_dir):
+                robust_results_dir = fallback_tools_dir
+                robust_csvs = robust_results_csv_filenames(robust_results_dir)
+    
+            if robust_csvs:
+                col_f, col_spacer = st.columns([1, 2])
+                with col_f:
+                    p_filter = st.radio("Product Filter", ["All", "Osmium", "Root"], horizontal=True, key="robust_product_filter")
                 
-                # Dynamic column selection with strict fallback for products
-                data_missing = False
-                if target_col in df.columns:
-                    pnls = df[target_col]
-                elif p_filter == "All":
-                    pnls = df["final_pnl"] if "final_pnl" in df.columns else pd.Series([0]*len(df))
-                else:
-                    # Filter is Osmium or Root but column missing
-                    pnls = pd.Series([0.0]*len(df))
-                    data_missing = True
+                p_col_map = {"All": "final_pnl", "Osmium": "pnl_osmium", "Root": "pnl_pepper"}
+                target_col = p_col_map[p_filter]
+    
+                tab_lead, tab_inspect, tab_stress = st.tabs(["🏆 Leaderboard & Comparison", "📊 Individual Inspection", "🔬 Anti-Overfit Stress Lab"])
+    
+                # Pre-load all data for leaderboard and comparison
+                all_leaderboard_data = []
+                all_dfs = []
+                for f in robust_csvs:
+                    df = pd.read_csv(os.path.join(robust_results_dir, f))
+                    name = robust_csv_trader_label(f)
+                    
+                    # Dynamic column selection with strict fallback for products
+                    data_missing = False
+                    if target_col in df.columns:
+                        pnls = df[target_col]
+                    elif p_filter == "All":
+                        pnls = df["final_pnl"] if "final_pnl" in df.columns else pd.Series([0]*len(df))
+                    else:
+                        # Filter is Osmium or Root but column missing
+                        pnls = pd.Series([0.0]*len(df))
+                        data_missing = True
+                    
+                    all_leaderboard_data.append({
+                        "Trader": name + (" (⚠️ RECALC)" if data_missing else ""),
+                        "Mean PnL": pnls.mean(),
+                        "Median PnL": pnls.median(),
+                        "Worst PnL": pnls.min(),
+                        "Win Rate": (pnls > 0).mean() * 100
+                    })
+                    df["target_pnl"] = pnls # For internal plotting
+                    df["trader"] = name
+                    all_dfs.append(df)
                 
-                all_leaderboard_data.append({
-                    "Trader": name + (" (⚠️ RECALC)" if data_missing else ""),
-                    "Mean PnL": pnls.mean(),
-                    "Median PnL": pnls.median(),
-                    "Worst PnL": pnls.min(),
-                    "Win Rate": (pnls > 0).mean() * 100
-                })
-                df["target_pnl"] = pnls # For internal plotting
-                df["trader"] = name
-                all_dfs.append(df)
-            
-            leaderboard_df = pd.DataFrame(all_leaderboard_data)
-            full_df = pd.concat(all_dfs)
-
-            with tab_lead:
-                st.subheader("⚔️ Interactive Comparison Matrix")
-                st.caption("Select any robust result files, auto-compute side-by-side metrics, color by quality, and auto-rank.")
-
-                default_selection = robust_csvs
-
-                selected_compare = st.multiselect(
-                    "Backtest Result Files",
-                    options=sorted(robust_csvs),
-                    default=default_selection,
-                    format_func=robust_csv_trader_label,
-                    key="comparison_files_multi",
-                )
-                cutoff_col, _ = st.columns([1, 3])
-                with cutoff_col:
-                    blowup_cutoff = st.number_input(
-                        "Blow-up cutoff ($)",
-                        min_value=1000,
-                        max_value=500000,
-                        value=10000,
-                        step=1000,
-                        key="comparison_blowup_cutoff",
-                        help="A run is counted as blow-up when PnL <= -cutoff.",
+                leaderboard_df = pd.DataFrame(all_leaderboard_data)
+                full_df = pd.concat(all_dfs)
+    
+                with tab_lead:
+                    st.subheader("⚔️ Interactive Comparison Matrix")
+                    st.caption("Select any robust result files, auto-compute side-by-side metrics, color by quality, and auto-rank.")
+    
+                    default_selection = robust_csvs
+    
+                    selected_compare = st.multiselect(
+                        "Backtest Result Files",
+                        options=sorted(robust_csvs),
+                        default=default_selection,
+                        format_func=robust_csv_trader_label,
+                        key="comparison_files_multi",
                     )
-
-                st.markdown("**AutoScore Preset**")
-                preset = st.radio(
-                    "Ranking profile",
-                    ["Balanced", "IMC-focused", "Safety-first"],
-                    horizontal=True,
-                    key="comparison_rank_profile",
-                )
-
-                if preset == "IMC-focused":
-                    weights = {
-                        "imc_mean": 0.48,
-                        "full_mean": 0.22,
-                        "win_rate": 0.10,
-                        "worst_day": 0.08,
-                        "scen_mean": 0.08,
-                        "blowup": 0.04,
-                    }
-                elif preset == "Safety-first":
-                    weights = {
-                        "imc_mean": 0.18,
-                        "full_mean": 0.20,
-                        "win_rate": 0.22,
-                        "worst_day": 0.20,
-                        "scen_mean": 0.08,
-                        "blowup": 0.12,
-                    }
-                else:
-                    weights = {
-                        "imc_mean": 0.34,
-                        "full_mean": 0.22,
-                        "win_rate": 0.16,
-                        "worst_day": 0.12,
-                        "scen_mean": 0.10,
-                        "blowup": 0.06,
-                    }
-
-                if selected_compare:
-                    comparison_df = _build_comparison_table(
-                        selected_compare,
-                        robust_results_dir,
-                        target_col,
-                        p_filter,
-                        float(blowup_cutoff),
-                        weights,
+                    cutoff_col, _ = st.columns([1, 3])
+                    with cutoff_col:
+                        blowup_cutoff = st.number_input(
+                            "Blow-up cutoff ($)",
+                            min_value=1000,
+                            max_value=500000,
+                            value=10000,
+                            step=1000,
+                            key="comparison_blowup_cutoff",
+                            help="A run is counted as blow-up when PnL <= -cutoff.",
+                        )
+    
+                    st.markdown("**AutoScore Preset**")
+                    preset = st.radio(
+                        "Ranking profile",
+                        ["Balanced", "IMC-focused", "Safety-first"],
+                        horizontal=True,
+                        key="comparison_rank_profile",
                     )
-                    if not comparison_df.empty:
-                        st.dataframe(
-                            _style_comparison_table(comparison_df),
-                            use_container_width=True,
-                            hide_index=True,
-                            height=min(700, 120 + len(comparison_df) * 35),
+    
+                    if preset == "IMC-focused":
+                        weights = {
+                            "imc_mean": 0.48,
+                            "full_mean": 0.22,
+                            "win_rate": 0.10,
+                            "worst_day": 0.08,
+                            "scen_mean": 0.08,
+                            "blowup": 0.04,
+                        }
+                    elif preset == "Safety-first":
+                        weights = {
+                            "imc_mean": 0.18,
+                            "full_mean": 0.20,
+                            "win_rate": 0.22,
+                            "worst_day": 0.20,
+                            "scen_mean": 0.08,
+                            "blowup": 0.12,
+                        }
+                    else:
+                        weights = {
+                            "imc_mean": 0.34,
+                            "full_mean": 0.22,
+                            "win_rate": 0.16,
+                            "worst_day": 0.12,
+                            "scen_mean": 0.10,
+                            "blowup": 0.06,
+                        }
+    
+                    if selected_compare:
+                        comparison_df = _build_comparison_table(
+                            selected_compare,
+                            robust_results_dir,
+                            target_col,
+                            p_filter,
+                            float(blowup_cutoff),
+                            weights,
                         )
-                        st.caption(
-                            f"Preset: {preset}. AutoScore blends IMC mean, full mean, win rate, worst day, scenario mean, and blow-up%. "
-                            "Higher rank = better profile under chosen objective."
-                        )
-
-                        rank_bar = alt.Chart(comparison_df).mark_bar().encode(
-                            x=alt.X("AutoScore:Q", title="AutoScore"),
-                            y=alt.Y("Trader:N", sort="-x", title="Trader"),
-                            color=alt.Color("IMC Mean:Q", scale=alt.Scale(scheme="yellowgreenblue"), title="IMC Mean"),
-                            tooltip=["Rank", "Trader", "AutoScore", "IMC Mean", "Full Mean", "Worst Day", "Win%", "Blow-up%"],
-                        ).properties(height=max(220, 30 * len(comparison_df)), title="Auto-Rank Overview")
-                        st.altair_chart(rank_bar, use_container_width=True)
-
-                        st.markdown("**Pairwise Edge vs Baseline**")
-                        baseline = st.selectbox(
-                            "Baseline trader",
-                            options=comparison_df["Trader"].tolist(),
-                            key="comparison_baseline_trader",
-                        )
-                        base_row = comparison_df[comparison_df["Trader"] == baseline].iloc[0]
-                        pair_df = comparison_df.copy()
-                        pair_df["Edge IMC Mean"] = pair_df["IMC Mean"] - base_row["IMC Mean"]
-                        pair_df["Edge Full Mean"] = pair_df["Full Mean"] - base_row["Full Mean"]
-                        pair_df["Edge Worst Day"] = pair_df["Worst Day"] - base_row["Worst Day"]
-                        pair_df["Edge Win%"] = pair_df["Win%"] - base_row["Win%"]
-                        pair_df["Edge Blow-up%"] = base_row["Blow-up%"] - pair_df["Blow-up%"]
-
-                        edge_cols = [
-                            "Rank",
-                            "Trader",
-                            "IMC Mean",
-                            "Full Mean",
-                            "Worst Day",
-                            "Win%",
-                            "Blow-up%",
-                            "Edge IMC Mean",
-                            "Edge Full Mean",
-                            "Edge Worst Day",
-                            "Edge Win%",
-                            "Edge Blow-up%",
-                        ]
-                        pair_view = pair_df[edge_cols].copy().sort_values("Edge Full Mean", ascending=False)
-                        pair_styler = pair_view.style
-                        if _matplotlib_available():
-                            pair_styler = pair_styler.background_gradient(
-                                cmap="RdYlGn",
-                                subset=["Edge IMC Mean", "Edge Full Mean", "Edge Worst Day", "Edge Win%", "Edge Blow-up%"],
+                        if not comparison_df.empty:
+                            st.dataframe(
+                                _style_comparison_table(comparison_df),
+                                use_container_width=True,
+                                hide_index=True,
+                                height=min(700, 120 + len(comparison_df) * 35),
                             )
-                        pair_styler = pair_styler.format(
-                            {
-                                "IMC Mean": "${:,.0f}",
-                                "Full Mean": "${:,.0f}",
-                                "Worst Day": "${:,.0f}",
-                                "Win%": "{:.1f}%",
-                                "Blow-up%": "{:.1f}%",
-                                "Edge IMC Mean": "{:+,.0f}",
-                                "Edge Full Mean": "{:+,.0f}",
-                                "Edge Worst Day": "{:+,.0f}",
-                                "Edge Win%": "{:+.1f}pp",
-                                "Edge Blow-up%": "{:+.1f}pp",
-                            }
-                        )
-                        st.dataframe(pair_styler, use_container_width=True, hide_index=True)
+                            st.caption(
+                                f"Preset: {preset}. AutoScore blends IMC mean, full mean, win rate, worst day, scenario mean, and blow-up%. "
+                                "Higher rank = better profile under chosen objective."
+                            )
+    
+                            rank_bar = alt.Chart(comparison_df).mark_bar().encode(
+                                x=alt.X("AutoScore:Q", title="AutoScore"),
+                                y=alt.Y("Trader:N", sort="-x", title="Trader"),
+                                color=alt.Color("IMC Mean:Q", scale=alt.Scale(scheme="yellowgreenblue"), title="IMC Mean"),
+                                tooltip=["Rank", "Trader", "AutoScore", "IMC Mean", "Full Mean", "Worst Day", "Win%", "Blow-up%"],
+                            ).properties(height=max(220, 30 * len(comparison_df)), title="Auto-Rank Overview")
+                            st.altair_chart(rank_bar, use_container_width=True)
+    
+                            st.markdown("**Pairwise Edge vs Baseline**")
+                            baseline = st.selectbox(
+                                "Baseline trader",
+                                options=comparison_df["Trader"].tolist(),
+                                key="comparison_baseline_trader",
+                            )
+                            base_row = comparison_df[comparison_df["Trader"] == baseline].iloc[0]
+                            pair_df = comparison_df.copy()
+                            pair_df["Edge IMC Mean"] = pair_df["IMC Mean"] - base_row["IMC Mean"]
+                            pair_df["Edge Full Mean"] = pair_df["Full Mean"] - base_row["Full Mean"]
+                            pair_df["Edge Worst Day"] = pair_df["Worst Day"] - base_row["Worst Day"]
+                            pair_df["Edge Win%"] = pair_df["Win%"] - base_row["Win%"]
+                            pair_df["Edge Blow-up%"] = base_row["Blow-up%"] - pair_df["Blow-up%"]
+    
+                            edge_cols = [
+                                "Rank",
+                                "Trader",
+                                "IMC Mean",
+                                "Full Mean",
+                                "Worst Day",
+                                "Win%",
+                                "Blow-up%",
+                                "Edge IMC Mean",
+                                "Edge Full Mean",
+                                "Edge Worst Day",
+                                "Edge Win%",
+                                "Edge Blow-up%",
+                            ]
+                            pair_view = pair_df[edge_cols].copy().sort_values("Edge Full Mean", ascending=False)
+                            pair_styler = pair_view.style
+                            if _matplotlib_available():
+                                pair_styler = pair_styler.background_gradient(
+                                    cmap="RdYlGn",
+                                    subset=["Edge IMC Mean", "Edge Full Mean", "Edge Worst Day", "Edge Win%", "Edge Blow-up%"],
+                                )
+                            pair_styler = pair_styler.format(
+                                {
+                                    "IMC Mean": "${:,.0f}",
+                                    "Full Mean": "${:,.0f}",
+                                    "Worst Day": "${:,.0f}",
+                                    "Win%": "{:.1f}%",
+                                    "Blow-up%": "{:.1f}%",
+                                    "Edge IMC Mean": "{:+,.0f}",
+                                    "Edge Full Mean": "{:+,.0f}",
+                                    "Edge Worst Day": "{:+,.0f}",
+                                    "Edge Win%": "{:+.1f}pp",
+                                    "Edge Blow-up%": "{:+.1f}pp",
+                                }
+                            )
+                            st.dataframe(pair_styler, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No comparable rows found in selected files.")
                     else:
-                        st.info("No comparable rows found in selected files.")
-                else:
-                    st.info("Select one or more result files to build the comparison matrix.")
-
-                st.divider()
-                st.subheader("🌐 Cross-Round Comparison")
-                st.caption("Compare robust results across multiple round folders in one table.")
-
-                selectable_rounds = ROUND_DIRS
-                cross_rounds = st.multiselect(
-                    "Rounds to include",
-                    options=selectable_rounds,
-                    default=[st.session_state.active_round] if st.session_state.active_round in selectable_rounds else selectable_rounds[:1],
-                    key="cross_round_selector",
-                )
-
-                if cross_rounds:
-                    cross_df = _build_cross_round_comparison(
-                        selected_rounds=cross_rounds,
-                        target_col=target_col,
-                        p_filter=p_filter,
-                        blowup_cutoff=float(blowup_cutoff),
-                        weights=weights,
+                        st.info("Select one or more result files to build the comparison matrix.")
+    
+                    st.divider()
+                    st.subheader("🌐 Cross-Round Comparison")
+                    st.caption("Compare robust results across multiple round folders in one table.")
+    
+                    selectable_rounds = ROUND_DIRS
+                    cross_rounds = st.multiselect(
+                        "Rounds to include",
+                        options=selectable_rounds,
+                        default=[st.session_state.active_round] if st.session_state.active_round in selectable_rounds else selectable_rounds[:1],
+                        key="cross_round_selector",
                     )
-                    if cross_df.empty:
-                        st.info("No robust CSV results found in selected rounds.")
-                    else:
-                        st.dataframe(
-                            _style_comparison_table(cross_df),
-                            use_container_width=True,
-                            hide_index=True,
-                            height=min(700, 120 + len(cross_df) * 35),
+    
+                    if cross_rounds:
+                        cross_df = _build_cross_round_comparison(
+                            selected_rounds=cross_rounds,
+                            target_col=target_col,
+                            p_filter=p_filter,
+                            blowup_cutoff=float(blowup_cutoff),
+                            weights=weights,
                         )
-
-                        cross_chart = alt.Chart(cross_df).mark_circle(size=120, opacity=0.85).encode(
-                            x=alt.X("IMC Mean:Q", title="IMC Mean"),
-                            y=alt.Y("Full Mean:Q", title="Full Mean"),
-                            color=alt.Color("Round:N", title="Round"),
-                            shape=alt.Shape("Round:N", title="Round"),
-                            tooltip=["Rank", "Round", "Trader", "Algo Key", "AutoScore", "IMC Mean", "Full Mean", "Worst Day", "Win%", "Blow-up%"],
-                        ).properties(height=380, title="Cross-Round Frontier (IMC vs Full Mean)").interactive()
-                        st.altair_chart(cross_chart, use_container_width=True)
-                else:
-                    st.info("Select at least one round to compare.")
-
-                st.divider()
-                st.subheader("Global Leaderboard")
-                st.dataframe(
-                    leaderboard_df.sort_values("Mean PnL", ascending=False),
-                    column_config={
-                        "Trader": st.column_config.TextColumn("Trader Profile"),
-                        "Mean PnL": st.column_config.NumberColumn("Mean PnL", format="$%d"),
-                        "Median PnL": st.column_config.NumberColumn("Median PnL", format="$%d"),
-                        "Worst PnL": st.column_config.NumberColumn("Worst PnL", format="$%d"),
-                        "Win Rate": st.column_config.NumberColumn("Win Rate", format="%.0f%%"),
-                    },
-                    use_container_width=True,
-                    hide_index=True
-                )
-
-                st.divider()
-                st.subheader("Comparative Analysis")
-                
-                col_c1, col_c2 = st.columns(2)
-                with col_c1:
-                    dist_chart = alt.Chart(full_df).mark_boxplot(extent='min-max').encode(
-                        x=alt.X("trader:N", title="Trader"),
-                        y=alt.Y("target_pnl:Q", title=f"PnL ({p_filter}) ($)"),
-                        color=alt.Color("trader:N", legend=None)
-                    ).properties(height=350)
-                    st.altair_chart(dist_chart, use_container_width=True)
-
-                with col_c2:
-                    st.markdown(f"**Mean PnL by Category ({p_filter})**")
-                    cat_comp = full_df.groupby(["trader", "category"])["target_pnl"].mean().reset_index()
-                    cat_chart = alt.Chart(cat_comp).mark_bar().encode(
-                        x=alt.X("category:N", title="Category"),
-                        y=alt.Y("target_pnl:Q", title=f"Mean PnL ({p_filter}) ($)"),
-                        color=alt.Color("trader:N", title="Trader"),
-                        xOffset="trader:N"
-                    ).properties(height=350)
-                    st.altair_chart(cat_chart, use_container_width=True)
-
-                st.divider()
-                st.markdown("**Risk Frontier: PnL vs Max Drawdown (All Scenarios)**")
-                risk_scatter = alt.Chart(full_df).mark_circle(size=60, opacity=0.6).encode(
-                    x=alt.X("target_pnl:Q", title=f"PnL ({p_filter}) ($)"),
-                    y=alt.Y("max_drawdown:Q", title="Max Drawdown ($)"),
-                    color=alt.Color("trader:N", title="Trader"),
-                    tooltip=["trader", "name", "target_pnl", "max_drawdown", "category"]
-                ).properties(height=450, title=f"Risk vs Reward (PnL: {p_filter}) - All Scenarios").interactive()
-                st.altair_chart(risk_scatter, use_container_width=True)
-
-                st.divider()
-                st.markdown(f"**PnL by Scenario Comparison (Heatmap - {p_filter})**")
-                heatmap = alt.Chart(full_df).mark_rect().encode(
-                    x=alt.X("trader:N", title="Trader", axis=alt.Axis(labelAngle=-45)),
-                    y=alt.Y("name:N", title="Scenario", sort="descending"),
-                    color=alt.Color("target_pnl:Q", scale=alt.Scale(scheme="redyellowgreen", domainMid=0), title="PnL ($)"),
-                    tooltip=["trader", "name", "target_pnl", "category"]
-                ).properties(height=max(400, len(full_df["name"].unique()) * 15))
-                st.altair_chart(heatmap, use_container_width=True)
-
-            with tab_inspect:
-                selected_result = st.selectbox(
-                    "Select Results File for Deep Dive",
-                    robust_csvs,
-                    format_func=robust_csv_trader_label,
-                )
-                df_robust = pd.read_csv(os.path.join(robust_results_dir, selected_result))
-                
-                # Dynamic column selection with strict fallback for products
-                data_missing = False
-                if target_col in df_robust.columns:
-                    pnls = df_robust[target_col]
-                elif p_filter == "All":
-                    pnls = df_robust["final_pnl"] if "final_pnl" in df_robust.columns else pd.Series([0]*len(df_robust))
-                else:
-                    pnls = pd.Series([0.0]*len(df_robust))
-                    data_missing = True
-                
-                df_robust["target_pnl"] = pnls
-
-                if data_missing:
-                    st.warning(f"⚠️ **Granular Data Missing:** This result file does not contain {p_filter}-specific PnL. Please re-run the robust backtester to enable filtering.")
-
-                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-                col_m1.metric(f"Mean PnL ({p_filter})", f"${pnls.mean():,.0f}")
-                col_m2.metric("Median PnL", f"${pnls.median():,.0f}")
-                col_m3.metric("Worst PnL", f"${pnls.min():,.0f}")
-                col_m4.metric("Win Rate", f"{(pnls > 0).mean()*100:.0f}%")
-
-                st.divider()
-
-                st.subheader(f"PnL by Category ({p_filter})")
-                if "category" in df_robust.columns:
-                    cat_stats = df_robust.groupby("category")["target_pnl"].agg(["mean", "min", "max", "count"])
-                    cat_stats.columns = ["Mean PnL", "Worst PnL", "Best PnL", "Count"]
-                    st.dataframe(cat_stats.style.format("${:,.0f}", subset=["Mean PnL", "Worst PnL", "Best PnL"]))
-
-                st.subheader(f"PnL by Scenario ({p_filter})")
-                bar_data = df_robust[["name", "target_pnl", "category"]].copy()
-                bar_data = bar_data.sort_values("target_pnl")
-
-                bar_chart = alt.Chart(bar_data).mark_bar().encode(
-                    x=alt.X("target_pnl:Q", title="PnL ($)"),
-                    y=alt.Y("name:N", sort="-x", title=""),
-                    color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
-                    tooltip=["name", "target_pnl", "category"],
-                ).properties(height=max(300, len(bar_data) * 22), width="container",
-                            title=f"PnL Across All Scenarios ({p_filter})")
-                st.altair_chart(bar_chart, use_container_width=True)
-
-                st.subheader(f"PnL Distribution ({p_filter})")
-                hist_chart = alt.Chart(df_robust).mark_bar(opacity=0.8).encode(
-                    x=alt.X("target_pnl:Q", bin=alt.Bin(maxbins=25), title="PnL ($)"),
-                    y=alt.Y("count()", title="Scenarios"),
-                    color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
-                ).properties(height=300, title=f"PnL Distribution Histogram ({p_filter})")
-                st.altair_chart(hist_chart, use_container_width=True)
-
-                if "max_drawdown" in df_robust.columns:
-                    st.subheader(f"Risk: PnL vs Drawdown ({p_filter})")
-                    scatter = alt.Chart(df_robust).mark_circle(size=80).encode(
-                        x=alt.X("target_pnl:Q", title="PnL ($)"),
-                        y=alt.Y("max_drawdown:Q", title="Max Drawdown ($)"),
-                        color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
-                        tooltip=["name", "target_pnl", "max_drawdown", "category"],
-                    ).properties(height=400, title="PnL vs Drawdown (bottom-right = best)")
-                    st.altair_chart(scatter, use_container_width=True)
-
-            with tab_stress:
-                st.subheader("🔬 Extreme Multi-Variant Stress Test")
-                st.markdown("""
-                Apply **destructive mutations** to price series to see if your bot relies on 
-                genuine signals or just "got lucky" with a specific trend.
-                """)
-
-                # 1. SETUP
-                trader_search = []
-                trader_base = get_paths()["traders_dir"]
-                for root, _, files in os.walk(trader_base):
-                    for f in files:
-                        if f.endswith(".py") and not f.startswith("__"):
-                            trader_search.append(os.path.relpath(os.path.join(root, f), os.getcwd()))
-                
-                col_s1, col_s2, col_s3 = st.columns(3)
-                with col_s1:
-                    sel_trader = st.selectbox("Target Trader", trader_search, key="stress_trader", index=next((i for i, x in enumerate(trader_search) if "v2d" in x), 0))
-                with col_s2:
-                    sel_prod = st.selectbox("Market Asset", ["ASH_COATED_OSMIUM", "INTARIAN_PEPPER_ROOT", "TOTAL (Both Assets)"], index=2)
-                with col_s3:
-                    sel_source = st.selectbox("Base Dataset", ["All (Round 1 Data)", -1, -2, 0], index=0)
-
-                if st.button("☣️ Run Destructive Mutation Suite", type="primary", use_container_width=True):
-                    source_key = "All" if sel_source == "All (Round 1 Data)" else sel_source
-                    df_p, _ = load_and_process_data(source_key)
-                    if df_p is None:
-                        st.error("Base data not found!")
+                        if cross_df.empty:
+                            st.info("No robust CSV results found in selected rounds.")
+                        else:
+                            st.dataframe(
+                                _style_comparison_table(cross_df),
+                                use_container_width=True,
+                                hide_index=True,
+                                height=min(700, 120 + len(cross_df) * 35),
+                            )
+    
+                            cross_chart = alt.Chart(cross_df).mark_circle(size=120, opacity=0.85).encode(
+                                x=alt.X("IMC Mean:Q", title="IMC Mean"),
+                                y=alt.Y("Full Mean:Q", title="Full Mean"),
+                                color=alt.Color("Round:N", title="Round"),
+                                shape=alt.Shape("Round:N", title="Round"),
+                                tooltip=["Rank", "Round", "Trader", "Algo Key", "AutoScore", "IMC Mean", "Full Mean", "Worst Day", "Win%", "Blow-up%"],
+                            ).properties(height=380, title="Cross-Round Frontier (IMC vs Full Mean)").interactive()
+                            st.altair_chart(cross_chart, use_container_width=True)
                     else:
-                        active_prods = ["ASH_COATED_OSMIUM", "INTARIAN_PEPPER_ROOT"] if "TOTAL" in sel_prod else [sel_prod]
-                        
-                        base_prices = {}
-                        for p in active_prods:
-                            p_vals = df_p[df_p["product"] == p]["mid_price"].values
-                            if len(p_vals) > 5000:
-                                p_vals = p_vals[::len(p_vals)//3000] # Dynamic downsample
-                            base_prices[p] = p_vals
-                        
-                        # Verify lengths match
-                        min_len = min(len(v) for v in base_prices.values())
-                        for p in base_prices: base_prices[p] = base_prices[p][:min_len]
-
-                        np.random.seed(42)
-                        
-                        # 2. VARIANTS (Dict of Dicts: variant_name -> product -> prices)
-                        variants = {}
-                        v_names = ["Original", "Inverted Returns", "Flat + Noise", "Trend Amplified (1.8x)", "Trend Dampened (0.4x)", "Shuffled Segments"]
-                        for v in v_names: variants[v] = {}
-
-                        for p in active_prods:
-                            价格 = base_prices[p]
-                            variants["Original"][p] = 价格.copy()
+                        st.info("Select at least one round to compare.")
+    
+                    st.divider()
+                    st.subheader("Global Leaderboard")
+                    st.dataframe(
+                        leaderboard_df.sort_values("Mean PnL", ascending=False),
+                        column_config={
+                            "Trader": st.column_config.TextColumn("Trader Profile"),
+                            "Mean PnL": st.column_config.NumberColumn("Mean PnL", format="$%d"),
+                            "Median PnL": st.column_config.NumberColumn("Median PnL", format="$%d"),
+                            "Worst PnL": st.column_config.NumberColumn("Worst PnL", format="$%d"),
+                            "Win Rate": st.column_config.NumberColumn("Win Rate", format="%.0f%%"),
+                        },
+                        use_container_width=True,
+                        hide_index=True
+                    )
+    
+                    st.divider()
+                    st.subheader("Comparative Analysis")
+                    
+                    col_c1, col_c2 = st.columns(2)
+                    with col_c1:
+                        dist_chart = alt.Chart(full_df).mark_boxplot(extent='min-max').encode(
+                            x=alt.X("trader:N", title="Trader"),
+                            y=alt.Y("target_pnl:Q", title=f"PnL ({p_filter}) ($)"),
+                            color=alt.Color("trader:N", legend=None)
+                        ).properties(height=350)
+                        st.altair_chart(dist_chart, use_container_width=True)
+    
+                    with col_c2:
+                        st.markdown(f"**Mean PnL by Category ({p_filter})**")
+                        cat_comp = full_df.groupby(["trader", "category"])["target_pnl"].mean().reset_index()
+                        cat_chart = alt.Chart(cat_comp).mark_bar().encode(
+                            x=alt.X("category:N", title="Category"),
+                            y=alt.Y("target_pnl:Q", title=f"Mean PnL ({p_filter}) ($)"),
+                            color=alt.Color("trader:N", title="Trader"),
+                            xOffset="trader:N"
+                        ).properties(height=350)
+                        st.altair_chart(cat_chart, use_container_width=True)
+    
+                    st.divider()
+                    st.markdown("**Risk Frontier: PnL vs Max Drawdown (All Scenarios)**")
+                    risk_scatter = alt.Chart(full_df).mark_circle(size=60, opacity=0.6).encode(
+                        x=alt.X("target_pnl:Q", title=f"PnL ({p_filter}) ($)"),
+                        y=alt.Y("max_drawdown:Q", title="Max Drawdown ($)"),
+                        color=alt.Color("trader:N", title="Trader"),
+                        tooltip=["trader", "name", "target_pnl", "max_drawdown", "category"]
+                    ).properties(height=450, title=f"Risk vs Reward (PnL: {p_filter}) - All Scenarios").interactive()
+                    st.altair_chart(risk_scatter, use_container_width=True)
+    
+                    st.divider()
+                    st.markdown(f"**PnL by Scenario Comparison (Heatmap - {p_filter})**")
+                    heatmap = alt.Chart(full_df).mark_rect().encode(
+                        x=alt.X("trader:N", title="Trader", axis=alt.Axis(labelAngle=-45)),
+                        y=alt.Y("name:N", title="Scenario", sort="descending"),
+                        color=alt.Color("target_pnl:Q", scale=alt.Scale(scheme="redyellowgreen", domainMid=0), title="PnL ($)"),
+                        tooltip=["trader", "name", "target_pnl", "category"]
+                    ).properties(height=max(400, len(full_df["name"].unique()) * 15))
+                    st.altair_chart(heatmap, use_container_width=True)
+    
+                with tab_inspect:
+                    selected_result = st.selectbox(
+                        "Select Results File for Deep Dive",
+                        robust_csvs,
+                        format_func=robust_csv_trader_label,
+                    )
+                    df_robust = pd.read_csv(os.path.join(robust_results_dir, selected_result))
+                    
+                    # Dynamic column selection with strict fallback for products
+                    data_missing = False
+                    if target_col in df_robust.columns:
+                        pnls = df_robust[target_col]
+                    elif p_filter == "All":
+                        pnls = df_robust["final_pnl"] if "final_pnl" in df_robust.columns else pd.Series([0]*len(df_robust))
+                    else:
+                        pnls = pd.Series([0.0]*len(df_robust))
+                        data_missing = True
+                    
+                    df_robust["target_pnl"] = pnls
+    
+                    if data_missing:
+                        st.warning(f"⚠️ **Granular Data Missing:** This result file does not contain {p_filter}-specific PnL. Please re-run the robust backtester to enable filtering.")
+    
+                    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                    col_m1.metric(f"Mean PnL ({p_filter})", f"${pnls.mean():,.0f}")
+                    col_m2.metric("Median PnL", f"${pnls.median():,.0f}")
+                    col_m3.metric("Worst PnL", f"${pnls.min():,.0f}")
+                    col_m4.metric("Win Rate", f"{(pnls > 0).mean()*100:.0f}%")
+    
+                    st.divider()
+    
+                    st.subheader(f"PnL by Category ({p_filter})")
+                    if "category" in df_robust.columns:
+                        cat_stats = df_robust.groupby("category")["target_pnl"].agg(["mean", "min", "max", "count"])
+                        cat_stats.columns = ["Mean PnL", "Worst PnL", "Best PnL", "Count"]
+                        st.dataframe(cat_stats.style.format("${:,.0f}", subset=["Mean PnL", "Worst PnL", "Best PnL"]))
+    
+                    st.subheader(f"PnL by Scenario ({p_filter})")
+                    bar_data = df_robust[["name", "target_pnl", "category"]].copy()
+                    bar_data = bar_data.sort_values("target_pnl")
+    
+                    bar_chart = alt.Chart(bar_data).mark_bar().encode(
+                        x=alt.X("target_pnl:Q", title="PnL ($)"),
+                        y=alt.Y("name:N", sort="-x", title=""),
+                        color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
+                        tooltip=["name", "target_pnl", "category"],
+                    ).properties(height=max(300, len(bar_data) * 22), width="container",
+                                title=f"PnL Across All Scenarios ({p_filter})")
+                    st.altair_chart(bar_chart, use_container_width=True)
+    
+                    st.subheader(f"PnL Distribution ({p_filter})")
+                    hist_chart = alt.Chart(df_robust).mark_bar(opacity=0.8).encode(
+                        x=alt.X("target_pnl:Q", bin=alt.Bin(maxbins=25), title="PnL ($)"),
+                        y=alt.Y("count()", title="Scenarios"),
+                        color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
+                    ).properties(height=300, title=f"PnL Distribution Histogram ({p_filter})")
+                    st.altair_chart(hist_chart, use_container_width=True)
+    
+                    if "max_drawdown" in df_robust.columns:
+                        st.subheader(f"Risk: PnL vs Drawdown ({p_filter})")
+                        scatter = alt.Chart(df_robust).mark_circle(size=80).encode(
+                            x=alt.X("target_pnl:Q", title="PnL ($)"),
+                            y=alt.Y("max_drawdown:Q", title="Max Drawdown ($)"),
+                            color=alt.Color("category:N", scale=alt.Scale(scheme="set2")),
+                            tooltip=["name", "target_pnl", "max_drawdown", "category"],
+                        ).properties(height=400, title="PnL vs Drawdown (bottom-right = best)")
+                        st.altair_chart(scatter, use_container_width=True)
+    
+                with tab_stress:
+                    st.subheader("🔬 Extreme Multi-Variant Stress Test")
+                    st.markdown("""
+                    Apply **destructive mutations** to price series to see if your bot relies on 
+                    genuine signals or just "got lucky" with a specific trend.
+                    """)
+    
+                    # 1. SETUP
+                    trader_search = []
+                    trader_base = get_paths()["traders_dir"]
+                    for root, _, files in os.walk(trader_base):
+                        for f in files:
+                            if f.endswith(".py") and not f.startswith("__"):
+                                trader_search.append(os.path.relpath(os.path.join(root, f), os.getcwd()))
+                    
+                    col_s1, col_s2, col_s3 = st.columns(3)
+                    with col_s1:
+                        sel_trader = st.selectbox("Target Trader", trader_search, key="stress_trader", index=next((i for i, x in enumerate(trader_search) if "v2d" in x), 0))
+                    with col_s2:
+                        sel_prod = st.selectbox("Market Asset", ["ASH_COATED_OSMIUM", "INTARIAN_PEPPER_ROOT", "TOTAL (Both Assets)"], index=2)
+                    with col_s3:
+                        sel_source = st.selectbox("Base Dataset", ["All (Round 1 Data)", -1, -2, 0], index=0)
+    
+                    if st.button("☣️ Run Destructive Mutation Suite", type="primary", use_container_width=True):
+                        source_key = "All" if sel_source == "All (Round 1 Data)" else sel_source
+                        df_p, _ = load_and_process_data(source_key)
+                        if df_p is None:
+                            st.error("Base data not found!")
+                        else:
+                            active_prods = ["ASH_COATED_OSMIUM", "INTARIAN_PEPPER_ROOT"] if "TOTAL" in sel_prod else [sel_prod]
                             
-                            rets = np.diff(价格)
-                            variants["Inverted Returns"][p] = 价格[0] + np.cumsum(-rets)
-                            variants["Flat + Noise"][p] = 价格[0] + np.random.normal(0, 5, len(价格))
-                            variants["Trend Amplified (1.8x)"][p] = 价格[0] + np.cumsum(rets * 1.8)
-                            variants["Trend Dampened (0.4x)"][p] = 价格[0] + np.cumsum(rets * 0.4)
+                            base_prices = {}
+                            for p in active_prods:
+                                p_vals = df_p[df_p["product"] == p]["mid_price"].values
+                                if len(p_vals) > 5000:
+                                    p_vals = p_vals[::len(p_vals)//3000] # Dynamic downsample
+                                base_prices[p] = p_vals
                             
-                            # Shuffled (litera chunks of 50)
-                            chunks = [价格[i:i + 50] for i in range(0, len(价格), 50)]
-                            shuf_idx = np.random.permutation(len(chunks))
-                            variants["Shuffled Segments"][p] = np.concatenate([chunks[i] for i in shuf_idx])
-
-                        # 3. RUN BOT
-                        stress_results = []
-                        pbar = st.progress(0)
-                        for i, vname in enumerate(v_names):
-                            res = run_stress_backtest(os.path.abspath(sel_trader), variants[vname], active_prods)
-                            res["Variant"] = vname
-                            stress_results.append(res)
-                            pbar.progress((i+1)/len(v_names))
-                        
-                        df_stress = pd.DataFrame(stress_results)
-                        
-                        # 4. ROBUSTNESS SCORE
-                        # Logic: Mean PnL / (Std PnL + 1) * Penalty for Sign Flips
-                        mean_p = df_stress["final_pnl"].mean()
-                        std_p = df_stress["final_pnl"].std()
-                        flips = sum(1 for p in df_stress["final_pnl"] if p < 0)
-                        score = (mean_p / (std_p + 1)) * (1.0 - (flips / len(variants)))
-                        
-                        # Normalize score 0-100
-                        norm_score = max(0, min(100, score * 10))
-                        
-                        st.divider()
-                        c_score, c_stats = st.columns([1, 2])
-                        with c_score:
-                            st.metric("Overall Robustness Score", f"{norm_score:.1f}/100", 
-                                      help="High score = bot makes money regardless of how the price chart is warped.")
-                        with c_stats:
-                            st.markdown(f"**Detected Failures**: {flips} / {len(variants)} regimes showed losses.")
-
-                        # 5. UI TABLE & FLAGS
-                        def flag_row(row, base_pnl, base_dd):
-                            flags = []
-                            if row["final_pnl"] < 0: flags.append("🚩 LOSS")
-                            if row["final_pnl"] * base_pnl < 0: flags.append("🔄 SIGN FLIP")
-                            if row["max_dd"] > base_dd * 2: flags.append("⚠️ DD SPIKE")
-                            if abs(row["final_pos"]) > 40: flags.append("📉 DIRECTIONAL")
-                            return ", ".join(flags) if flags else "✅ ROBUST"
-
-                        base_pnl = df_stress[df_stress["Variant"] == "Original"]["final_pnl"].values[0]
-                        base_dd = df_stress[df_stress["Variant"] == "Original"]["max_dd"].values[0]
-                        df_stress["Analysis"] = df_stress.apply(lambda r: flag_row(r, base_pnl, base_dd), axis=1)
-
-                        st.dataframe(df_stress[["Variant", "final_pnl", "max_dd", "final_pos", "Analysis"]].style.format({
-                            "final_pnl": "${:,.0f}",
-                            "max_dd": "${:,.0f}"
-                        }), use_container_width=True)
-
-                        # 6. VISUALIZATION
-                        st.subheader("Variant PnL Trajectories")
-                        line_data = []
-                        for res in stress_results:
-                            for t, val in enumerate(res["pnl_curve"]):
-                                if t % 20 == 0: # Downsample
-                                    line_data.append({"Tick": t, "PnL": val, "Variant": res["Variant"]})
-                        
-                        df_chart = pd.DataFrame(line_data)
-                        chart = alt.Chart(df_chart).mark_line().encode(
-                            x="Tick:Q",
-                            y="PnL:Q",
-                            color="Variant:N",
-                            tooltip=["Tick", "PnL", "Variant"]
-                        ).properties(height=400).interactive()
-                        st.altair_chart(chart, use_container_width=True)
-
-                        col_sc1, col_sc2 = st.columns(2)
-                        with col_sc1:
-                            st.markdown("**Mean PnL vs Drawdown**")
-                            scatter = alt.Chart(df_stress).mark_circle(size=100).encode(
-                                x=alt.X("final_pnl:Q", title="Final PnL ($)"),
-                                y=alt.Y("max_dd:Q", title="Max Drawdown ($)"),
+                            # Verify lengths match
+                            min_len = min(len(v) for v in base_prices.values())
+                            for p in base_prices: base_prices[p] = base_prices[p][:min_len]
+    
+                            np.random.seed(42)
+                            
+                            # 2. VARIANTS (Dict of Dicts: variant_name -> product -> prices)
+                            variants = {}
+                            v_names = ["Original", "Inverted Returns", "Flat + Noise", "Trend Amplified (1.8x)", "Trend Dampened (0.4x)", "Shuffled Segments"]
+                            for v in v_names: variants[v] = {}
+    
+                            for p in active_prods:
+                                价格 = base_prices[p]
+                                variants["Original"][p] = 价格.copy()
+                                
+                                rets = np.diff(价格)
+                                variants["Inverted Returns"][p] = 价格[0] + np.cumsum(-rets)
+                                variants["Flat + Noise"][p] = 价格[0] + np.random.normal(0, 5, len(价格))
+                                variants["Trend Amplified (1.8x)"][p] = 价格[0] + np.cumsum(rets * 1.8)
+                                variants["Trend Dampened (0.4x)"][p] = 价格[0] + np.cumsum(rets * 0.4)
+                                
+                                # Shuffled (litera chunks of 50)
+                                chunks = [价格[i:i + 50] for i in range(0, len(价格), 50)]
+                                shuf_idx = np.random.permutation(len(chunks))
+                                variants["Shuffled Segments"][p] = np.concatenate([chunks[i] for i in shuf_idx])
+    
+                            # 3. RUN BOT
+                            stress_results = []
+                            pbar = st.progress(0)
+                            for i, vname in enumerate(v_names):
+                                res = run_stress_backtest(os.path.abspath(sel_trader), variants[vname], active_prods)
+                                res["Variant"] = vname
+                                stress_results.append(res)
+                                pbar.progress((i+1)/len(v_names))
+                            
+                            df_stress = pd.DataFrame(stress_results)
+                            
+                            # 4. ROBUSTNESS SCORE
+                            # Logic: Mean PnL / (Std PnL + 1) * Penalty for Sign Flips
+                            mean_p = df_stress["final_pnl"].mean()
+                            std_p = df_stress["final_pnl"].std()
+                            flips = sum(1 for p in df_stress["final_pnl"] if p < 0)
+                            score = (mean_p / (std_p + 1)) * (1.0 - (flips / len(variants)))
+                            
+                            # Normalize score 0-100
+                            norm_score = max(0, min(100, score * 10))
+                            
+                            st.divider()
+                            c_score, c_stats = st.columns([1, 2])
+                            with c_score:
+                                st.metric("Overall Robustness Score", f"{norm_score:.1f}/100", 
+                                          help="High score = bot makes money regardless of how the price chart is warped.")
+                            with c_stats:
+                                st.markdown(f"**Detected Failures**: {flips} / {len(variants)} regimes showed losses.")
+    
+                            # 5. UI TABLE & FLAGS
+                            def flag_row(row, base_pnl, base_dd):
+                                flags = []
+                                if row["final_pnl"] < 0: flags.append("🚩 LOSS")
+                                if row["final_pnl"] * base_pnl < 0: flags.append("🔄 SIGN FLIP")
+                                if row["max_dd"] > base_dd * 2: flags.append("⚠️ DD SPIKE")
+                                if abs(row["final_pos"]) > 40: flags.append("📉 DIRECTIONAL")
+                                return ", ".join(flags) if flags else "✅ ROBUST"
+    
+                            base_pnl = df_stress[df_stress["Variant"] == "Original"]["final_pnl"].values[0]
+                            base_dd = df_stress[df_stress["Variant"] == "Original"]["max_dd"].values[0]
+                            df_stress["Analysis"] = df_stress.apply(lambda r: flag_row(r, base_pnl, base_dd), axis=1)
+    
+                            st.dataframe(df_stress[["Variant", "final_pnl", "max_dd", "final_pos", "Analysis"]].style.format({
+                                "final_pnl": "${:,.0f}",
+                                "max_dd": "${:,.0f}"
+                            }), use_container_width=True)
+    
+                            # 6. VISUALIZATION
+                            st.subheader("Variant PnL Trajectories")
+                            line_data = []
+                            for res in stress_results:
+                                for t, val in enumerate(res["pnl_curve"]):
+                                    if t % 20 == 0: # Downsample
+                                        line_data.append({"Tick": t, "PnL": val, "Variant": res["Variant"]})
+                            
+                            df_chart = pd.DataFrame(line_data)
+                            chart = alt.Chart(df_chart).mark_line().encode(
+                                x="Tick:Q",
+                                y="PnL:Q",
                                 color="Variant:N",
-                                tooltip=["Variant", "final_pnl", "max_dd"]
+                                tooltip=["Tick", "PnL", "Variant"]
                             ).properties(height=400).interactive()
-                            st.altair_chart(scatter, use_container_width=True)
-                        with col_sc2:
-                            st.info("""
-                            **Variant Interpretration:**
-                            - **Inverted**: Tests if your bot actually finds alpha or just follows a trend.
-                            - **Shuffled**: Tests if trade timing/order matters.
-                            - **Flat+Noise**: Tests if the bot over-trades (chops) in dead markets.
-                            - **Amplified**: Tests if the bot can handle high volatility.
-                            """)
-
-        else:
-            st.warning("No robust results found. Run the Round 2 robust backtester (IMC days by default):")
-            st.code("python \"ROUND 2/tools/robust_backtester.py\" \"ROUND 2/traders/your_trader.py\" --quick")
-            st.caption("Add ``--with-scenarios`` or ``--full-legacy`` only if you want synthetic / cached real-world CSVs in the same run.")
+                            st.altair_chart(chart, use_container_width=True)
+    
+                            col_sc1, col_sc2 = st.columns(2)
+                            with col_sc1:
+                                st.markdown("**Mean PnL vs Drawdown**")
+                                scatter = alt.Chart(df_stress).mark_circle(size=100).encode(
+                                    x=alt.X("final_pnl:Q", title="Final PnL ($)"),
+                                    y=alt.Y("max_dd:Q", title="Max Drawdown ($)"),
+                                    color="Variant:N",
+                                    tooltip=["Variant", "final_pnl", "max_dd"]
+                                ).properties(height=400).interactive()
+                                st.altair_chart(scatter, use_container_width=True)
+                            with col_sc2:
+                                st.info("""
+                                **Variant Interpretration:**
+                                - **Inverted**: Tests if your bot actually finds alpha or just follows a trend.
+                                - **Shuffled**: Tests if trade timing/order matters.
+                                - **Flat+Noise**: Tests if the bot over-trades (chops) in dead markets.
+                                - **Amplified**: Tests if the bot can handle high volatility.
+                                """)
+    
+            else:
+                st.warning("No robust results found. Run the Round 2 robust backtester (IMC days by default):")
+                st.code("python \"ROUND 2/tools/robust_backtester.py\" \"ROUND 2/traders/your_trader.py\" --quick")
+                st.caption("Add ``--with-scenarios`` or ``--full-legacy`` only if you want synthetic / cached real-world CSVs in the same run.")
 
 
     with tab_backtest:
