@@ -2,6 +2,14 @@
 
 The [prosperity_rust_backtester](https://github.com/GeyzsoN/prosperity_rust_backtester) sources live under `external/prosperity_rust_backtester/` as **normal tracked files** in this repo (vendored copy). If that folder used to look empty after `git clone`, it was because Git had stored only a **submodule pointer** (gitlink) without a `.gitmodules` file—clones do not download submodule contents unless configured. Vendoring avoids that.
 
+## One command from the imc-prosperity-4 repo root
+
+```bash
+python tools/run_rust_backtester.py
+```
+
+This runs `cargo build --release` in `external/prosperity_rust_backtester/` (unless you pass `--no-build` and the binary already exists), then executes `rust_backtester` with default `--trader` / `--dataset` pointing at **Round 2** capsule CSVs. Extra CLI flags go after `--`, e.g. `python tools/run_rust_backtester.py -- --day -1`.
+
 ## IMC Prosperity data layout here
 
 Official-style capsule CSVs are under each round folder, for example:

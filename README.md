@@ -9,6 +9,7 @@ A unified repository for strategy development, backtesting, and analysis, curren
 - **`ROUND 2/`**: Active development workspace containing traders, configurations, and results.
 - **`ROUND 1/`**: Legacy data and strategies for reference.
 - **`tools/dashboard.py`**: The main entry point for the visual console.
+- **`tools/run_rust_backtester.py`**: One command to build and run the vendored Rust backtester against Round 2 capsule data.
 - **`tools/impl/`**: Core implementation of the Unified Dashboard.
 - **`requirements-dashboard.txt`**: Python dependencies for the Streamlit dashboard (install once from the repo root).
 - **`ROUND 2/tools/robust_backtester.py`**: Round 2 multi-session backtester (defaults to **IMC capsule days only** under `ROUND 2/data_capsule/`; scenarios and cached real-world CSVs are opt-in).
@@ -51,16 +52,23 @@ python -m streamlit run "tools/dashboard.py"
 
 The UI defaults to **Round 2**; use the sidebar to switch rounds. The Robust Analysis tab reads CSVs from `ROUND N/results/robust/` (IMC-focused metrics by default).
 
-### 3. Optional: Rust CLI backtester
+### 3. Optional: Rust CLI backtester (one command)
 
-Sources live in `external/prosperity_rust_backtester/`. On **Windows**, `cargo build` needs the **MSVC linker** (Visual Studio Build Tools with “Desktop development with C++”) unless you use **WSL2** and build there. Details and example `--dataset` paths for this repo: **`external/README_IMC_PROSPERITY.md`**.
+From the repo root this builds the vendored crate (release) if needed, then runs it against **Round 2** capsule data and the default Ken v6 trader:
 
-Example (POSIX paths, e.g. WSL):
-
-```bash
-rust_backtester --trader /path/to/imc-prosperity-4/ROUND\ 2/traders/ken/trader_ken_v6.py \
-  --dataset /path/to/imc-prosperity-4/ROUND\ 2/data_capsule
+```powershell
+python "tools/run_rust_backtester.py"
 ```
+
+Override trader or dataset, or pass extra flags to the Rust binary:
+
+```powershell
+python "tools/run_rust_backtester.py" --trader "ROUND 2/traders/trader.py" --dataset "ROUND 2/data_capsule"
+python "tools/run_rust_backtester.py" -- --day -1
+python "tools/run_rust_backtester.py" --no-build
+```
+
+Sources live in `external/prosperity_rust_backtester/`. You need **`cargo`** on PATH. On **Windows**, the first build needs the **MSVC linker** (Visual Studio Build Tools with “Desktop development with C++”) unless you use **WSL2**. More detail: **`external/README_IMC_PROSPERITY.md`**.
 
 ### 4. Real-world market fetcher (off by default)
 
