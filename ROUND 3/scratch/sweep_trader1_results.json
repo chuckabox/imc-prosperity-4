@@ -1,0 +1,470 @@
+[
+  {
+    "params": {
+      "HP_TAKE_EDGE": 1,
+      "HP_OBI_THRESHOLD": 0.06,
+      "HP_NEUTRAL_FRONT": 12
+    },
+    "per_day": {
+      "0": 10584.0,
+      "1": 18465.5
+    },
+    "train_pnl": 29049.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 1,
+      "HP_OBI_THRESHOLD": 0.1,
+      "HP_NEUTRAL_FRONT": 12
+    },
+    "per_day": {
+      "0": 10584.0,
+      "1": 18465.5
+    },
+    "train_pnl": 29049.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 1,
+      "HP_OBI_THRESHOLD": 0.15,
+      "HP_NEUTRAL_FRONT": 12
+    },
+    "per_day": {
+      "0": 10584.0,
+      "1": 18465.5
+    },
+    "train_pnl": 29049.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 1,
+      "HP_OBI_THRESHOLD": 0.06,
+      "HP_NEUTRAL_FRONT": 18
+    },
+    "per_day": {
+      "0": 10324.0,
+      "1": 18465.5
+    },
+    "train_pnl": 28789.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 1,
+      "HP_OBI_THRESHOLD": 0.1,
+      "HP_NEUTRAL_FRONT": 18
+    },
+    "per_day": {
+      "0": 10324.0,
+      "1": 18465.5
+    },
+    "train_pnl": 28789.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 1,
+      "HP_OBI_THRESHOLD": 0.06,
+      "HP_NEUTRAL_FRONT": 25
+    },
+    "per_day": {
+      "0": 10324.0,
+      "1": 18286.5
+    },
+    "train_pnl": 28610.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 1,
+      "HP_OBI_THRESHOLD": 0.1,
+      "HP_NEUTRAL_FRONT": 25
+    },
+    "per_day": {
+      "0": 10324.0,
+      "1": 18286.5
+    },
+    "train_pnl": 28610.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 1,
+      "HP_OBI_THRESHOLD": 0.2,
+      "HP_NEUTRAL_FRONT": 12
+    },
+    "per_day": {
+      "0": 10099.0,
+      "1": 18234.5
+    },
+    "train_pnl": 28333.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 1,
+      "HP_OBI_THRESHOLD": 0.15,
+      "HP_NEUTRAL_FRONT": 18
+    },
+    "per_day": {
+      "0": 9719.0,
+      "1": 18465.5
+    },
+    "train_pnl": 28184.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 1,
+      "HP_OBI_THRESHOLD": 0.2,
+      "HP_NEUTRAL_FRONT": 18
+    },
+    "per_day": {
+      "0": 9823.0,
+      "1": 18234.5
+    },
+    "train_pnl": 28057.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 1,
+      "HP_OBI_THRESHOLD": 0.2,
+      "HP_NEUTRAL_FRONT": 25
+    },
+    "per_day": {
+      "0": 9423.0,
+      "1": 18296.5
+    },
+    "train_pnl": 27719.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 1,
+      "HP_OBI_THRESHOLD": 0.15,
+      "HP_NEUTRAL_FRONT": 25
+    },
+    "per_day": {
+      "0": 9487.0,
+      "1": 18083.5
+    },
+    "train_pnl": 27570.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 2,
+      "HP_OBI_THRESHOLD": 0.06,
+      "HP_NEUTRAL_FRONT": 12
+    },
+    "per_day": {
+      "0": 8722.0,
+      "1": 18844.5
+    },
+    "train_pnl": 27566.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 2,
+      "HP_OBI_THRESHOLD": 0.06,
+      "HP_NEUTRAL_FRONT": 18
+    },
+    "per_day": {
+      "0": 8722.0,
+      "1": 18844.5
+    },
+    "train_pnl": 27566.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 2,
+      "HP_OBI_THRESHOLD": 0.06,
+      "HP_NEUTRAL_FRONT": 25
+    },
+    "per_day": {
+      "0": 8722.0,
+      "1": 18844.5
+    },
+    "train_pnl": 27566.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 2,
+      "HP_OBI_THRESHOLD": 0.1,
+      "HP_NEUTRAL_FRONT": 12
+    },
+    "per_day": {
+      "0": 8722.0,
+      "1": 18844.5
+    },
+    "train_pnl": 27566.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 2,
+      "HP_OBI_THRESHOLD": 0.1,
+      "HP_NEUTRAL_FRONT": 18
+    },
+    "per_day": {
+      "0": 8722.0,
+      "1": 18844.5
+    },
+    "train_pnl": 27566.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 2,
+      "HP_OBI_THRESHOLD": 0.1,
+      "HP_NEUTRAL_FRONT": 25
+    },
+    "per_day": {
+      "0": 8722.0,
+      "1": 18844.5
+    },
+    "train_pnl": 27566.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 2,
+      "HP_OBI_THRESHOLD": 0.15,
+      "HP_NEUTRAL_FRONT": 12
+    },
+    "per_day": {
+      "0": 8722.0,
+      "1": 18844.5
+    },
+    "train_pnl": 27566.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 2,
+      "HP_OBI_THRESHOLD": 0.15,
+      "HP_NEUTRAL_FRONT": 18
+    },
+    "per_day": {
+      "0": 8722.0,
+      "1": 18844.5
+    },
+    "train_pnl": 27566.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 2,
+      "HP_OBI_THRESHOLD": 0.15,
+      "HP_NEUTRAL_FRONT": 25
+    },
+    "per_day": {
+      "0": 8722.0,
+      "1": 18844.5
+    },
+    "train_pnl": 27566.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 2,
+      "HP_OBI_THRESHOLD": 0.2,
+      "HP_NEUTRAL_FRONT": 25
+    },
+    "per_day": {
+      "0": 8382.0,
+      "1": 18874.5
+    },
+    "train_pnl": 27256.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 2,
+      "HP_OBI_THRESHOLD": 0.2,
+      "HP_NEUTRAL_FRONT": 12
+    },
+    "per_day": {
+      "0": 8382.0,
+      "1": 18804.5
+    },
+    "train_pnl": 27186.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 2,
+      "HP_OBI_THRESHOLD": 0.2,
+      "HP_NEUTRAL_FRONT": 18
+    },
+    "per_day": {
+      "0": 8382.0,
+      "1": 18804.5
+    },
+    "train_pnl": 27186.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 3,
+      "HP_OBI_THRESHOLD": 0.2,
+      "HP_NEUTRAL_FRONT": 25
+    },
+    "per_day": {
+      "0": 8597.0,
+      "1": 16088.5
+    },
+    "train_pnl": 24685.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 3,
+      "HP_OBI_THRESHOLD": 0.2,
+      "HP_NEUTRAL_FRONT": 12
+    },
+    "per_day": {
+      "0": 8569.0,
+      "1": 16088.5
+    },
+    "train_pnl": 24657.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 3,
+      "HP_OBI_THRESHOLD": 0.2,
+      "HP_NEUTRAL_FRONT": 18
+    },
+    "per_day": {
+      "0": 8569.0,
+      "1": 16088.5
+    },
+    "train_pnl": 24657.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 3,
+      "HP_OBI_THRESHOLD": 0.06,
+      "HP_NEUTRAL_FRONT": 12
+    },
+    "per_day": {
+      "0": 8569.0,
+      "1": 15962.5
+    },
+    "train_pnl": 24531.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 3,
+      "HP_OBI_THRESHOLD": 0.06,
+      "HP_NEUTRAL_FRONT": 18
+    },
+    "per_day": {
+      "0": 8569.0,
+      "1": 15962.5
+    },
+    "train_pnl": 24531.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 3,
+      "HP_OBI_THRESHOLD": 0.06,
+      "HP_NEUTRAL_FRONT": 25
+    },
+    "per_day": {
+      "0": 8569.0,
+      "1": 15962.5
+    },
+    "train_pnl": 24531.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 3,
+      "HP_OBI_THRESHOLD": 0.1,
+      "HP_NEUTRAL_FRONT": 12
+    },
+    "per_day": {
+      "0": 8569.0,
+      "1": 15962.5
+    },
+    "train_pnl": 24531.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 3,
+      "HP_OBI_THRESHOLD": 0.1,
+      "HP_NEUTRAL_FRONT": 18
+    },
+    "per_day": {
+      "0": 8569.0,
+      "1": 15962.5
+    },
+    "train_pnl": 24531.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 3,
+      "HP_OBI_THRESHOLD": 0.1,
+      "HP_NEUTRAL_FRONT": 25
+    },
+    "per_day": {
+      "0": 8569.0,
+      "1": 15962.5
+    },
+    "train_pnl": 24531.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 3,
+      "HP_OBI_THRESHOLD": 0.15,
+      "HP_NEUTRAL_FRONT": 12
+    },
+    "per_day": {
+      "0": 8569.0,
+      "1": 15962.5
+    },
+    "train_pnl": 24531.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 3,
+      "HP_OBI_THRESHOLD": 0.15,
+      "HP_NEUTRAL_FRONT": 18
+    },
+    "per_day": {
+      "0": 8569.0,
+      "1": 15962.5
+    },
+    "train_pnl": 24531.5,
+    "val_pnl": null
+  },
+  {
+    "params": {
+      "HP_TAKE_EDGE": 3,
+      "HP_OBI_THRESHOLD": 0.15,
+      "HP_NEUTRAL_FRONT": 25
+    },
+    "per_day": {
+      "0": 8569.0,
+      "1": 15962.5
+    },
+    "train_pnl": 24531.5,
+    "val_pnl": null
+  }
+]
