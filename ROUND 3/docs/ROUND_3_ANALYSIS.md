@@ -175,8 +175,12 @@ Without the VEV layer, 330k is not reachable. HYDROGEL alone can't do it
    empirically; don't hard-code.**
 2. **Are the "live" days 3–4 or 3–5?** Affects how aggressive we get with
    late-TTE gamma.
-3. **What does the `La_trahison_des_images.png` file in the data capsule
-   contain?** Possibly a hint/anagram – inspect manually.
+3. ~~**What does the `La_trahison_des_images.png` file contain?**~~
+   **Resolved.** The image is René Magritte's *La trahison des images*
+   ("Ceci n'est pas une pipe"). Thematically: *the representation is not the
+   thing itself*. Our take: **the market's quoted IV (~1.26%/day) is not the
+   real volatility (~2.15%/day realised)** — the painting confirms the
+   IV/RV gap is the intended alpha. Trade with conviction.
 4. **Trade tape signal in `trades_round_3_day_*.csv`:** look for whale
    signatures like Round 1's `Olivia` counter-party that signaled
    reversals.
