@@ -77,15 +77,15 @@ class Trader:
     VEV_MAKER_EDGE = 2.0
 
     # Base risk governor (looser than v23 in normal mode)
-    RISK_NET_DELTA_TRIGGER = 62.0
-    RISK_HP_POS_TRIGGER = 68
-    RISK_ADVERSE_MOVE = 3.0
-    RISK_MIN_SCALE = 0.45
+    RISK_NET_DELTA_TRIGGER = 70.0
+    RISK_HP_POS_TRIGGER = 72
+    RISK_ADVERSE_MOVE = 3.5
+    RISK_MIN_SCALE = 0.60
 
     # Trailing DD guard (only meaningful giveback)
-    DD_TRIGGER = 1450.0
-    DD_RELEASE = 650.0
-    DD_PROTECT_TICKS = 45
+    DD_TRIGGER = 2200.0
+    DD_RELEASE = 1000.0
+    DD_PROTECT_TICKS = 24
 
     def __init__(self):
         self.history: Dict = {}
@@ -192,7 +192,7 @@ class Trader:
 
         room_long = min(limit - pos, max_qty)
         room_short = min(limit + pos, max_qty)
-        if one_sided_flatten:
+        if one_sided_flatten and abs(pos) >= max(10, max_qty):
             if pos > 0:
                 room_long = 0
             elif pos < 0:
@@ -252,7 +252,7 @@ class Trader:
                 orders.append(Order(HYDROGEL, bb, -sz))
                 pos -= sz
 
-        edge = self.HP_MAKER_EDGE + (1.0 if risk_off else 0.0)
+        edge = self.HP_MAKER_EDGE + (0.6 if risk_off else 0.0)
         orders.extend(self._guarded_maker(HYDROGEL, d, pos, fair, lim, edge, maker_max, one_sided_flatten=protect_mode))
         return orders
 
@@ -285,7 +285,7 @@ class Trader:
                 orders.append(Order(VFE, bb, -sz))
                 pos -= sz
 
-        edge = self.VFE_MAKER_EDGE + (0.8 if risk_off else 0.0)
+        edge = self.VFE_MAKER_EDGE + (0.5 if risk_off else 0.0)
         orders.extend(self._guarded_maker(VFE, d, pos, fair, lim, edge, maker_max, one_sided_flatten=protect_mode))
         return orders, mid
 
@@ -311,8 +311,8 @@ class Trader:
             self.history["prem"][key] = prem
             fair = intrinsic + prem
             pos = state.position.get(sym, 0)
-            lim = max(8, int(STRIKE_CAP[k] * (0.70 if protect_mode else (0.80 if risk_off else 1.0))))
-            edge = self.VEV_MAKER_EDGE + (0.9 if risk_off else 0.0)
+            lim = max(8, int(STRIKE_CAP[k] * (0.82 if protect_mode else (0.90 if risk_off else 1.0))))
+            edge = self.VEV_MAKER_EDGE + (0.5 if risk_off else 0.0)
             out.extend(self._guarded_maker(sym, d, pos, fair, lim, edge, maker_max, one_sided_flatten=protect_mode))
         return out
 
