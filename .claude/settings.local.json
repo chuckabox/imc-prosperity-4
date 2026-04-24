@@ -42,7 +42,8 @@
       "Bash(python tools/run_prosperity4bt.py --trader \"ROUND 2/traders/ken/trader_ken_v5.py\" --no-progress --day 0)",
       "Bash(python \"ROUND 3/scratch/hydrogel_stats.py\")",
       "Bash(python -m py_compile \"ROUND 3/traders/ken/trader_ken_v1.py\")",
-      "Bash(python -m py_compile \"ROUND 3/traders/ken/trader_ken_v2.py\")"
+      "Bash(python -m py_compile \"ROUND 3/traders/ken/trader_ken_v2.py\")",
+      "Bash(python -m py_compile \"ROUND 3/traders/ken/trader_ken_v3.py\")"
     ]
   }
 }
