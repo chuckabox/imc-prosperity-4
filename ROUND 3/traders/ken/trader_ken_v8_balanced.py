@@ -1,10 +1,11 @@
-"""trader_ken_v8_balanced.py — v6-style upside with light reliability controls.
+"""trader_ken_v8_balanced.py — v6-style upside with empirical reliability controls.
 
 Philosophy:
 - Keep the strong HYDROGEL + VFE MM engines from v6.
 - Keep VEV long-vol entries as primary alpha capture.
 - Add only "guard-rail" controls:
-  1) opportunistic VEV unwind when clearly rich vs model,
+  1) empirical intrinsic+premium fair for VEV (online per-strike EWMA),
+  2) opportunistic VEV unwind when clearly rich vs fair,
   2) sparse, partial VFE hedge only when portfolio delta gets extreme.
 """
 from __future__ import annotations
@@ -83,13 +84,49 @@ class Trader:
 
     # VEV alpha knobs
     VEV_SIGMA = 0.018
-    VEV_ACTIVE_STRIKES = [5100, 5200, 5300, 5400]
-    VEV_BID_EDGE_REQ = 1.35
-    VEV_TAKE_EDGE = 8.5
+    VEV_ACTIVE_STRIKES = [5000, 5100, 5200, 5300, 5400]
+    VEV_BID_EDGE_REQ = 1.2
+    VEV_TAKE_EDGE = 6.5
     VEV_PER_STRIKE_CAP = 48
     VEV_BID_SIZE = 12
-    VEV_EXIT_EDGE = 13.0
+    VEV_EXIT_EDGE = 10.0
     VEV_EXIT_MAX = 6
+    VEV_PREM_ALPHA = 0.05
+    VEV_PREM_BOUNDS: Dict[str, Tuple[float, float]] = {
+        "VEV_5000": (2.0, 12.0),
+        "VEV_5100": (10.0, 28.0),
+        "VEV_5200": (30.0, 70.0),
+        "VEV_5300": (30.0, 70.0),
+        "VEV_5400": (8.0, 28.0),
+    }
+    VEV_PREM_INIT: Dict[str, float] = {
+        "VEV_5000": 6.0,
+        "VEV_5100": 19.0,
+        "VEV_5200": 49.0,
+        "VEV_5300": 48.0,
+        "VEV_5400": 17.0,
+    }
+    VEV_TAKE_EDGE_BY_STRIKE: Dict[int, float] = {
+        5000: 5.0,
+        5100: 6.0,
+        5200: 6.5,
+        5300: 6.5,
+        5400: 6.5,
+    }
+    VEV_BID_EDGE_BY_STRIKE: Dict[int, float] = {
+        5000: 0.8,
+        5100: 1.0,
+        5200: 1.2,
+        5300: 1.2,
+        5400: 1.3,
+    }
+    VEV_CAP_BY_STRIKE: Dict[int, int] = {
+        5000: 34,
+        5100: 48,
+        5200: 48,
+        5300: 44,
+        5400: 42,
+    }
 
     # Reliability guard rail: hedge only extreme delta
     HEDGE_TRIGGER = 52.0
@@ -107,8 +144,13 @@ class Trader:
                 self.history = {}
         self.history.setdefault("hp_ewma", None)
         self.history.setdefault("vfe_ewma", None)
+        self.history.setdefault("vev_prem", {})
         self.history.setdefault("last_ts", -1)
         self.history.setdefault("day", 0)
+        if not isinstance(self.history["vev_prem"], dict):
+            self.history["vev_prem"] = {}
+        for sym, init in self.VEV_PREM_INIT.items():
+            self.history["vev_prem"].setdefault(sym, init)
         ts = state.timestamp
         last = int(self.history["last_ts"])
         if 0 <= ts < last:
@@ -303,19 +345,33 @@ class Trader:
             bb, ba, _, _ = self._top(depth)
             if bb is None or ba is None:
                 continue
-            fair = bs_call(vfe_mid, k, tte, sigma)
+            intrinsic = max(vfe_mid - k, 0.0)
+            # Keep BS as a soft anchor, but trade mainly on empirical time value.
+            bs_fair = bs_call(vfe_mid, k, tte, sigma)
+            obs_prem = mid = (bb + ba) / 2.0
+            obs_prem = mid - intrinsic
+            prem_state = self.history["vev_prem"].get(sym, self.VEV_PREM_INIT.get(sym, 0.0))
+            prem = (1.0 - self.VEV_PREM_ALPHA) * prem_state + self.VEV_PREM_ALPHA * obs_prem
+            lo, hi = self.VEV_PREM_BOUNDS.get(sym, (0.0, 1e9))
+            prem = max(lo, min(hi, prem))
+            self.history["vev_prem"][sym] = prem
+
+            emp_fair = intrinsic + prem
+            fair = 0.2 * bs_fair + 0.8 * emp_fair
             delta = bs_delta(vfe_mid, k, tte, sigma)
             pos = state.position.get(sym, 0)
-            cap = min(self.LIMITS[sym], self.VEV_PER_STRIKE_CAP)
+            cap = min(self.LIMITS[sym], self.VEV_CAP_BY_STRIKE.get(k, self.VEV_PER_STRIKE_CAP))
+            take_edge = self.VEV_TAKE_EDGE_BY_STRIKE.get(k, self.VEV_TAKE_EDGE)
+            bid_edge = self.VEV_BID_EDGE_BY_STRIKE.get(k, self.VEV_BID_EDGE_REQ)
 
-            if ba < fair - self.VEV_TAKE_EDGE and pos < cap:
+            if ba < fair - take_edge and pos < cap:
                 size = min(cap - pos, -depth.sell_orders[ba])
                 if size > 0:
                     out.append(Order(sym, ba, size))
                     pos += size
 
             quote_bid = bb + 1
-            if quote_bid <= fair - self.VEV_BID_EDGE_REQ and pos < cap:
+            if quote_bid <= fair - bid_edge and pos < cap:
                 size = min(self.VEV_BID_SIZE, cap - pos)
                 if size > 0:
                     out.append(Order(sym, quote_bid, size))
