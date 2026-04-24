@@ -49,7 +49,28 @@
       "Bash(python -m prosperity4bt --help)",
       "Bash(python -m prosperity4bt \"ROUND 3/traders/ken/trader_ken_v3.py\" 3 --data \"ROUND 3/data_capsule\" --no-out --no-progress)",
       "Bash(python *)",
-      "Bash(tasklist /FI \"IMAGENAME eq python.exe\")"
+      "Bash(tasklist /FI \"IMAGENAME eq python.exe\")",
+      "Bash(awk -F';' '{print $1,$2,$3,$4,$5,$6}')",
+      "Bash(awk -F';' '{print $15}')",
+      "Bash(awk -F';' '{sum+=$15; count++} END {print \"mean=\"sum/count}')",
+      "Bash(awk -F';' '{print $3,$4,$10,$15}')",
+      "Bash(awk -F';' '{bid=$4; ask=$10; mid=$15; spread=ask-bid; print \"bid=\"bid,\"ask=\"ask,\"mid=\"mid,\"spread=\"spread}')",
+      "Bash(awk '-F;' '{for\\(i=1;i<=NF;i++\\) print i, $i}')",
+      "Bash(awk -F';' '{spread=$10-$4; sum+=spread; count++} END {print \"avg_spread=\"sum/count}')",
+      "Bash(awk -F';' '{spread=$10-$4; sum+=spread; count++; sum_mid+=$16} END {print \"avg_spread=\"sum/count, \"avg_mid=\"sum_mid/count}')",
+      "Bash(awk -F';' '{print $5, $11}')",
+      "Bash(awk -F';' '{sum_bv+=$5; sum_av+=$11; count++} END {print \"avg_bid_vol=\"sum_bv/count, \"avg_ask_vol=\"sum_av/count}')",
+      "Bash(awk -F';' '{spread=$10-$4; print spread}')",
+      "Bash(awk -F';' '{ask=$10; bid=$4; if\\(ask<=9991\\) buys++; if\\(bid>=9995\\) sells++} END {print \"buy_opps=\"buys, \"sell_opps=\"sells}')",
+      "Bash(awk -F';' '{spread=$10-$4; sum+=spread; count++} END {print \"VFE avg spread:\", sum/count}')",
+      "Bash(awk '-F;' '{ *)",
+      "Bash(awk -F';' '{print $2, $16}')",
+      "Bash(python3 *)",
+      "Bash(python3.exe \"/c/Users/ductv/Desktop/Projects/imc prosperity/imc-prosperity-4/ROUND 3/scratch/vev_empirical_scan.py\")",
+      "Bash(awk -F';' '{ask=$10; if\\(ask<=9995\\) count++} END {print \"HP ask<=9995 count:\", count, \"/ 10000 ticks\"}')",
+      "Bash(awk -F';' '{bid=$4; ask=$10; if\\(bid>=10000\\) sell++; if\\(ask<=9995\\) buy++} END {print \"buy opps\\(ask<=9995\\):\"buy, \"sell opps\\(bid>=10000\\):\"sell}')",
+      "Bash(awk -F';' '{bid=$4; ask=$10; if\\(bid>=10000\\) sell++; if\\(ask<=9995\\) buy++} END {print \"day1 buy:\"buy, \"sell:\"sell}')",
+      "Bash(awk -F';' '{bid=$4; ask=$10; if\\(bid>=10000\\) sell++; if\\(ask<=9995\\) buy++} END {print \"day2 buy:\"buy, \"sell:\"sell}')"
     ]
   }
 }
