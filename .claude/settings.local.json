@@ -75,7 +75,8 @@
       "Bash(awk -F';' 'NR>1 && $3==\"VELVETFRUIT_EXTRACT\"{print $2\";\"$4\";\"$10\";\"$16}' \"/Users/Adin/Library/CloudStorage/OneDrive-TheUniversityofQueensland/IMC Prosperity/imc-prosperity-4/ROUND 3/data_capsule/prices_round_3_day_0.csv\")",
       "Bash(awk -F';' 'NR>1 && $3==\"VELVETFRUIT_EXTRACT\"{print $16}' \"/Users/Adin/Library/CloudStorage/OneDrive-TheUniversityofQueensland/IMC Prosperity/imc-prosperity-4/ROUND 3/data_capsule/prices_round_3_day_0.csv\")",
       "Bash(awk 'BEGIN{c=0;s=0;mn=1e9;mx=0}{c++;s+=$1; if\\($1<mn\\)mn=$1; if\\($1>mx\\)mx=$1}END{print \"n=\",c,\"mean=\",s/c,\"min=\",mn,\"max=\",mx}')",
-      "Bash(awk -F';' 'NR>1 && $3==\"HYDROGEL_PACK\"{print $16}' \"/Users/Adin/Library/CloudStorage/OneDrive-TheUniversityofQueensland/IMC Prosperity/imc-prosperity-4/ROUND 3/data_capsule/prices_round_3_day_0.csv\")"
+      "Bash(awk -F';' 'NR>1 && $3==\"HYDROGEL_PACK\"{print $16}' \"/Users/Adin/Library/CloudStorage/OneDrive-TheUniversityofQueensland/IMC Prosperity/imc-prosperity-4/ROUND 3/data_capsule/prices_round_3_day_0.csv\")",
+      "Read(//c/c/Users/ductv/Desktop/Projects/imc prosperity/imc-prosperity-4/ROUND 3/data_capsule/**)"
     ]
   }
 }
