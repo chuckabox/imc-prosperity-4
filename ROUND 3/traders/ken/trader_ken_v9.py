@@ -256,7 +256,7 @@ class Trader:
         out: List[Order] = []
         total_delta = 0.0
 
-        for K in self.VEV_STRIKES:
+        for K in VEV_STRIKES:
             sym = f"VEV_{K}"
             pos = state.position.get(sym, 0)
             
