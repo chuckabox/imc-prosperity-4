@@ -39,7 +39,8 @@
       "Bash(python tools/run_prosperity4bt.py --day 1 --no-progress)",
       "Bash(python -c \"from prosperity4bt.data import LIMITS; print\\(LIMITS\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\('tools/impl/unified_dashboard.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
-      "Bash(python tools/run_prosperity4bt.py --trader \"ROUND 2/traders/ken/trader_ken_v5.py\" --no-progress --day 0)"
+      "Bash(python tools/run_prosperity4bt.py --trader \"ROUND 2/traders/ken/trader_ken_v5.py\" --no-progress --day 0)",
+      "Bash(python \"ROUND 3/scratch/hydrogel_stats.py\")"
     ]
   }
 }
