@@ -72,8 +72,8 @@ class Trader:
     VFE_LIMIT = 80
     VFE_EWMA_ALPHA = 0.20
     VFE_MAKER_EDGE = 2.0
-    VFE_TAKER_EDGE = 4.0
-    VFE_TAKER_MAX = 15
+    VFE_TAKER_EDGE = 3.5
+    VFE_TAKER_MAX = 18
 
     PREM_ALPHA = 0.05
     VEV_MAKER_EDGE = 2.0
@@ -81,7 +81,7 @@ class Trader:
 
     # New: selective VEV taker alpha
     VEV_TAKER_EDGE = 2.2
-    VEV_TAKER_MAX = 5
+    VEV_TAKER_MAX = 0
     VEV_TAKER_STRIKES = {5200, 5300}
 
     # New: lightweight protection (rare activation)
