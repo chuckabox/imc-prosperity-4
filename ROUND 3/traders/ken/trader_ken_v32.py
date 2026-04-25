@@ -226,7 +226,40 @@ class Trader:
     # ── Module 3: VEV ─────────────────────────────────────────────────────────
 
     def _vev_logic(self, state: TradingState, vfe_mid: float) -> List[Order]:
-        return []
+        tte = self._tte(state)
+        if tte <= 0:
+            return []
+
+        orders: List[Order] = []
+        for strike in VEV_ACTIVE_STRIKES:
+            sym = f"VEV_{strike}"
+            depth = state.order_depths.get(sym)
+            if depth is None:
+                continue
+            bb, ba = self._top(depth)
+            if bb is None or ba is None:
+                continue
+
+            fair = self._bs_call(vfe_mid, strike, tte)
+            pos  = state.position.get(sym, 0)
+
+            # Buy when market ask is meaningfully below BS fair (cheap option)
+            if ba < fair - VEV_MIN_EDGE:
+                room  = VEV_LIMIT - pos
+                avail = abs(depth.sell_orders.get(ba, 0))
+                qty   = min(room, avail)
+                if qty > 0:
+                    orders.append(Order(sym, ba, qty))
+
+            # Sell when market bid is meaningfully above BS fair (expensive option)
+            if bb > fair + VEV_MIN_EDGE:
+                room  = VEV_LIMIT + pos
+                avail = depth.buy_orders.get(bb, 0)
+                qty   = min(room, avail)
+                if qty > 0:
+                    orders.append(Order(sym, bb, -qty))
+
+        return orders
 
     # ── Entry point ────────────────────────────────────────────────────────────
 
