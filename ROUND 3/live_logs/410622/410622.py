@@ -1,0 +1,315 @@
+"""trader_ken_v32.py
+
+Three-module trader for Round 3:
+  - HYDROGEL_PACK: EWMA fair + L1 imbalance quote skew
+  - VELVETFRUIT_EXTRACT: passive symmetric maker
+  - VEV_5200 / VEV_5300: BS-fair taker when ask < fair - MIN_EDGE
+
+Single-file, no local imports beyond datamodel.
+"""
+# Backtest results (data capsule, 3 days):
+# v32 HP anchor blend: Total=44,654  (day0=14,353  day1=17,932  day2=12,369)
+# v32 previous:        Total=29,105  (day0=9,835   day1=13,396  day2=5,874)
+# v30 baseline:        Total=54,260
+# HP fair value now uses blended EWMA: fair = 0.7 * ewma + 0.3 * HP_ANCHOR (10000).
+# Faster alpha=0.10 (vs old 0.003) lets EWMA track price more responsively.
+# The 10000 round-number anchor acts as a mean-reversion prior for HP.
+# Uses dual EWMA: fast maker (alpha=0.10 + anchor blend), fast taker (alpha=0.20).
+# Remaining gap vs v30: VFE (limit 60 vs 80, edge 3 vs 2) and VEV (2 strikes vs 6).
+from __future__ import annotations
+
+import json
+import math
+from typing import Dict, List, Optional, Tuple
+
+from datamodel import Order, OrderDepth, TradingState
+
+# ── Products ──────────────────────────────────────────────────────────────────
+HP  = "HYDROGEL_PACK"
+VFE = "VELVETFRUIT_EXTRACT"
+VEV_ACTIVE_STRIKES = [5200, 5300]
+
+# ── HYDROGEL parameters ───────────────────────────────────────────────────────
+HP_LIMIT         = 80
+HP_EWMA_ALPHA    = 0.003   # half-life ~300 ticks, matches OU from data analysis
+HP_EDGE          = 8       # half of observed 16-wide spread
+HP_SKEW          = 4       # matches ~4 XIRECs predicted by imbalance signal
+HP_INV_TRIGGER   = 40      # |pos| threshold to start inventory lean
+HP_INV_FACTOR    = 0.15    # quote shift per unit of pos above trigger
+HP_TAKER_MAX     = 5       # max lots to take when reducing wrong-side exposure
+HP_ANCHOR        = 10000   # round-number prior for HP fair-value blend
+HP_TAKER_EDGE    = 3       # take when best price crosses fair by this much (mean reversion)
+HP_TAKER_SIZE    = 20      # max lots per mean-reversion take
+
+# ── VFE parameters ────────────────────────────────────────────────────────────
+VFE_LIMIT        = 60
+VFE_EWMA_ALPHA   = 0.05
+VFE_EDGE         = 3
+VFE_INV_TRIGGER  = 30
+VFE_INV_FACTOR   = 0.10
+
+# ── VEV parameters ────────────────────────────────────────────────────────────
+VEV_LIMIT        = 20      # per strike
+VEV_SIGMA        = 0.0176  # bias-corrected realized vol per day
+VEV_MIN_EDGE     = 3       # minimum XIRECs edge to enter (reduced from 5 to increase VEV activity)
+
+
+class Trader:
+
+    def __init__(self) -> None:
+        self._state: Dict = {}
+
+    # ── State persistence ──────────────────────────────────────────────────────
+
+    def _load(self, state: TradingState) -> None:
+        if state.traderData:
+            try:
+                self._state = json.loads(state.traderData)
+            except Exception:
+                self._state = {}
+        self._state.setdefault("hp_ewma", None)
+        self._state.setdefault("hp_ewma_fast", None)
+        self._state.setdefault("vfe_ewma", None)
+
+    def _save(self) -> str:
+        return json.dumps(self._state)
+
+    # ── Helpers ────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _top(depth: OrderDepth) -> Tuple[Optional[int], Optional[int]]:
+        bb = max(depth.buy_orders) if depth.buy_orders else None
+        ba = min(depth.sell_orders) if depth.sell_orders else None
+        return bb, ba
+
+    @staticmethod
+    def _top_vol(depth: OrderDepth) -> Tuple[int, int]:
+        """Return (bid_vol_1, ask_vol_1) at the best level."""
+        bv = depth.buy_orders[max(depth.buy_orders)] if depth.buy_orders else 0
+        av = abs(depth.sell_orders[min(depth.sell_orders)]) if depth.sell_orders else 0
+        return bv, av
+
+    # ── BS helpers (no scipy -- inline approximation) ─────────────────────────
+
+    @staticmethod
+    def _norm_cdf(x: float) -> float:
+        """Abramowitz & Stegun 26.2.17 rational approximation, error < 1.5e-7."""
+        sign = 1.0 if x >= 0 else -1.0
+        x = abs(x)
+        t = 1.0 / (1.0 + 0.2316419 * x)
+        p = t * (0.319381530
+              + t * (-0.356563782
+              + t * (1.781477937
+              + t * (-1.821255978
+              + t * 1.330274429))))
+        pdf_val = (1.0 / math.sqrt(2 * math.pi)) * math.exp(-0.5 * x * x)
+        if sign >= 0:
+            return 1.0 - pdf_val * p
+        else:
+            return pdf_val * p
+
+    def _bs_call(self, S: float, K: int, tte: float) -> float:
+        """Black-Scholes call price, r=0."""
+        if tte <= 0:
+            return max(S - K, 0.0)
+        sigma_sqrt_t = VEV_SIGMA * math.sqrt(tte)
+        if sigma_sqrt_t == 0:
+            return max(S - K, 0.0)
+        d1 = (math.log(S / K) + 0.5 * VEV_SIGMA ** 2 * tte) / sigma_sqrt_t
+        d2 = d1 - sigma_sqrt_t
+        return S * self._norm_cdf(d1) - K * self._norm_cdf(d2)
+
+    @staticmethod
+    def _tte(state: TradingState) -> float:
+        """Time-to-expiry in days. TTE=8 at ts=0 day=0; decays continuously."""
+        ts = int(state.timestamp)
+        day_num = ts // 1_000_000
+        tick_ts = ts % 1_000_000
+        return 8.0 - day_num - tick_ts / 1_000_000.0
+
+    # ── Module 1: HYDROGEL ─────────────────────────────────────────────────────
+
+    def _hp_logic(self, state: TradingState) -> List[Order]:
+        depth = state.order_depths.get(HP)
+        if depth is None:
+            return []
+        bb, ba = self._top(depth)
+        if bb is None or ba is None:
+            return []
+
+        mid = (bb + ba) / 2.0
+
+        # EWMA fair — blended with round-number anchor
+        prev = self._state["hp_ewma"]
+        ewma = mid if prev is None else (1 - 0.10) * prev + 0.10 * mid
+        self._state["hp_ewma"] = ewma
+        fair = 0.7 * ewma + 0.3 * HP_ANCHOR
+
+        # Fast EWMA for taker signal (alpha=0.20 matches v30, ~47 triggers vs 8k with slow)
+        prev_fast = self._state["hp_ewma_fast"]
+        ewma_fast = mid if prev_fast is None else 0.80 * prev_fast + 0.20 * mid
+        self._state["hp_ewma_fast"] = ewma_fast
+        fair_taker = ewma_fast
+
+        # L1 imbalance signal
+        bv, av = self._top_vol(depth)
+        total_vol = bv + av
+        imb = (bv - av) / total_vol if total_vol > 0 else 0.0
+
+        # Inventory skew — lean against large positions
+        pos = state.position.get(HP, 0)
+        inv_lean = 0.0
+        if abs(pos) > HP_INV_TRIGGER:
+            inv_lean = pos * HP_INV_FACTOR
+
+        # Quote prices: shift both quotes in direction of imbalance
+        skew = HP_SKEW * (1 if imb > 0 else -1 if imb < 0 else 0)
+        q_bid = round(fair - HP_EDGE + skew - inv_lean)
+        q_ask = round(fair + HP_EDGE + skew - inv_lean)
+
+        # Clamp: never cross the existing inside market
+        if q_bid >= ba:
+            q_bid = ba - 1
+        if q_ask <= bb:
+            q_ask = bb + 1
+        if q_bid >= q_ask:
+            q_bid = q_ask - 1
+
+        orders: List[Order] = []
+
+        # Defensive taker: reduce wrong-side exposure when imbalance is present
+        if imb != 0.0:
+            if imb < 0 and pos > 0:  # price moving down, we are long → hit bid to reduce
+                reduce = min(HP_TAKER_MAX, pos, depth.buy_orders.get(bb, 0))
+                if reduce > 0:
+                    orders.append(Order(HP, bb, -reduce))
+                    pos -= reduce
+            elif imb > 0 and pos < 0:  # price moving up, we are short → lift ask to reduce
+                reduce = min(HP_TAKER_MAX, -pos, abs(depth.sell_orders.get(ba, 0)))
+                if reduce > 0:
+                    orders.append(Order(HP, ba, reduce))
+                    pos += reduce
+
+        # Mean-reversion taker — buy when ask is below fair, sell when bid is above fair
+        # Uses fast EWMA (alpha=0.20) so it only fires on genuine dislocations (~47x vs 8k with slow)
+        if ba <= fair_taker - HP_TAKER_EDGE and pos < HP_LIMIT:
+            sz = min(HP_TAKER_SIZE, HP_LIMIT - pos, abs(depth.sell_orders.get(ba, 0)))
+            if sz > 0:
+                orders.append(Order(HP, ba, sz))
+                pos += sz
+        if bb >= fair_taker + HP_TAKER_EDGE and pos > -HP_LIMIT:
+            sz = min(HP_TAKER_SIZE, HP_LIMIT + pos, depth.buy_orders.get(bb, 0))
+            if sz > 0:
+                orders.append(Order(HP, bb, -sz))
+                pos -= sz
+
+        # Passive maker quotes
+        room_long  = HP_LIMIT - pos
+        room_short = HP_LIMIT + pos
+        if room_long > 0:
+            orders.append(Order(HP, q_bid, room_long))
+        if room_short > 0:
+            orders.append(Order(HP, q_ask, -room_short))
+
+        return orders
+
+    # ── Module 2: VFE ─────────────────────────────────────────────────────────
+
+    def _vfe_logic(self, state: TradingState) -> Tuple[List[Order], Optional[float]]:
+        depth = state.order_depths.get(VFE)
+        if depth is None:
+            return [], None
+        bb, ba = self._top(depth)
+        if bb is None or ba is None:
+            return [], None
+
+        mid = (bb + ba) / 2.0
+
+        prev = self._state["vfe_ewma"]
+        ewma = mid if prev is None else (1 - VFE_EWMA_ALPHA) * prev + VFE_EWMA_ALPHA * mid
+        self._state["vfe_ewma"] = ewma
+        fair = ewma
+
+        pos = state.position.get(VFE, 0)
+        inv_lean = 0.0
+        if abs(pos) > VFE_INV_TRIGGER:
+            inv_lean = pos * VFE_INV_FACTOR
+
+        q_bid = round(fair - VFE_EDGE - inv_lean)
+        q_ask = round(fair + VFE_EDGE - inv_lean)
+
+        if q_bid >= ba:
+            q_bid = ba - 1
+        if q_ask <= bb:
+            q_ask = bb + 1
+        if q_bid >= q_ask:
+            q_bid = q_ask - 1
+
+        orders: List[Order] = []
+        room_long  = VFE_LIMIT - pos
+        room_short = VFE_LIMIT + pos
+        if room_long > 0:
+            orders.append(Order(VFE, q_bid, room_long))
+        if room_short > 0:
+            orders.append(Order(VFE, q_ask, -room_short))
+
+        return orders, mid
+
+    # ── Module 3: VEV ─────────────────────────────────────────────────────────
+
+    def _vev_logic(self, state: TradingState, vfe_mid: float) -> List[Order]:
+        tte = self._tte(state)
+        if tte <= 0:
+            return []
+
+        orders: List[Order] = []
+        for strike in VEV_ACTIVE_STRIKES:
+            sym = f"VEV_{strike}"
+            depth = state.order_depths.get(sym)
+            if depth is None:
+                continue
+            bb, ba = self._top(depth)
+            if bb is None or ba is None:
+                continue
+
+            fair = self._bs_call(vfe_mid, strike, tte)
+            pos  = state.position.get(sym, 0)
+
+            # Buy when market ask is meaningfully below BS fair (cheap option)
+            if ba < fair - VEV_MIN_EDGE:
+                room  = VEV_LIMIT - pos
+                avail = abs(depth.sell_orders.get(ba, 0))
+                qty   = min(room, avail)
+                if qty > 0:
+                    orders.append(Order(sym, ba, qty))
+
+            # Sell when market bid is meaningfully above BS fair (expensive option)
+            if bb > fair + VEV_MIN_EDGE:
+                room  = VEV_LIMIT + pos
+                avail = depth.buy_orders.get(bb, 0)
+                qty   = min(room, avail)
+                if qty > 0:
+                    orders.append(Order(sym, bb, -qty))
+
+        return orders
+
+    # ── Entry point ────────────────────────────────────────────────────────────
+
+    def run(self, state: TradingState):
+        self._load(state)
+        result: Dict[str, List[Order]] = {}
+
+        hp_orders = self._hp_logic(state)
+        for o in (hp_orders or []):
+            result.setdefault(o.symbol, []).append(o)
+
+        vfe_orders, vfe_mid = self._vfe_logic(state)
+        for o in (vfe_orders or []):
+            result.setdefault(o.symbol, []).append(o)
+
+        if vfe_mid is not None:
+            vev_orders = self._vev_logic(state, vfe_mid)
+            for o in (vev_orders or []):
+                result.setdefault(o.symbol, []).append(o)
+
+        return result, 0, self._save()
