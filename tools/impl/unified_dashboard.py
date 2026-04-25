@@ -6,11 +6,11 @@ import sys
 import glob
 from pathlib import Path
 
-# Resolve absolute paths for relative imports (datamodel in ../../ROUND 2/config, trader in ../../ROUND 2/traders)
+# Resolve absolute paths for relative imports (datamodel in ../../ROUND 3/config, trader in ../../ROUND 3/traders)
 script_dir = os.path.dirname(os.path.abspath(__file__))
 repo_root = os.path.abspath(os.path.join(script_dir, "..", ".."))
-config_path = os.path.join(repo_root, "ROUND 2", "config")
-traders_path = os.path.join(repo_root, "ROUND 2", "traders")
+config_path = os.path.join(repo_root, "ROUND 3", "config")
+traders_path = os.path.join(repo_root, "ROUND 3", "traders")
 
 if config_path not in sys.path:
     sys.path.insert(0, config_path)
@@ -35,9 +35,9 @@ ROUND_DIRS = ["Root"] + sorted(
     d for d in os.listdir(REPO_ROOT)
     if d.startswith("ROUND ") and os.path.isdir(os.path.join(REPO_ROOT, d))
 )
-DEFAULT_ROUND = "ROUND 2"
+DEFAULT_ROUND = "ROUND 3"
 
-# Round 2 datamodel uses 80; dashboard fills must match or simulation is meaningless.
+# Round 3 datamodel uses 80; dashboard fills must match or simulation is meaningless.
 DEFAULT_SIM_POSITION_LIMIT = 80
 
 
@@ -236,12 +236,9 @@ def execute_backtest_headless(day, trader_path, config_override=None):
             else:
                 setattr(trader, k, v)
 
-    listings = {
-        "ASH_COATED_OSMIUM": Listing("ASH_COATED_OSMIUM", "ASH_COATED_OSMIUM", "SEASHELLS"),
-        "INTARIAN_PEPPER_ROOT": Listing("INTARIAN_PEPPER_ROOT", "INTARIAN_PEPPER_ROOT", "SEASHELLS"),
-    }
-
-    positions = {"ASH_COATED_OSMIUM": 0, "INTARIAN_PEPPER_ROOT": 0}
+    products = df_prices["product"].unique()
+    listings = {p: Listing(p, p, "SEASHELLS") for p in products}
+    positions = {p: 0 for p in products}
     cash = 0.0
     pnl_history = []
     current_trader_data = ""
@@ -400,12 +397,9 @@ def run_backtest_simulation(day, trader_py_path: str | None = None):
 
     pos_limit = _sim_position_limit(trader)
 
-    listings = {
-        "ASH_COATED_OSMIUM": Listing("ASH_COATED_OSMIUM", "ASH_COATED_OSMIUM", "SEASHELLS"),
-        "INTARIAN_PEPPER_ROOT": Listing("INTARIAN_PEPPER_ROOT", "INTARIAN_PEPPER_ROOT", "SEASHELLS"),
-    }
-
-    positions = {"ASH_COATED_OSMIUM": 0, "INTARIAN_PEPPER_ROOT": 0}
+    products = df_prices["product"].unique()
+    listings = {p: Listing(p, p, "SEASHELLS") for p in products}
+    positions = {p: 0 for p in products}
     cash = 0.0
 
     if "trades_log" not in st.session_state:
@@ -573,28 +567,28 @@ def load_and_process_data(day):
     days_to_load = available_days if day == "All" else [day]
     all_prices = []
     all_trades = []
-    
+
+    base_day = min(available_days) if available_days else 0
+
     for d in days_to_load:
         prices_file = _resolve_round_day_file(data_dir, "prices", d)
         trades_file = _resolve_round_day_file(data_dir, "trades", d)
-        
+
         if prices_file and os.path.exists(prices_file):
             df_p = pd.read_csv(prices_file, sep=";")
             df_p = df_p.dropna(subset=["bid_price_1", "ask_price_1", "timestamp"])
-            # Offset timestamp for continuity if showing All
             if day == "All":
-                # days are -2, -1, 0 -> normalized to index 0, 1, 2 for continuous timeline
-                offset = (d + 2) * 1000000 
+                offset = (d - base_day) * 1000000
                 df_p["timestamp"] = df_p["timestamp"] + offset
             df_p["day"] = d
             all_prices.append(df_p)
-            
+
         if trades_file and os.path.exists(trades_file):
             df_t = pd.read_csv(trades_file, sep=";")
             if "symbol" in df_t.columns:
                 df_t = df_t.rename(columns={"symbol": "product"})
             if day == "All":
-                offset = (d + 2) * 1000000
+                offset = (d - base_day) * 1000000
                 df_t["timestamp"] = df_t["timestamp"] + offset
             df_t["day"] = d
             all_trades.append(df_t)
@@ -643,8 +637,8 @@ def _build_comparison_table(
         df = df.copy()
         df["target_pnl"] = pnls
 
-        # Allow both robust labels (imc, real) and standard labels (round_1, round_2, real_world)
-        imc = df.loc[df["category"].isin(["imc", "round_1", "round_2"]), "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+        # Allow both robust labels (imc, real) and standard labels (round_1, round_2, round_3, real_world)
+        imc = df.loc[df["category"].isin(["imc", "round_1", "round_2", "round_3"]), "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
         real = df.loc[df["category"].isin(["real", "real_world"]), "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
         scen = df.loc[df["category"] == "scenario", "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
         allp = df["target_pnl"]
@@ -742,8 +736,8 @@ def _build_cross_round_comparison(
             df = df.copy()
             df["target_pnl"] = pnls
 
-            # Allow both robust labels (imc, real) and standard labels (round_1, round_2, real_world)
-            imc = df.loc[df["category"].isin(["imc", "round_1", "round_2"]), "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
+            # Allow both robust labels (imc, real) and standard labels (round_1, round_2, round_3, real_world)
+            imc = df.loc[df["category"].isin(["imc", "round_1", "round_2", "round_3"]), "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
             real = df.loc[df["category"].isin(["real", "real_world"]), "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
             scen = df.loc[df["category"] == "scenario", "target_pnl"] if "category" in df.columns else pd.Series([], dtype=float)
             allp = df["target_pnl"]
@@ -1044,10 +1038,13 @@ def perform_auto_analysis():
         return
 
     df = pd.concat(frames)
-    os_mean = df[df["product"] == "ASH_COATED_OSMIUM"]["mid_price"].mean()
-    pep_std = df[df["product"] == "INTARIAN_PEPPER_ROOT"]["mid_price"].std()
+    stats = {}
+    for p in df["product"].unique():
+        p_df = df[df["product"] == p]
+        stats[f"{p}_mean"] = p_df["mid_price"].mean()
+        stats[f"{p}_std"] = p_df["mid_price"].std()
 
-    st.session_state.analysis = {"os_mean": os_mean, "pep_std": pep_std}
+    st.session_state.analysis = stats
     st.toast("Analysis Successful!")
 
 
@@ -1405,8 +1402,10 @@ def main():
                     "See `external/README_IMC_PROSPERITY.md`. Example once `rust_backtester` is on your PATH (often via WSL); "
                     "paths use POSIX form for copy-paste into a Linux shell."
                 )
-                _caps = (Path(REPO_ROOT) / "ROUND 2" / "data_capsule").resolve()
-                _tr = (Path(REPO_ROOT) / "ROUND 2" / "traders" / "ken" / "trader_ken_v6.py").resolve()
+                _active = st.session_state.get("active_round", DEFAULT_ROUND)
+                _caps = (Path(REPO_ROOT) / _active / "data_capsule").resolve()
+                _tr_candidates = sorted((Path(REPO_ROOT) / _active / "traders").rglob("*.py"))
+                _tr = _tr_candidates[0].resolve() if _tr_candidates else (Path(REPO_ROOT) / _active / "traders" / "trader.py").resolve()
                 st.code(
                 f'rust_backtester --trader "{_tr.as_posix()}" --dataset "{_caps.as_posix()}"',
                 language="bash",
@@ -1425,12 +1424,16 @@ def main():
                 robust_csvs = robust_results_csv_filenames(robust_results_dir)
     
             if robust_csvs:
-                col_f, col_spacer = st.columns([1, 2])
-                with col_f:
-                    p_filter = st.radio("Product Filter", ["All", "Osmium", "Root"], horizontal=True, key="robust_product_filter")
+                # Dynamically discover PnL columns from the first available file
+                sample_df = pd.read_csv(os.path.join(robust_results_dir, robust_csvs[0]))
+                pnl_cols = [c for c in sample_df.columns if c.startswith("pnl_")]
+                display_cols = ["All"] + [c.replace("pnl_", "").title() for c in pnl_cols]
                 
-                p_col_map = {"All": "final_pnl", "Osmium": "pnl_osmium", "Root": "pnl_pepper"}
-                target_col = p_col_map[p_filter]
+                with col_f:
+                    p_filter_display = st.radio("Product Filter", display_cols, horizontal=True, key="robust_product_filter")
+                
+                p_filter = p_filter_display if p_filter_display == "All" else f"pnl_{p_filter_display.lower().replace(' ', '_')}"
+                target_col = "final_pnl" if p_filter == "All" else p_filter
     
                 tab_lead, tab_inspect, tab_stress = st.tabs(["🏆 Leaderboard & Comparison", "📊 Individual Inspection", "🔬 Anti-Overfit Stress Lab"])
     
@@ -1796,10 +1799,14 @@ def main():
                     col_s1, col_s2, col_s3 = st.columns(3)
                     with col_s1:
                         sel_trader = st.selectbox("Target Trader", trader_search, key="stress_trader", index=next((i for i, x in enumerate(trader_search) if "v2d" in x), 0))
+                    # Discover available assets for stress testing
+                    df_sample, _ = load_and_process_data(sel_source if sel_source != "All (Round 1 Data)" else "All")
+                    stress_products = sorted(df_sample["product"].unique()) if df_sample is not None else []
+                    
                     with col_s2:
-                        sel_prod = st.selectbox("Market Asset", ["ASH_COATED_OSMIUM", "INTARIAN_PEPPER_ROOT", "TOTAL (Both Assets)"], index=2)
+                        sel_prod = st.selectbox("Market Asset", stress_products + ["TOTAL (All Assets)"], index=len(stress_products))
                     with col_s3:
-                        sel_source = st.selectbox("Base Dataset", ["All (Round 1 Data)", -1, -2, 0], index=0)
+                        sel_source = st.selectbox("Base Dataset", ["All", -1, -2, 0], index=0)
     
                     if st.button("☣️ Run Destructive Mutation Suite", type="primary", use_container_width=True):
                         source_key = "All" if sel_source == "All (Round 1 Data)" else sel_source
@@ -1807,7 +1814,7 @@ def main():
                         if df_p is None:
                             st.error("Base data not found!")
                         else:
-                            active_prods = ["ASH_COATED_OSMIUM", "INTARIAN_PEPPER_ROOT"] if "TOTAL" in sel_prod else [sel_prod]
+                            active_prods = stress_products if "TOTAL" in sel_prod else [sel_prod]
                             
                             base_prices = {}
                             for p in active_prods:
@@ -1926,8 +1933,9 @@ def main():
                                 """)
     
             else:
-                st.warning("No robust results found. Run the Round 2 robust backtester (IMC days by default):")
-                st.code("python \"ROUND 2/tools/robust_backtester.py\" \"ROUND 2/traders/your_trader.py\" --quick")
+                _ar = st.session_state.get("active_round", DEFAULT_ROUND)
+                st.warning(f"No robust results found. Run the {_ar} robust backtester (IMC days by default):")
+                st.code(f"python \"{_ar}/tools/robust_backtester.py\" \"{_ar}/traders/your_trader.py\" --quick")
                 st.caption("Add ``--with-scenarios`` or ``--full-legacy`` only if you want synthetic / cached real-world CSVs in the same run.")
 
 
@@ -1996,16 +2004,30 @@ def main():
         if df_prices is not None:
             st.subheader(f"📊 Market Reconstruction (Day {selected_day})")
 
-            st.markdown("#### 💎 ASH COATED OSMIUM (Mean Reversion)")
-            df_os = render_chart(df_prices, df_trades, "ASH_COATED_OSMIUM", "#2ecc71", show_mean=True)
+            products = sorted(df_prices["product"].unique())
             
-            if df_os is not None:
-                os_mean = df_os["mid_price"].mean()
-                if abs(os_mean - 10000) < 100:
-                    st.info(f"**Fair Value Found:** Osmium average is stable around {os_mean:.2f}. Anchoring to 10,000 is optimal.")
+            # Group VEV strikes together to avoid UI clutter
+            vev_strikes = [p for p in products if p.startswith("VEV_")]
+            main_products = [p for p in products if not p.startswith("VEV_")]
+            
+            def _color_for(p: str) -> str:
+                if "OSMIUM" in p or "HYDRO" in p:
+                    return "#2ecc71"  # green: market-making asset
+                if "VELVETFRUIT" in p or "VFE" in p:
+                    return "#9b59b6"  # purple: option underlying
+                if "PEPPER" in p:
+                    return "#e74c3c"  # red: legacy round 2
+                return "#f39c12"  # amber: misc
 
-            st.markdown("#### 🌶️ INTARIAN PEPPER ROOT (Trend MM)")
-            render_chart(df_prices, df_trades, "INTARIAN_PEPPER_ROOT", "#e74c3c", show_mean=False)
+            for p in main_products:
+                st.markdown(f"#### {p}")
+                render_chart(df_prices, df_trades, p, _color_for(p), show_mean=True)
+
+            if vev_strikes:
+                with st.expander("🔦 View VEV Options Complex", expanded=False):
+                    for p in vev_strikes:
+                        st.markdown(f"##### {p}")
+                        render_chart(df_prices, df_trades, p, "#3498db", show_mean=False)
 
             st.markdown("#### 🌎 Total Market Reconstruction")
             render_total_chart(df_prices, df_trades)
