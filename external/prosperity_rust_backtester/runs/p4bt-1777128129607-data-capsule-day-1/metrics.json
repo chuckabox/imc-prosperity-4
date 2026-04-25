@@ -1,0 +1,29 @@
+{
+  "dataset_id": "prices_round_3_day_1",
+  "dataset_path": "C:\\Users\\kentrn\\Desktop\\Prosperity 4\\imc-prosperity-4\\ROUND 3\\data_capsule\\prices_round_3_day_1.csv",
+  "day": 1,
+  "engine": "prosperity4bt",
+  "final_pnl_by_product": {
+    "HYDROGEL_PACK": 9007.0,
+    "VELVETFRUIT_EXTRACT": 3698.5,
+    "VEV_4000": 0.0,
+    "VEV_4500": 0.0,
+    "VEV_5000": 0.0,
+    "VEV_5100": 0.0,
+    "VEV_5200": 0.0,
+    "VEV_5300": 0.0,
+    "VEV_5400": 0.0,
+    "VEV_5500": 0.0,
+    "VEV_6000": 0.0,
+    "VEV_6500": 0.0
+  },
+  "final_pnl_total": 12705.5,
+  "generated_at": "2026-04-25T14:42:12+00:00",
+  "matching": {
+    "trade_match_mode": "all"
+  },
+  "own_trade_count": 317,
+  "run_id": "p4bt-1777128129607-data-capsule-day-1",
+  "tick_count": 120000,
+  "trader_path": "C:\\Users\\kentrn\\Desktop\\Prosperity 4\\imc-prosperity-4\\ROUND 3\\traders\\ken\\trader_ken_v44.py"
+}

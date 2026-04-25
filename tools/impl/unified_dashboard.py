@@ -1225,6 +1225,104 @@ def _compute_option_alpha_scan(days_tuple: tuple, ema_span: int, fwd_horizon: in
     return out.sort_values(["MoveToSpread", "ExtremeHitRate"], ascending=False)
 
 
+@st.cache_data(show_spinner=False)
+def _compute_alpha_mining_tables(days_tuple: tuple) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    raw = _load_r3_prices(days_tuple)
+    if raw.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+    def _signal_stats(series: pd.Series, span: int, horizon: int, z_thr: float) -> dict:
+        x = series.reset_index(drop=True)
+        ema = x.ewm(span=span, adjust=False).mean()
+        dev = x - ema
+        fwd = x.shift(-horizon) - x
+        vol = dev.rolling(500, min_periods=250).std().replace(0, np.nan)
+        z = dev / vol
+        d = pd.DataFrame({"dev": dev, "fwd": fwd, "z": z}).dropna()
+        if d.empty:
+            return {"n": 0, "hit": np.nan, "edge": np.nan, "corr": np.nan}
+        ext = d[d["z"].abs() >= z_thr]
+        if ext.empty:
+            return {"n": 0, "hit": np.nan, "edge": np.nan, "corr": float(d["dev"].corr(d["fwd"]))}
+        hit = (((ext["dev"] > 0) & (ext["fwd"] < 0)) | ((ext["dev"] < 0) & (ext["fwd"] > 0))).mean()
+        return {
+            "n": int(len(ext)),
+            "hit": float(hit),
+            "edge": float(ext["fwd"].abs().mean()),
+            "corr": float(d["dev"].corr(d["fwd"])),
+        }
+
+    under_rows = []
+    for p in ["HYDROGEL_PACK", "VELVETFRUIT_EXTRACT"]:
+        sub = raw[raw["product"] == p].sort_values(["src_day", "timestamp"]).copy()
+        if sub.empty:
+            continue
+        s = sub["mid"]
+        stt = _signal_stats(s, span=220, horizon=50, z_thr=1.5)
+        mean_spread = float(sub["spread"].mean())
+        under_rows.append(
+            {
+                "Product": p,
+                "RetLag1AC": float(s.diff().dropna().autocorr(lag=1)),
+                "Corr(dev,fwd50)": stt["corr"],
+                "ExtremeHitRate": stt["hit"],
+                "ExtremeCount": stt["n"],
+                "AvgAbsFwdMove": stt["edge"],
+                "MeanSpread": mean_spread,
+                "MoveToSpread": float(stt["edge"] / mean_spread) if stt["edge"] and mean_spread > 0 else np.nan,
+            }
+        )
+    under_df = pd.DataFrame(under_rows)
+
+    vev_rows = []
+    pv = raw.pivot_table(index=["src_day", "timestamp"], columns="product", values="mid").sort_index()
+    if "VELVETFRUIT_EXTRACT" in pv.columns:
+        S = pv["VELVETFRUIT_EXTRACT"]
+        for c in [c for c in pv.columns if str(c).startswith("VEV_")]:
+            try:
+                K = int(str(c).split("_")[1])
+            except Exception:
+                continue
+            prem = (pv[c] - np.maximum(S - K, 0.0)).dropna()
+            if len(prem) < 1200:
+                continue
+            stt = _signal_stats(prem, span=120, horizon=50, z_thr=1.5)
+            mspread = float(raw[raw["product"] == c]["spread"].mean())
+            vev_rows.append(
+                {
+                    "Strike": K,
+                    "Corr(dev,fwdPrem50)": stt["corr"],
+                    "ExtremeHitRate": stt["hit"],
+                    "ExtremeCount": stt["n"],
+                    "AvgAbsFwdPremMove": stt["edge"],
+                    "MeanSpread": mspread,
+                    "MoveToSpread": float(stt["edge"] / mspread) if stt["edge"] and mspread > 0 else np.nan,
+                }
+            )
+    vev_df = pd.DataFrame(vev_rows)
+    if not vev_df.empty:
+        vev_df = vev_df.sort_values("MoveToSpread", ascending=False)
+
+    lead_rows = []
+    if "HYDROGEL_PACK" in pv.columns and "VELVETFRUIT_EXTRACT" in pv.columns:
+        h = pv["HYDROGEL_PACK"].reset_index(drop=True).diff()
+        v = pv["VELVETFRUIT_EXTRACT"].reset_index(drop=True).diff()
+        for lag in [1, 2, 3, 5, 8, 13, 21]:
+            d = pd.DataFrame({"h": h, "v_lead": v.shift(-lag)}).dropna()
+            if len(d) > 1000:
+                lead_rows.append({"Signal": "hydro_ret_t -> vfe_ret_t+lag", "Lag": lag, "Corr": float(d["h"].corr(d["v_lead"]))})
+        for lag in [1, 2, 3, 5, 8, 13, 21]:
+            d = pd.DataFrame({"v": v, "h_lead": h.shift(-lag)}).dropna()
+            if len(d) > 1000:
+                lead_rows.append({"Signal": "vfe_ret_t -> hydro_ret_t+lag", "Lag": lag, "Corr": float(d["v"].corr(d["h_lead"]))})
+    lead_df = pd.DataFrame(lead_rows)
+    if not lead_df.empty:
+        lead_df["AbsCorr"] = lead_df["Corr"].abs()
+        lead_df = lead_df.sort_values("AbsCorr", ascending=False)
+
+    return under_df, vev_df, lead_df
+
+
 def render_strategy_lab_tab():
     st.header("🧪 Strategy Lab — R3 Alpha Diagnostics")
     st.caption("Interactive analysis of IV scalping, gamma scalping, mean-reversion. **Days 0+1 only — Day 2 hidden.**")
@@ -1236,7 +1334,7 @@ def render_strategy_lab_tab():
         return
     st.info(f"Training set: days {train_days}. Day 2 NOT loaded here.")
 
-    sub = st.tabs(["1. IV Surface", "2. Gamma Edge", "3. Mean Reversion", "4. Hybrid Sizing", "5. Alpha Scanner"])
+    sub = st.tabs(["1. IV Surface", "2. Gamma Edge", "3. Mean Reversion", "4. Hybrid Sizing", "5. Alpha Scanner", "6. Alpha Mining"])
 
     iv_df = _compute_iv_surface(tuple(train_days))
     if iv_df.empty:
@@ -1447,6 +1545,55 @@ def render_strategy_lab_tab():
                 qdf = pd.DataFrame(q_rows)
                 st.dataframe(qdf, use_container_width=True, hide_index=True)
                 st.caption("Interpretation: negative lag1 AC and negative corr(dev, fwd) favor market-making / mean-reversion entries.")
+
+    with sub[5]:
+        st.subheader("Alpha Mining (Ranked Signals)")
+        st.caption("Data-mined signal ranking focused on monetizable edge (move vs spread), not just raw correlation.")
+        under_df, vev_df, lead_df = _compute_alpha_mining_tables(tuple(train_days))
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Underlyings (Hydro / VFE)**")
+            if under_df.empty:
+                st.info("No underlying mining rows.")
+            else:
+                st.dataframe(under_df, use_container_width=True, hide_index=True)
+        with c2:
+            st.markdown("**VEV Strike Ranking**")
+            if vev_df.empty:
+                st.info("No VEV mining rows.")
+            else:
+                st.dataframe(vev_df, use_container_width=True, hide_index=True)
+
+        st.markdown("**Lead/Lag Cross-Asset Checks**")
+        if lead_df.empty:
+            st.info("No lead/lag rows.")
+        else:
+            st.dataframe(lead_df.head(12), use_container_width=True, hide_index=True)
+
+        if not vev_df.empty:
+            chart = (
+                alt.Chart(vev_df)
+                .mark_circle(size=110, opacity=0.85)
+                .encode(
+                    x=alt.X("MoveToSpread:Q", title="Move / Spread"),
+                    y=alt.Y("ExtremeHitRate:Q", title="Extreme Hit Rate"),
+                    color=alt.Color("Corr(dev,fwdPrem50):Q", title="Corr(dev,fwdPrem50)"),
+                    tooltip=["Strike", "MoveToSpread", "ExtremeHitRate", "ExtremeCount", "Corr(dev,fwdPrem50)"],
+                )
+                .properties(height=320, title="VEV Signal Frontier")
+                .interactive()
+            )
+            st.altair_chart(chart, use_container_width=True)
+
+        st.markdown("**Suggested workflow**")
+        st.markdown(
+            """
+            1. Pick 1-3 strikes with highest `MoveToSpread` and acceptable `ExtremeHitRate`.
+            2. Prefer underlyings where `RetLag1AC < 0` and `Corr(dev,fwd50) < 0`.
+            3. Use lead/lag only if absolute correlation is meaningfully non-zero.
+            """
+        )
 
 
 def render_rust_backtester_tab():
