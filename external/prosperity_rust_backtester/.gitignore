@@ -1,2 +1,13 @@
-# Cargo build output (never commit)
-/target/
+target/
+runs/*
+!runs/.gitkeep
+__pycache__/
+.venv/
+build/
+dist/
+*.whl
+.maturin/
+.DS_Store
+TUTORIAL_ROUND_*/
+[0-9]*/
+traders/p4*

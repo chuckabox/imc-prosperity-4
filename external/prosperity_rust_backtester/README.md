@@ -8,6 +8,10 @@ Everything needed for the default backtest flow now lives inside this directory.
 
 - `traders/latest_trader.py`
 
+There is also a diagnostic trader that aggressively tests every visible product in a dataset:
+
+- `traders/all_products_trader.py`
+
 ## Setup
 
 Clone the repo:
@@ -42,6 +46,15 @@ rust_backtester
 ```
 
 If `rust_backtester` is not found after install, make sure `~/.cargo/bin` is on your `PATH`.
+
+If `rust_backtester cannot be executed after install, make sure that `~/scripts/cargo_local.sh` is executable:
+```
+ls -la scripts/
+
+sed -i 's/\r$//' scripts/cargo_local.sh
+
+chmod +x scripts/cargo_local.sh
+```
 
 For local development from this repo, either install the local CLI:
 
@@ -105,14 +118,19 @@ The repo is organized by round:
 - `datasets/round2/trades_round_2_day_0.csv`
 - `datasets/round2/prices_round_2_day_1.csv`
 - `datasets/round2/trades_round_2_day_1.csv`
-- `datasets/round3/`
+- `datasets/round3/prices_round_3_day_0.csv`
+- `datasets/round3/trades_round_3_day_0.csv`
+- `datasets/round3/prices_round_3_day_1.csv`
+- `datasets/round3/trades_round_3_day_1.csv`
+- `datasets/round3/prices_round_3_day_2.csv`
+- `datasets/round3/trades_round_3_day_2.csv`
 - `datasets/round4/`
 - `datasets/round5/`
 - `datasets/round6/`
 - `datasets/round7/`
 - `datasets/round8/`
 
-Right now the bundled public data is the raw IMC tutorial day data in `datasets/tutorial/`, the raw round 1 day data in `datasets/round1/`, the raw round 2 day data in `datasets/round2/`, plus a sample tutorial `submission.log` produced with the bundled basic trader. The remaining round folders are there so future round files can be placed in the correct folder instead of being mixed together.
+Right now the bundled public data is the raw IMC tutorial day data in `datasets/tutorial/`, the raw round 1 day data in `datasets/round1/`, the raw round 2 day data in `datasets/round2/`, the raw round 3 day data in `datasets/round3/`, plus a sample tutorial `submission.log` produced with the bundled basic trader. The remaining round folders are there so future round files can be placed in the correct folder instead of being mixed together.
 If you place a portal `submission.log` file into a round folder, the backtester will use it. `submission.log` is also generated for persisted runs.
 
 ## CLI
@@ -169,6 +187,7 @@ Useful optional variables for any `make` backtest target:
 make tutorial DAY=-1
 make submission ROUND=round1
 make round3 TRADER=traders/latest_trader.py
+make round3 TRADER=traders/all_products_trader.py
 make round2 PERSIST=1
 make tutorial FLAT=1
 make tutorial CARRY=1
@@ -229,7 +248,7 @@ Behavior:
 - use `--persist` or `PERSIST=1` to write the full replay artifact set under `runs/`
 - persisted multi-day or multi-file runs also write one combined bundle at `runs/<backtest-id>/`, including `combined.log` and `manifest.json`
 - for multi-run visualizer uploads, use each child `RUN_DIR/submission.log`; the top-level bundle does not emit a stitched replay file
-- product output defaults to a compact summary so large product sets do not flood the terminal
+- product output defaults to every product so no product PnL is hidden in larger rounds
 
 Published binary vs local development:
 
@@ -255,8 +274,8 @@ Bundled dataset aliases:
 
 Product display modes:
 
-- `--products summary` default: print a separate product table with the top product PnL contributors and an `OTHER(+N)` rollup when needed
-- `--products full`: print a separate product table with every product
+- `--products full` default: print a separate product table with every product
+- `--products summary`: print a compact product table with the top product PnL contributors and an `OTHER(+N)` rollup when needed
 - `--products off`: show only the per-day total
 
 Artifact modes:
@@ -382,10 +401,12 @@ The Docker image builds the project in a clean container and runs the zero-argum
 
 - `src/` Rust backtester implementation
 - `traders/latest_trader.py` bundled default trader
+- `traders/all_products_trader.py` diagnostic trader for verifying every product surface
 - `datasets/tutorial/` bundled raw IMC tutorial day CSVs and sample submission log
 - `datasets/round1/` bundled raw IMC round 1 CSVs
 - `datasets/round2/` bundled raw IMC round 2 CSVs
-- `datasets/round3/` ... `datasets/round8/` placeholders for future round data
+- `datasets/round3/` bundled raw IMC round 3 CSVs
+- `datasets/round4/` ... `datasets/round8/` placeholders for future round data
 - `runs/` persisted outputs when `--persist` is used
 - `runs/<backtest-id>/` combined bundle for persisted multi-day runs, including `combined.log` and `manifest.json`
 
