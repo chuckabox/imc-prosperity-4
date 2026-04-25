@@ -114,7 +114,15 @@
       "Bash(winget search *)",
       "Bash(cargo binstall *)",
       "Bash(tee /tmp/backtest_p4bt_r3.log)",
-      "Bash(tee /tmp/backtest_p4bt_suvin.log)"
+      "Bash(tee /tmp/backtest_p4bt_suvin.log)",
+      "Bash('C:/Program Files/LLVM/bin/llvm-dlltool.exe' -m i386:x86-64 -D msvcrt.dll -l 'C:/Program Files \\(x86\\)/Windows Kits/10/Lib/10.0.18362.0/um/x64/msvcrt.lib' --input-def /dev/stdin)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(cat)",
+      "Bash('C:/Program Files/LLVM/bin/llvm-dlltool.exe' -m i386:x86-64 -D msvcrt.dll -d /tmp/msvcrt.def -l 'C:/Program Files \\(x86\\)/Windows Kits/10/Lib/10.0.18362.0/um/x64/msvcrt.lib')",
+      "Bash(mkdir -p /tmp/rustlibs)",
+      "Bash('C:/Program Files/LLVM/bin/llvm-dlltool.exe' -m i386:x86-64 -D msvcrt.dll -d /tmp/msvcrt.def -l /tmp/rustlibs/msvcrt.lib)",
+      "Read(//tmp/rustlibs/**)",
+      "Bash(cmd.exe /c \"echo %TEMP%\")"
     ]
   }
 }
