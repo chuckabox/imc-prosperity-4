@@ -87,7 +87,12 @@
       "Bash(git reset *)",
       "Bash(awk -F';' 'NR>1{print $3}' \"ROUND 3/data_capsule/prices_round_3_day_0.csv\")",
       "Bash(python \"ROUND 3/scratch/sweep_hp_t2.py\")",
-      "Bash(echo \"PID=$!\")"
+      "Bash(echo \"PID=$!\")",
+      "Bash(awk -F';' 'NR>1{print $4}' \"C:/Users/kentrn/Desktop/Prosperity 4/imc-prosperity-4/ROUND 3/data_capsule/trades_round_3_day_0.csv\")",
+      "Bash(awk -F';' 'NR>1 && \\($2!=\"\" || $3!=\"\"\\) {print $0}' \"C:/Users/kentrn/Desktop/Prosperity 4/imc-prosperity-4/ROUND 3/data_capsule/trades_round_3_day_0.csv\")",
+      "Bash(awk -F';' 'NR>1 && \\($2!=\"\" || $3!=\"\"\\) {c++} END{print c+0}' \"C:/Users/kentrn/Desktop/Prosperity 4/imc-prosperity-4/ROUND 3/data_capsule/trades_round_3_day_0.csv\")",
+      "Bash(PYTHONIOENCODING=utf-8 python \"ROUND 3/scratch/deep_analysis.py\")",
+      "Bash(PYTHONIOENCODING=utf-8 python \"ROUND 3/scratch/hp_imbalance_signal.py\")"
     ]
   }
 }
