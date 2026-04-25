@@ -8,12 +8,13 @@ Three-module trader for Round 3:
 Single-file, no local imports beyond datamodel.
 """
 # Backtest results (data capsule, 3 days):
-# v32 (this): Total=29,105  (day0=9,835  day1=13,396  day2=5,874)
-# v30 baseline: Total=54,260
-# HP mean-reversion taker added (HP_TAKER_EDGE=3, HP_TAKER_SIZE=20).
-# Uses dual EWMA: slow (alpha=0.003) for maker quotes, fast (alpha=0.20) for taker signal.
-# Slow alpha alone causes taker to fire ~8k times/day (fires on every tick); fast alpha
-# reduces this to ~47 genuine dislocations. Net PnL preserved vs original v32.
+# v32 HP anchor blend: Total=44,654  (day0=14,353  day1=17,932  day2=12,369)
+# v32 previous:        Total=29,105  (day0=9,835   day1=13,396  day2=5,874)
+# v30 baseline:        Total=54,260
+# HP fair value now uses blended EWMA: fair = 0.7 * ewma + 0.3 * HP_ANCHOR (10000).
+# Faster alpha=0.10 (vs old 0.003) lets EWMA track price more responsively.
+# The 10000 round-number anchor acts as a mean-reversion prior for HP.
+# Uses dual EWMA: fast maker (alpha=0.10 + anchor blend), fast taker (alpha=0.20).
 # Remaining gap vs v30: VFE (limit 60 vs 80, edge 3 vs 2) and VEV (2 strikes vs 6).
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ HP_SKEW          = 4       # matches ~4 XIRECs predicted by imbalance signal
 HP_INV_TRIGGER   = 40      # |pos| threshold to start inventory lean
 HP_INV_FACTOR    = 0.15    # quote shift per unit of pos above trigger
 HP_TAKER_MAX     = 5       # max lots to take when reducing wrong-side exposure
-HP_ANCHOR        = 9993.0  # static anchor for fair-value blend (from v30)
+HP_ANCHOR        = 10000   # round-number prior for HP fair-value blend
 HP_TAKER_EDGE    = 3       # take when best price crosses fair by this much (mean reversion)
 HP_TAKER_SIZE    = 20      # max lots per mean-reversion take
 
@@ -138,11 +139,11 @@ class Trader:
 
         mid = (bb + ba) / 2.0
 
-        # EWMA fair — no static anchor
+        # EWMA fair — blended with round-number anchor
         prev = self._state["hp_ewma"]
-        ewma = mid if prev is None else (1 - HP_EWMA_ALPHA) * prev + HP_EWMA_ALPHA * mid
+        ewma = mid if prev is None else (1 - 0.10) * prev + 0.10 * mid
         self._state["hp_ewma"] = ewma
-        fair = ewma
+        fair = 0.7 * ewma + 0.3 * HP_ANCHOR
 
         # Fast EWMA for taker signal (alpha=0.20 matches v30, ~47 triggers vs 8k with slow)
         prev_fast = self._state["hp_ewma_fast"]
