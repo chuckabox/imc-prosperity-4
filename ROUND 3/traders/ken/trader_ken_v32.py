@@ -8,11 +8,13 @@ Three-module trader for Round 3:
 Single-file, no local imports beyond datamodel.
 """
 # Backtest results (data capsule, 3 days):
-# v32: HP=21,684  VFE=7,196  VEV=225  Total=29,105
+# v32 (this): Total=29,105  (day0=9,835  day1=13,396  day2=5,874)
 # v30 baseline: Total=54,260
-# Note: VEV_MIN_EDGE reduced from 5 to 3 to increase VEV activity (minimal effect on data capsule).
-# v32 < v30 primarily because HP EWMA alpha=0.003 (slow, conservative) vs v30 approach;
-# VEV module contributes negligible PnL on data capsule (thin option markets).
+# HP mean-reversion taker added (HP_TAKER_EDGE=3, HP_TAKER_SIZE=20).
+# Uses dual EWMA: slow (alpha=0.003) for maker quotes, fast (alpha=0.20) for taker signal.
+# Slow alpha alone causes taker to fire ~8k times/day (fires on every tick); fast alpha
+# reduces this to ~47 genuine dislocations. Net PnL preserved vs original v32.
+# Remaining gap vs v30: VFE (limit 60 vs 80, edge 3 vs 2) and VEV (2 strikes vs 6).
 from __future__ import annotations
 
 import json
@@ -34,6 +36,9 @@ HP_SKEW          = 4       # matches ~4 XIRECs predicted by imbalance signal
 HP_INV_TRIGGER   = 40      # |pos| threshold to start inventory lean
 HP_INV_FACTOR    = 0.15    # quote shift per unit of pos above trigger
 HP_TAKER_MAX     = 5       # max lots to take when reducing wrong-side exposure
+HP_ANCHOR        = 9993.0  # static anchor for fair-value blend (from v30)
+HP_TAKER_EDGE    = 3       # take when best price crosses fair by this much (mean reversion)
+HP_TAKER_SIZE    = 20      # max lots per mean-reversion take
 
 # ── VFE parameters ────────────────────────────────────────────────────────────
 VFE_LIMIT        = 60
@@ -62,6 +67,7 @@ class Trader:
             except Exception:
                 self._state = {}
         self._state.setdefault("hp_ewma", None)
+        self._state.setdefault("hp_ewma_fast", None)
         self._state.setdefault("vfe_ewma", None)
 
     def _save(self) -> str:
@@ -138,6 +144,12 @@ class Trader:
         self._state["hp_ewma"] = ewma
         fair = ewma
 
+        # Fast EWMA for taker signal (alpha=0.20 matches v30, ~47 triggers vs 8k with slow)
+        prev_fast = self._state["hp_ewma_fast"]
+        ewma_fast = mid if prev_fast is None else 0.80 * prev_fast + 0.20 * mid
+        self._state["hp_ewma_fast"] = ewma_fast
+        fair_taker = ewma_fast
+
         # L1 imbalance signal
         bv, av = self._top_vol(depth)
         total_vol = bv + av
@@ -176,6 +188,19 @@ class Trader:
                 if reduce > 0:
                     orders.append(Order(HP, ba, reduce))
                     pos += reduce
+
+        # Mean-reversion taker — buy when ask is below fair, sell when bid is above fair
+        # Uses fast EWMA (alpha=0.20) so it only fires on genuine dislocations (~47x vs 8k with slow)
+        if ba <= fair_taker - HP_TAKER_EDGE and pos < HP_LIMIT:
+            sz = min(HP_TAKER_SIZE, HP_LIMIT - pos, abs(depth.sell_orders.get(ba, 0)))
+            if sz > 0:
+                orders.append(Order(HP, ba, sz))
+                pos += sz
+        if bb >= fair_taker + HP_TAKER_EDGE and pos > -HP_LIMIT:
+            sz = min(HP_TAKER_SIZE, HP_LIMIT + pos, depth.buy_orders.get(bb, 0))
+            if sz > 0:
+                orders.append(Order(HP, bb, -sz))
+                pos -= sz
 
         # Passive maker quotes
         room_long  = HP_LIMIT - pos
