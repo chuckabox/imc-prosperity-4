@@ -2,6 +2,8 @@
 
 This document tracks the key quantitative edges (alphas) and architectural breakthroughs found during the optimization of the Ken/Generation trader series.
 
+Alpha count: 8
+
 ## 1. Inventory & Market Making Alphas
 
 ### HP Anchor (`HYDROGEL_PACK`)
