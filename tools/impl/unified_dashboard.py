@@ -1142,6 +1142,89 @@ def _compute_iv_surface(days_tuple: tuple) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+@st.cache_data(show_spinner=False)
+def _load_r3_prices(days_tuple: tuple) -> pd.DataFrame:
+    data_dir = get_paths()["data_dir"]
+    frames = []
+    for d in days_tuple:
+        f = os.path.join(data_dir, f"prices_round_3_day_{d}.csv")
+        if os.path.exists(f):
+            x = pd.read_csv(f, sep=";")
+            x["src_day"] = d
+            frames.append(x)
+    if not frames:
+        return pd.DataFrame()
+    out = pd.concat(frames, ignore_index=True)
+    out = out.dropna(subset=["bid_price_1", "ask_price_1"]).copy()
+    out["mid"] = (out["bid_price_1"] + out["ask_price_1"]) / 2.0
+    out["spread"] = out["ask_price_1"] - out["bid_price_1"]
+    return out
+
+
+@st.cache_data(show_spinner=False)
+def _compute_option_alpha_scan(days_tuple: tuple, ema_span: int, fwd_horizon: int, z_thresh: float) -> pd.DataFrame:
+    df = _load_r3_prices(days_tuple)
+    if df.empty:
+        return pd.DataFrame()
+
+    pv = df.pivot_table(index=["src_day", "timestamp"], columns="product", values="mid").sort_index()
+    if "VELVETFRUIT_EXTRACT" not in pv.columns:
+        return pd.DataFrame()
+    S = pv["VELVETFRUIT_EXTRACT"]
+
+    rows = []
+    for K in VEV_STRIKES_R3:
+        sym = f"VEV_{K}"
+        if sym not in pv.columns:
+            continue
+        prem = pv[sym] - np.maximum(S - K, 0.0)
+        prem = prem.dropna()
+        if len(prem) < max(300, fwd_horizon + 20):
+            continue
+
+        ema = prem.ewm(span=ema_span, adjust=False).mean()
+        dev = prem - ema
+        fwd = prem.shift(-fwd_horizon) - prem
+        vol = dev.rolling(300, min_periods=120).std()
+        z = dev / vol.replace(0, np.nan)
+        sig = pd.DataFrame({"dev": dev, "fwd": fwd, "z": z}).dropna()
+        if sig.empty:
+            continue
+
+        corr = float(sig["dev"].corr(sig["fwd"]))
+        extremes = sig[sig["z"].abs() >= z_thresh]
+        if extremes.empty:
+            hit_rate = np.nan
+            edge_ticks = np.nan
+            n_extreme = 0
+        else:
+            good = ((extremes["dev"] > 0) & (extremes["fwd"] < 0)) | ((extremes["dev"] < 0) & (extremes["fwd"] > 0))
+            hit_rate = float(good.mean())
+            edge_ticks = float(extremes["fwd"].abs().mean())
+            n_extreme = int(len(extremes))
+
+        s = df[df["product"] == sym]
+        mean_spread = float(s["spread"].mean()) if not s.empty else np.nan
+        edge_to_spread = edge_ticks / mean_spread if (pd.notna(edge_ticks) and pd.notna(mean_spread) and mean_spread > 0) else np.nan
+
+        rows.append(
+            {
+                "Strike": K,
+                "Corr(dev, fwdPrem)": corr,
+                "ExtremeHitRate": hit_rate,
+                "AvgAbsFwdMove": edge_ticks,
+                "MeanSpread": mean_spread,
+                "MoveToSpread": edge_to_spread,
+                "ExtremeSamples": n_extreme,
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame()
+    out = pd.DataFrame(rows)
+    return out.sort_values(["MoveToSpread", "ExtremeHitRate"], ascending=False)
+
+
 def render_strategy_lab_tab():
     st.header("🧪 Strategy Lab — R3 Alpha Diagnostics")
     st.caption("Interactive analysis of IV scalping, gamma scalping, mean-reversion. **Days 0+1 only — Day 2 hidden.**")
@@ -1153,7 +1236,7 @@ def render_strategy_lab_tab():
         return
     st.info(f"Training set: days {train_days}. Day 2 NOT loaded here.")
 
-    sub = st.tabs(["1. IV Surface", "2. Gamma Edge", "3. Mean Reversion", "4. Hybrid Sizing"])
+    sub = st.tabs(["1. IV Surface", "2. Gamma Edge", "3. Mean Reversion", "4. Hybrid Sizing", "5. Alpha Scanner"])
 
     iv_df = _compute_iv_surface(tuple(train_days))
     if iv_df.empty:
@@ -1191,20 +1274,23 @@ def render_strategy_lab_tab():
                 residuals.append({"day": d, "ts": ts, "K": r["K"], "iv_dev": r["iv"] - fair,
                                   "fair_iv": fair, "S": r["S"], "TTE": r["TTE"], "price": r["price"]})
         res_df = pd.DataFrame(residuals)
-        st.markdown("**IV Deviation per Strike** (positive = overpriced vs smile)")
-        dev_stats = res_df.groupby("K")["iv_dev"].agg(["mean", "std", "count"]).reset_index()
-        st.dataframe(dev_stats, use_container_width=True, hide_index=True)
+        if res_df.empty:
+            st.info("Not enough snapshots to estimate IV deviation robustly.")
+        else:
+            st.markdown("**IV Deviation per Strike** (positive = overpriced vs smile)")
+            dev_stats = res_df.groupby("K")["iv_dev"].agg(["mean", "std", "count"]).reset_index()
+            st.dataframe(dev_stats, use_container_width=True, hide_index=True)
 
-        # autocorr
-        ac_rows = []
-        for K, g in res_df.groupby("K"):
-            s = g.sort_values(["day", "ts"])["iv_dev"].values
-            if len(s) > 20:
-                ac_rows.append({"K": K, "lag1_autocorr": float(np.corrcoef(s[:-1], s[1:])[0, 1]), "n": len(s)})
-        ac_df = pd.DataFrame(ac_rows)
-        st.markdown("**Lag-1 Autocorrelation of IV Deviation**")
-        st.caption("Negative = mean-reverting (good for IV scalping). Positive = trending (avoid naive entry).")
-        st.dataframe(ac_df, use_container_width=True, hide_index=True)
+            # autocorr
+            ac_rows = []
+            for K, g in res_df.groupby("K"):
+                s = g.sort_values(["day", "ts"])["iv_dev"].values
+                if len(s) > 20:
+                    ac_rows.append({"K": K, "lag1_autocorr": float(np.corrcoef(s[:-1], s[1:])[0, 1]), "n": len(s)})
+            ac_df = pd.DataFrame(ac_rows)
+            st.markdown("**Lag-1 Autocorrelation of IV Deviation**")
+            st.caption("Negative = mean-reverting (good for IV scalping). Positive = trending (avoid naive entry).")
+            st.dataframe(ac_df, use_container_width=True, hide_index=True)
 
     # --- Tab 2: Gamma scalping edge ---
     with sub[1]:
@@ -1287,6 +1373,80 @@ def render_strategy_lab_tab():
         Train days 0+1, lock all params, run Day 2 ONCE.
         """)
         st.warning("Day 2 evaluation is INTENTIONALLY not exposed in this tab. Use `validate_trader2.py` once.")
+
+    with sub[4]:
+        st.subheader("Strike-Level Alpha Scanner")
+        st.caption("Ranks option strikes by mean-reversion quality and move-vs-spread efficiency.")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            ema_span = st.slider("Premium EMA span", min_value=40, max_value=300, value=120, step=10)
+        with c2:
+            fwd_h = st.slider("Forward horizon", min_value=20, max_value=200, value=50, step=10)
+        with c3:
+            z_th = st.slider("Extreme threshold |z|", min_value=1.0, max_value=3.0, value=1.5, step=0.1)
+
+        scan = _compute_option_alpha_scan(tuple(train_days), ema_span=ema_span, fwd_horizon=fwd_h, z_thresh=z_th)
+        if scan.empty:
+            st.info("No option scan rows available with current parameters.")
+        else:
+            st.dataframe(
+                scan,
+                column_config={
+                    "Strike": st.column_config.NumberColumn("Strike", format="%d"),
+                    "Corr(dev, fwdPrem)": st.column_config.NumberColumn("Corr(dev, fwdPrem)", format="%.3f", help="More negative implies stronger premium mean reversion."),
+                    "ExtremeHitRate": st.column_config.NumberColumn("Hit rate", format="%.3f", help="At |z| threshold, fraction of times premium reverts in expected direction."),
+                    "AvgAbsFwdMove": st.column_config.NumberColumn("Avg |fwd move|", format="%.3f"),
+                    "MeanSpread": st.column_config.NumberColumn("Mean spread", format="%.3f"),
+                    "MoveToSpread": st.column_config.NumberColumn("Move/spread", format="%.2f", help="Higher means easier to monetize after costs."),
+                    "ExtremeSamples": st.column_config.NumberColumn("Samples", format="%d"),
+                },
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            top = scan.head(3).copy()
+            top["label"] = top["Strike"].astype(str)
+            bar = alt.Chart(top).mark_bar().encode(
+                x=alt.X("label:N", title="Top Strikes"),
+                y=alt.Y("MoveToSpread:Q", title="Move / Spread"),
+                color=alt.Color("Corr(dev, fwdPrem):Q", scale=alt.Scale(scheme="redyellowgreen"), title="Corr(dev,fwd)"),
+                tooltip=["Strike", "MoveToSpread", "ExtremeHitRate", "ExtremeSamples"],
+            ).properties(height=250, title="Most Monetizable Strikes")
+            st.altair_chart(bar, use_container_width=True)
+
+        st.markdown("---")
+        st.subheader("Underlying Signal Quality (for baseline sizing)")
+        raw = _load_r3_prices(tuple(train_days))
+        if raw.empty:
+            st.info("No base price data loaded.")
+        else:
+            q_rows = []
+            for p in ["HYDROGEL_PACK", "VELVETFRUIT_EXTRACT"]:
+                subp = raw[raw["product"] == p].sort_values(["src_day", "timestamp"]).copy()
+                if len(subp) < 1000:
+                    continue
+                series = subp["mid"].reset_index(drop=True)
+                ret = series.diff().dropna()
+                ac = float(ret.autocorr(lag=1))
+                ema = series.ewm(span=400, adjust=False).mean()
+                dev = series - ema
+                fwd = series.shift(-100) - series
+                ev = pd.DataFrame({"dev": dev, "fwd": fwd}).dropna()
+                mr_corr = float(ev["dev"].corr(ev["fwd"])) if not ev.empty else np.nan
+                spread = float(subp["spread"].mean())
+                q_rows.append(
+                    {
+                        "Product": p,
+                        "Lag1 Ret AC": ac,
+                        "Corr(dev, fwd)": mr_corr,
+                        "Mean spread": spread,
+                        "Mean mid": float(series.mean()),
+                    }
+                )
+            if q_rows:
+                qdf = pd.DataFrame(q_rows)
+                st.dataframe(qdf, use_container_width=True, hide_index=True)
+                st.caption("Interpretation: negative lag1 AC and negative corr(dev, fwd) favor market-making / mean-reversion entries.")
 
 
 def render_rust_backtester_tab():
@@ -1665,8 +1825,12 @@ def main():
                 pnl_cols = [c for c in sample_df.columns if c.startswith("pnl_")]
                 display_cols = ["All"] + [c.replace("pnl_", "").title() for c in pnl_cols]
                 
-                with col_f:
-                    p_filter_display = st.radio("Product Filter", display_cols, horizontal=True, key="robust_product_filter")
+                p_filter_display = st.radio(
+                    "Product Filter",
+                    display_cols,
+                    horizontal=True,
+                    key="robust_product_filter",
+                )
                 
                 p_filter = p_filter_display if p_filter_display == "All" else f"pnl_{p_filter_display.lower().replace(' ', '_')}"
                 target_col = "final_pnl" if p_filter == "All" else p_filter
@@ -2035,18 +2199,17 @@ def main():
                     col_s1, col_s2, col_s3 = st.columns(3)
                     with col_s1:
                         sel_trader = st.selectbox("Target Trader", trader_search, key="stress_trader", index=next((i for i, x in enumerate(trader_search) if "v2d" in x), 0))
+                    with col_s3:
+                        sel_source = st.selectbox("Base Dataset", ["All", -1, -2, 0], index=0)
                     # Discover available assets for stress testing
-                    df_sample, _ = load_and_process_data(sel_source if sel_source != "All (Round 1 Data)" else "All")
+                    df_sample, _ = load_and_process_data(sel_source)
                     stress_products = sorted(df_sample["product"].unique()) if df_sample is not None else []
                     
                     with col_s2:
                         sel_prod = st.selectbox("Market Asset", stress_products + ["TOTAL (All Assets)"], index=len(stress_products))
-                    with col_s3:
-                        sel_source = st.selectbox("Base Dataset", ["All", -1, -2, 0], index=0)
     
                     if st.button("☣️ Run Destructive Mutation Suite", type="primary", use_container_width=True):
-                        source_key = "All" if sel_source == "All (Round 1 Data)" else sel_source
-                        df_p, _ = load_and_process_data(source_key)
+                        df_p, _ = load_and_process_data(sel_source)
                         if df_p is None:
                             st.error("Base data not found!")
                         else:
