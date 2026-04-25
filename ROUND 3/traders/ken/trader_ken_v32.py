@@ -180,7 +180,44 @@ class Trader:
     # ── Module 2: VFE ─────────────────────────────────────────────────────────
 
     def _vfe_logic(self, state: TradingState) -> Tuple[List[Order], Optional[float]]:
-        return [], None
+        depth = state.order_depths.get(VFE)
+        if depth is None:
+            return [], None
+        bb, ba = self._top(depth)
+        if bb is None or ba is None:
+            return [], None
+
+        mid = (bb + ba) / 2.0
+
+        prev = self._state["vfe_ewma"]
+        ewma = mid if prev is None else (1 - VFE_EWMA_ALPHA) * prev + VFE_EWMA_ALPHA * mid
+        self._state["vfe_ewma"] = ewma
+        fair = ewma
+
+        pos = state.position.get(VFE, 0)
+        inv_lean = 0.0
+        if abs(pos) > VFE_INV_TRIGGER:
+            inv_lean = pos * VFE_INV_FACTOR
+
+        q_bid = round(fair - VFE_EDGE - inv_lean)
+        q_ask = round(fair + VFE_EDGE - inv_lean)
+
+        if q_bid >= ba:
+            q_bid = ba - 1
+        if q_ask <= bb:
+            q_ask = bb + 1
+        if q_bid >= q_ask:
+            q_bid = q_ask - 1
+
+        orders: List[Order] = []
+        room_long  = VFE_LIMIT - pos
+        room_short = VFE_LIMIT + pos
+        if room_long > 0:
+            orders.append(Order(VFE, q_bid, room_long))
+        if room_short > 0:
+            orders.append(Order(VFE, q_ask, -room_short))
+
+        return orders, mid
 
     # ── Module 3: VEV ─────────────────────────────────────────────────────────
 
