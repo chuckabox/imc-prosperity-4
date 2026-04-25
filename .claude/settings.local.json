@@ -84,7 +84,10 @@
       "Bash(git stash *)",
       "Bash(git pull *)",
       "Bash(git add *)",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(awk -F';' 'NR>1{print $3}' \"ROUND 3/data_capsule/prices_round_3_day_0.csv\")",
+      "Bash(python \"ROUND 3/scratch/sweep_hp_t2.py\")",
+      "Bash(echo \"PID=$!\")"
     ]
   }
 }
