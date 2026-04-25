@@ -1,0 +1,30 @@
+{
+  "dataset_id": "prices_round_3_day_0",
+  "dataset_path": "//?/C:/Users/ductv/Desktop/Projects/imc prosperity/imc-prosperity-4/ROUND 3/data_capsule/prices_round_3_day_0.csv",
+  "day": 0,
+  "final_pnl_by_product": {
+    "HYDROGEL_PACK": 0.0,
+    "VELVETFRUIT_EXTRACT": 0.0,
+    "VEV_4000": 0.0,
+    "VEV_4500": 0.0,
+    "VEV_5000": 0.0,
+    "VEV_5100": 0.0,
+    "VEV_5200": 48.0,
+    "VEV_5300": 0.0,
+    "VEV_5400": 0.0,
+    "VEV_5500": 0.0,
+    "VEV_6000": 0.0,
+    "VEV_6500": 0.0
+  },
+  "final_pnl_total": 48.0,
+  "generated_at": "2026-04-25T22:21:32+00:00",
+  "matching": {
+    "price_slippage_bps": 0.0,
+    "queue_penetration": 1.0,
+    "trade_match_mode": "all"
+  },
+  "own_trade_count": 2,
+  "run_id": "backtest-1777155692039-data-capsule-day-0",
+  "tick_count": 10000,
+  "trader_path": "//?/C:/Users/ductv/Desktop/Projects/imc prosperity/imc-prosperity-4/ROUND 3/Sid/GOAT-V8.py"
+}

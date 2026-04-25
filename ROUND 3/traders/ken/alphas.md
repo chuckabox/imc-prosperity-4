@@ -79,4 +79,14 @@ This document tracks and ranks the key quantitative edges (alphas) found during 
 | `we found epsilon` | 11,450 | 1,513 | Baseline |
 | `we found greek` | 11,583 | 1,612 | Gamma + Vega |
 | `we found theta` | 11,583 | 1,710 | Theta exit |
-| `we found smile mm` | 11,583 | **1,872** | **Passive MM** |
+| `we found smile mm` | 11,583 | 1,872 | Passive MM |
+| `we found vfe gold` | **12,028** | **6,328** | **VFE Hedge Opt + Side-Aware MM** |
+
+---
+
+## 🏆 Current Champion: `we found vfe gold.py`
+**Total Round 3 PnL: 40,042**
+*   **Day 0**: 15,296
+*   **Day 1**: 18,418
+*   **Day 2**: 6,328
+*   **Benchmark**: Firmly in the "Fair" range (30k-50k) for Rust backtester equivalence.
