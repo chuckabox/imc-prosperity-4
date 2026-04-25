@@ -57,9 +57,9 @@ class Trader:
     # HYDROGEL
     HP_LIMIT = 80           # FIX: was 20 — was capping our best module at 25%
     HP_ANCHOR = 9993.0      # calibrated mean from Day 0+1 data
-    HP_EWMA_ALPHA = 0.10    # slow EMA — HYDROGEL is very mean-reverting
-    HP_TAKER_EDGE = 3.0     # take when market is 3+ ticks from fair
-    HP_MAKER_EDGE = 1.5     # passive quotes at ±1.5 ticks
+    HP_EWMA_ALPHA = 0.20    # same alpha as v16_alpha (proven on +38k HYDROGEL backtest)
+    HP_TAKER_EDGE = 2.0     # matches v16_alpha's HP_EDGE=2 which drove +38k HYDROGEL
+    HP_MAKER_EDGE = 2.0     # clearly passive — avoids any book-crossing penalty
     HP_TAKER_MAX = 20       # max units per taker hit
 
     # VFE
