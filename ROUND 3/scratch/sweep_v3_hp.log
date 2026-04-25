@@ -104,3 +104,25 @@ Sweeping 108 combos x 3 days = 324 runs
   [103/108] thr=0.20 nf=30 lagg=30 loff=2 | d0=  +6225 d1= +14697 d2=  +3270  SUM= +24192  (eta 19s)
   [104/108] thr=0.20 nf=30 lagg=30 loff=3 | d0=  +6225 d1= +14697 d2=  +3270  SUM= +24192  (eta 15s)
   [105/108] thr=0.20 nf=30 lagg=30 loff=4 | d0=  +6225 d1= +14697 d2=  +3270  SUM= +24192  (eta 11s)
+  [106/108] thr=0.20 nf=30 lagg=40 loff=2 | d0=  +6225 d1= +14697 d2=  +3270  SUM= +24192  (eta 8s)
+  [107/108] thr=0.20 nf=30 lagg=40 loff=3 | d0=  +6225 d1= +14697 d2=  +3270  SUM= +24192  (eta 4s)
+  [108/108] thr=0.20 nf=30 lagg=40 loff=4 | d0=  +6225 d1= +14697 d2=  +3270  SUM= +24192  (eta 0s)
+
+=== TOP 10 ===
+  SUM= +25248  d0=  +6565 d1= +15180 d2=  +3503  thr=0.10 nf=15 lagg=25 loff=2
+  SUM= +25248  d0=  +6565 d1= +15180 d2=  +3503  thr=0.10 nf=15 lagg=30 loff=2
+  SUM= +25248  d0=  +6565 d1= +15180 d2=  +3503  thr=0.10 nf=15 lagg=40 loff=2
+  SUM= +25248  d0=  +6565 d1= +15180 d2=  +3503  thr=0.10 nf=20 lagg=25 loff=2
+  SUM= +25248  d0=  +6565 d1= +15180 d2=  +3503  thr=0.10 nf=20 lagg=30 loff=2
+  SUM= +25248  d0=  +6565 d1= +15180 d2=  +3503  thr=0.10 nf=20 lagg=40 loff=2
+  SUM= +25248  d0=  +6565 d1= +15180 d2=  +3503  thr=0.10 nf=25 lagg=25 loff=2
+  SUM= +25248  d0=  +6565 d1= +15180 d2=  +3503  thr=0.10 nf=25 lagg=30 loff=2
+  SUM= +25248  d0=  +6565 d1= +15180 d2=  +3503  thr=0.10 nf=25 lagg=40 loff=2
+  SUM= +25248  d0=  +6565 d1= +15180 d2=  +3503  thr=0.10 nf=30 lagg=25 loff=2
+
+=== BOTTOM 5 ===
+  SUM= +24192  d0=  +6225 d1= +14697 d2=  +3270  thr=0.20 nf=30 lagg=30 loff=3
+  SUM= +24192  d0=  +6225 d1= +14697 d2=  +3270  thr=0.20 nf=30 lagg=30 loff=4
+  SUM= +24192  d0=  +6225 d1= +14697 d2=  +3270  thr=0.20 nf=30 lagg=40 loff=2
+  SUM= +24192  d0=  +6225 d1= +14697 d2=  +3270  thr=0.20 nf=30 lagg=40 loff=3
+  SUM= +24192  d0=  +6225 d1= +14697 d2=  +3270  thr=0.20 nf=30 lagg=40 loff=4
