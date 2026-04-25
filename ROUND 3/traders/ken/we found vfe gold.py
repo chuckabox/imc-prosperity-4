@@ -87,15 +87,15 @@ TS_PER_DAY = 1_000_000
 
 
 class Trader:
-    LIMITS = {HYDROGEL: 200, VFE: 200, **{s: 100 for s in VEV_SYMBOLS}}
+    LIMITS = {HYDROGEL: 80, VFE: 200, **{s: 100 for s in VEV_SYMBOLS}}
 
-    # HYDROGEL
-    HP_ANCHOR = 9991.0
-    HP_BLEND = 0.8
+    # HYDROGEL (Adin-Aggressive)
+    HP_ANCHOR = 9993.0
+    HP_BLEND = 0.4
     HP_EWMA_ALPHA = 0.20
-    HP_VOL_ALPHA = 0.10
-    HP_TAKE_EDGE = 1
-    HP_QUOTE_SIZE = 85
+    HP_TAKE_EDGE = 2.0
+    HP_GAMMA = 0.04             # Adin's AS penalty
+    HP_MAKER_EDGE = 1.5
 
     # VFE
     VFE_EWMA_ALPHA = 0.3
@@ -103,9 +103,9 @@ class Trader:
     VFE_TAKER_EDGE = 1.6
     VFE_TAKER_MAX = 64
     VFE_MICRO_TILT = 0.24
-    VFE_HEDGE_BAND = 35
+    VFE_HEDGE_BAND = 35         # Optimized for Rust/Reality to balance drift vs fees
     VFE_HEDGE_AGGRO_BAND = 40
-    VFE_HEDGE_MAX = 64
+    VFE_HEDGE_MAX = 100
     OPEN_PHASE_TS = 100_000
     VFE_SPEED_TRIGGER = 54
     SPEED_COOLDOWN_TS = 40_000
@@ -138,15 +138,15 @@ class Trader:
     VEV_THETA_EXIT_WEIGHT = 0.02
     VEV_DUAL_PAIR_ENABLE = False # Phase 5
     VEV_DUAL_PAIR_EXTRA_QTY = 12
-    VFE_SPREAD_HEDGE_PENALTY = 0.15
+    VFE_SPREAD_HEDGE_PENALTY = 1.0 # 1.0 = improve Best Bid/Ask by 1 to jump queue
 
     # Smile-Based Passive MM Parameters
     SMM_ENABLE = True
-    SMM_STRIKES = [5200, 5300, 5400, 5500]  # Strikes with persistent mispricing
-    SMM_EDGE = 0.5              # Minimum edge over fair to quote
-    SMM_QTY = 15                # Passive quote size per strike
-    SMM_POS_CAP = 50            # Max absolute position per strike from MM
-    SMM_SKEW_FACTOR = 0.3       # Position-based skew (tighten against inventory)
+    SMM_STRIKES = [5200, 5300, 5400, 5500]
+    SMM_EDGE = 0.5              # Balanced edge
+    SMM_QTY = 50                # Larger size to capture the 'Voucher'
+    SMM_POS_CAP = 100           # Full strike capacity
+    SMM_SKEW_FACTOR = 0.5
 
     DELTA_APPROX: Dict[int, float] = {
         4000: 1.00,
@@ -202,47 +202,44 @@ class Trader:
         return (bb + ba) / 2.0 if bb is not None and ba is not None else None
 
     def _hp(self, state: TradingState) -> List[Order]:
-        if HYDROGEL not in state.order_depths:
-            return []
-        od = state.order_depths[HYDROGEL]
-        m = self._mid(od)
-        if m is None:
-            return []
-        prev = self.history.get("hp_ewma")
-        ewma = m if prev is None else self.HP_EWMA_ALPHA * m + (1 - self.HP_EWMA_ALPHA) * prev
+        od = state.order_depths.get(HYDROGEL)
+        if not od: return []
+        bb, ba, _, _ = self._top(od)
+        if bb is None or ba is None: return []
+        
+        mid = (bb + ba) / 2.0
+        prev = self.history.get("hp_ewma") or mid
+        ewma = (1 - self.HP_EWMA_ALPHA) * prev + self.HP_EWMA_ALPHA * mid
         self.history["hp_ewma"] = ewma
-        diff = abs(m - (prev or m))
-        vol = (1 - self.HP_VOL_ALPHA) * self.history["hp_vol"] + self.HP_VOL_ALPHA * diff
-        self.history["hp_vol"] = vol
-        fair = self.HP_BLEND * ewma + (1 - self.HP_BLEND) * self.HP_ANCHOR
+        
+        fair = (1 - self.HP_BLEND) * ewma + self.HP_BLEND * self.HP_ANCHOR
         pos = state.position.get(HYDROGEL, 0)
         lim = self.LIMITS[HYDROGEL]
-        bb, ba, _, _ = self._top(od)
         orders: List[Order] = []
-        if ba is not None and ba <= fair - self.HP_TAKE_EDGE:
-            qty = min(-od.sell_orders[ba], lim - pos)
+        
+        # Taker side
+        if ba <= fair - self.HP_TAKE_EDGE and pos < lim:
+            qty = min(lim - pos, -od.sell_orders[ba])
             if qty > 0:
-                orders.append(Order(HYDROGEL, ba, qty))
-                pos += qty
-        if bb is not None and bb >= fair + self.HP_TAKE_EDGE:
-            qty = min(od.buy_orders[bb], lim + pos)
+                orders.append(Order(HYDROGEL, ba, qty)); pos += qty
+        if bb >= fair + self.HP_TAKE_EDGE and pos > -lim:
+            qty = min(lim + pos, od.buy_orders[bb])
             if qty > 0:
-                orders.append(Order(HYDROGEL, bb, -qty))
-                pos -= qty
-        spread = 1 + int(vol * 2)
-        skew = int(round(3 * (pos / lim)))
-        bid_px = int(round(fair - spread - skew))
-        ask_px = int(round(fair + spread - skew))
-        if bb is not None:
-            bid_px = max(bid_px, bb + (1 if pos < lim * 0.3 else 0))
-        if ba is not None:
-            ask_px = min(ask_px, ba - (1 if pos > -lim * 0.3 else 0))
-        if bid_px >= ask_px:
-            bid_px = ask_px - 1
-        if lim - pos > 0:
-            orders.append(Order(HYDROGEL, bid_px, min(self.HP_QUOTE_SIZE, lim - pos)))
-        if lim + pos > 0:
-            orders.append(Order(HYDROGEL, ask_px, -min(self.HP_QUOTE_SIZE, lim + pos)))
+                orders.append(Order(HYDROGEL, bb, -qty)); pos -= qty
+
+        # AS reservation price
+        reservation = fair - self.HP_GAMMA * pos
+        bid_px = int(math.floor(reservation - self.HP_MAKER_EDGE))
+        ask_px = int(math.ceil(reservation + self.HP_MAKER_EDGE))
+        
+        if bid_px >= ba: bid_px = ba - 1
+        if ask_px <= bb: ask_px = bb + 1
+        
+        if pos < lim:
+            orders.append(Order(HYDROGEL, bid_px, lim - pos))
+        if pos > -lim:
+            orders.append(Order(HYDROGEL, ask_px, -(lim + pos)))
+            
         return orders
 
     def _in_open_phase(self, state: TradingState) -> bool:
@@ -282,14 +279,22 @@ class Trader:
         if abs(residual) >= self.VFE_HEDGE_BAND:
             hmx = max(8, int(self.VFE_HEDGE_MAX * local_scale))
             if residual > 0 and pos < lim:
-                hq = min(hmx, residual, lim - pos, -od.sell_orders[ba])
+                # Improve best ask by penalty to jump queue
+                hq = min(hmx, residual, lim - pos) # Remove liquidity cap
                 if hq > 0:
-                    orders.append(Order(VFE, ba, hq))
+                    px = int(ba) # Use ba directly like Hydrogel
+                    orders.append(Order(VFE, px, hq))
+                    if int(state.timestamp) % 10000 == 0:
+                        print(f"[Ken-VFE] BUY {hq} @ {px} (Target={target_pos} Pos={pos}) Bids={od.buy_orders} Asks={od.sell_orders}")
                     pos += hq
             elif residual < 0 and pos > -lim:
-                hq = min(hmx, -residual, lim + pos, od.buy_orders[bb])
+                # Improve best bid by penalty to jump queue
+                hq = min(hmx, -residual, lim + pos) # Remove liquidity cap
                 if hq > 0:
-                    orders.append(Order(VFE, bb, -hq))
+                    px = int(bb) # Use bb directly like Hydrogel
+                    orders.append(Order(VFE, px, -hq))
+                    if int(state.timestamp) % 10000 == 0:
+                        print(f"[Ken-VFE] SELL {-hq} @ {px} (Target={target_pos} Pos={pos}) Bids={od.buy_orders} Asks={od.sell_orders}")
                     pos -= hq
         taker_max = max(10, int(self.VFE_TAKER_MAX * local_scale * 1.15))
         if abs(target_pos - pos) <= self.VFE_HEDGE_AGGRO_BAND:
@@ -486,57 +491,44 @@ class Trader:
         return max(-lim, min(lim, int(round(-net_delta))))
 
     def _vev_smile_mm(self, state: TradingState, smile_coefs: Optional[Tuple[float, float, float]], S: float, T: float) -> List[Order]:
-        """Passive market making on VEV strikes using smile fair value.
-        
-        The data shows VEV_5400 is chronically underpriced and VEV_5300 is
-        chronically overpriced relative to the smile. We passively quote
-        these strikes to capture the persistent mispricing.
-        """
         if not self.SMM_ENABLE or smile_coefs is None or S is None or S <= 0:
             return []
         orders: List[Order] = []
         for k in self.SMM_STRIKES:
             sym = f"VEV_{k}"
             od = state.order_depths.get(sym)
-            if not od:
-                continue
+            if not od: continue
             bb, ba, _, _ = self._top(od)
-            if bb is None or ba is None:
-                continue
+            if bb is None or ba is None: continue
             
-            # Compute fair from smile
             mny = math.log(k / S)
             iv_k = smile_coefs[0] * mny * mny + smile_coefs[1] * mny + smile_coefs[2]
-            if iv_k <= 0.01:
-                continue
+            if iv_k <= 0.01: continue
             fair = bs_call(S, k, T, iv_k)
-            
             pos = state.position.get(sym, 0)
             lim = self.LIMITS[sym]
             
-            # Position-based skew: tighten against inventory
+            # TAKER: Hit if mispricing is massive
+            if k in [5400, 5100, 5500] and ba <= fair - 1.5:
+                q = min(self.SMM_QTY, lim - pos)
+                if q > 0:
+                    orders.append(Order(sym, ba, q)); pos += q
+            if k in [5300, 5200, 5000] and bb >= fair + 1.5:
+                q = min(self.SMM_QTY, lim + pos)
+                if q > 0:
+                    orders.append(Order(sym, bb, -q)); pos -= q
+
+            # MAKER: Passive priority quoting
             skew = self.SMM_SKEW_FACTOR * (pos / max(self.SMM_POS_CAP, 1))
+            bid_px = int(math.floor(fair - self.SMM_EDGE - skew))
+            ask_px = int(math.ceil(fair + self.SMM_EDGE - skew))
+            if bid_px >= ba: bid_px = ba - 1
+            if ask_px <= bb: ask_px = bb + 1
             
-            # Bid side: buy below fair (Only for 5400, or if not in the known overpriced list)
-            if k != 5300:
-                bid_px = int(math.floor(fair - self.SMM_EDGE - skew))
-                if bid_px >= ba:
-                    bid_px = ba - 1
-                if bid_px >= 1 and pos < self.SMM_POS_CAP and pos < lim:
-                    qty = min(self.SMM_QTY, self.SMM_POS_CAP - pos, lim - pos)
-                    if qty > 0:
-                        orders.append(Order(sym, bid_px, qty))
-            
-            # Ask side: sell above fair (Only for 5200, 5300, 5500, or if not in known underpriced list)
-            if k != 5400:
-                ask_px = int(math.ceil(fair + self.SMM_EDGE - skew))
-                if ask_px <= bb:
-                    ask_px = bb + 1
-                if ask_px >= 1 and pos > -self.SMM_POS_CAP and pos > -lim:
-                    qty = min(self.SMM_QTY, self.SMM_POS_CAP + pos, lim + pos)
-                    if qty > 0:
-                        orders.append(Order(sym, ask_px, -qty))
-        
+            if pos < self.SMM_POS_CAP and pos < lim:
+                orders.append(Order(sym, bid_px, min(self.SMM_QTY, self.SMM_POS_CAP - pos, lim - pos)))
+            if pos > -self.SMM_POS_CAP and pos > -lim:
+                orders.append(Order(sym, ask_px, -min(self.SMM_QTY, self.SMM_POS_CAP + pos, lim + pos)))
         return orders
 
     def run(self, state: TradingState) -> Tuple[Dict[str, List[Order]], int, str]:
@@ -545,34 +537,32 @@ class Trader:
         result: Dict[str, List[Order]] = {}
 
         hp_orders = self._hp(state)
-        if hp_orders:
-            result[HYDROGEL] = hp_orders
+        if hp_orders: result[HYDROGEL] = hp_orders
 
         vev_orders, smile_coefs, S, T = self._vev(state)
-        for o in vev_orders:
-            result.setdefault(o.symbol, []).append(o)
+        for o in vev_orders: result.setdefault(o.symbol, []).append(o)
 
-        # Smile-Based Passive MM on VEV
         if S is not None:
             smm_orders = self._vev_smile_mm(state, smile_coefs, S, T)
-            for o in smm_orders:
-                result.setdefault(o.symbol, []).append(o)
+            for o in smm_orders: result.setdefault(o.symbol, []).append(o)
 
-        # BS Delta Hedging
+        # BS Delta Hedging: PASSIVE (Maker) to avoid spread fees
         vfe_od = state.order_depths.get(VFE)
-        if S is None:
-            S = self._mid(vfe_od) if vfe_od else None
+        if S is None: S = self._mid(vfe_od) if vfe_od else None
         day = int(self.history.get("day_index", self.VEV_DAY_INIT))
-        if T is None:
-            T = max(0.5, (self.VEV_TTE_START - day) - state.timestamp / TS_PER_DAY)
+        if T is None: T = max(0.5, (self.VEV_TTE_START - day) - state.timestamp / TS_PER_DAY)
         
         if S is not None:
             target_vfe = self._target_vfe_from_delta(state, smile_coefs, S, T)
-        else:
-            target_vfe = 0
-            
-        vfe_orders = self._vfe(state, target_vfe)
-        if vfe_orders:
-            result[VFE] = vfe_orders
+            pos = state.position.get(VFE, 0)
+            residual = target_vfe - pos
+            if abs(residual) >= self.VFE_HEDGE_BAND and vfe_od:
+                bb, ba, _, _ = self._top(vfe_od)
+                if bb is not None and ba is not None:
+                    # PASSIVE orders at the Best Bid/Ask
+                    if residual > 0: # Buy
+                        result.setdefault(VFE, []).append(Order(VFE, bb, min(residual, self.LIMITS[VFE] - pos)))
+                    else: # Sell
+                        result.setdefault(VFE, []).append(Order(VFE, ba, max(residual, -self.LIMITS[VFE] - pos)))
 
         return result, 0, self._save()

@@ -1,0 +1,30 @@
+{
+  "dataset_id": "prices_round_3_day_2",
+  "dataset_path": "datasets/round3/prices_round_3_day_2.csv",
+  "day": 2,
+  "final_pnl_by_product": {
+    "HYDROGEL_PACK": 0.0,
+    "VELVETFRUIT_EXTRACT": 0.0,
+    "VEV_4000": 0.0,
+    "VEV_4500": 0.0,
+    "VEV_5000": 0.0,
+    "VEV_5100": 0.0,
+    "VEV_5200": 0.0,
+    "VEV_5300": -591.0,
+    "VEV_5400": 255.0,
+    "VEV_5500": 0.0,
+    "VEV_6000": 0.0,
+    "VEV_6500": 0.0
+  },
+  "final_pnl_total": -336.0,
+  "generated_at": "2026-04-25T23:00:56+00:00",
+  "matching": {
+    "price_slippage_bps": 0.0,
+    "queue_penetration": 1.0,
+    "trade_match_mode": "all"
+  },
+  "own_trade_count": 20,
+  "run_id": "backtest-1777158056356",
+  "tick_count": 10000,
+  "trader_path": "//?/C:/Users/ductv/Desktop/Projects/imc prosperity/imc-prosperity-4/external/prosperity_rust_backtester/traders/ken_gold_v2.py"
+}
