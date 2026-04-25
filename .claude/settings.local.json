@@ -43,7 +43,12 @@
       "Bash(python \"ROUND 3/scratch/hydrogel_stats.py\")",
       "Bash(python -m py_compile \"ROUND 3/traders/ken/trader_ken_v1.py\")",
       "Bash(python -m py_compile \"ROUND 3/traders/ken/trader_ken_v2.py\")",
-      "Bash(python -m py_compile \"ROUND 3/traders/ken/trader_ken_v3.py\")"
+      "Bash(python -m py_compile \"ROUND 3/traders/ken/trader_ken_v3.py\")",
+      "Bash(python -c \"import prosperity4bt; print\\(prosperity4bt.__version__\\)\")",
+      "Bash(python -c \"import prosperity4bt; help\\(prosperity4bt\\)\")",
+      "Bash(python -m prosperity4bt --help)",
+      "Bash(python -m prosperity4bt \"ROUND 3/traders/ken/trader_ken_v3.py\" 3 --data \"ROUND 3/data_capsule\" --no-out --no-progress)",
+      "Bash(python *)"
     ]
   }
 }
