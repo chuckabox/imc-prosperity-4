@@ -892,6 +892,22 @@ def render_chart(df_prices, df_trades, product, color, show_mean=False):
     st.altair_chart(chart, use_container_width=True)
     return df_p
 
+def render_vev_chain_chart(df_prices, vev_strikes):
+    df = df_prices[df_prices["product"].isin(vev_strikes)].copy()
+    if df.empty:
+        st.warning("No VEV chain data")
+        return
+    if len(df) > 6000:
+        df = df.iloc[::max(1, len(df) // 6000)]
+    chart = alt.Chart(df).mark_line(opacity=0.85).encode(
+        x=alt.X('timestamp:Q', title="Timestamp"),
+        y=alt.Y('mid_price:Q', scale=alt.Scale(zero=False), title="Mid Price"),
+        color=alt.Color('product:N', title="Strike", scale=alt.Scale(scheme='turbo')),
+        tooltip=['product', 'timestamp', 'mid_price']
+    ).properties(width='container', height=320, title="VEV Options Chain Mid Prices").interactive()
+    st.altair_chart(chart, use_container_width=True)
+
+
 def render_total_chart(df_prices, df_trades):
     # Downsample for Performance
     df_p = df_prices.copy()
@@ -1052,6 +1068,225 @@ def render_manual_optimizer_tab():
     """Delegates to unified implementation in manual_optimiser.dashboard_tab."""
     from manual_optimiser.dashboard_tab import render_manual_optimizer_tab as _impl
     _impl()
+
+
+# ---------- Strategy Lab (R3) ----------
+import math as _math
+
+VEV_STRIKES_R3 = [4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500]
+
+
+def _norm_cdf_dash(x):
+    return 0.5 * (1 + _math.erf(x / _math.sqrt(2)))
+
+
+def _bs_call_dash(S, K, T, sigma):
+    if T <= 0 or sigma <= 0:
+        return max(0.0, S - K)
+    d1 = (_math.log(S / K) + 0.5 * sigma * sigma * T) / (sigma * _math.sqrt(T))
+    d2 = d1 - sigma * _math.sqrt(T)
+    return S * _norm_cdf_dash(d1) - K * _norm_cdf_dash(d2)
+
+
+def _implied_vol_dash(price, S, K, T, lo=1e-4, hi=2.0, n=80):
+    intrinsic = max(0.0, S - K)
+    if price <= intrinsic + 1e-6 or price >= S:
+        return None
+    for _ in range(n):
+        mid = 0.5 * (lo + hi)
+        if _bs_call_dash(S, K, T, mid) > price:
+            hi = mid
+        else:
+            lo = mid
+        if hi - lo < 1e-5:
+            break
+    return 0.5 * (lo + hi)
+
+
+@st.cache_data(show_spinner=False)
+def _compute_iv_surface(days_tuple: tuple) -> pd.DataFrame:
+    data_dir = get_paths()["data_dir"]
+    frames = []
+    for d in days_tuple:
+        f = os.path.join(data_dir, f"prices_round_3_day_{d}.csv")
+        if os.path.exists(f):
+            df = pd.read_csv(f, sep=";")
+            df["day"] = d
+            frames.append(df)
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True).dropna(subset=["bid_price_1", "ask_price_1"])
+    df["mid"] = (df["bid_price_1"] + df["ask_price_1"]) / 2.0
+    pv = df.pivot_table(index=["day", "timestamp"], columns="product", values="mid").sort_index()
+    if "VELVETFRUIT_EXTRACT" not in pv.columns:
+        return pd.DataFrame()
+    rows = []
+    sample = pv.iloc[::50]
+    TOTAL_DAYS = 8
+    for (d, ts), row in sample.iterrows():
+        S = row.get("VELVETFRUIT_EXTRACT")
+        if pd.isna(S):
+            continue
+        TTE = (TOTAL_DAYS - d) - ts / 1_000_000
+        if TTE <= 0:
+            continue
+        for K in VEV_STRIKES_R3:
+            p = row.get(f"VEV_{K}")
+            if pd.isna(p) or p <= 0:
+                continue
+            iv = _implied_vol_dash(p, S, K, TTE)
+            if iv is None:
+                continue
+            rows.append({"day": d, "ts": ts, "K": K, "S": S, "price": p, "TTE": TTE, "iv": iv,
+                         "moneyness": _math.log(K / S)})
+    return pd.DataFrame(rows)
+
+
+def render_strategy_lab_tab():
+    st.header("🧪 Strategy Lab — R3 Alpha Diagnostics")
+    st.caption("Interactive analysis of IV scalping, gamma scalping, mean-reversion. **Days 0+1 only — Day 2 hidden.**")
+
+    days_avail = discover_available_days(get_paths()["data_dir"])
+    train_days = [d for d in days_avail if d in (0, 1)]
+    if not train_days:
+        st.warning("No R3 train data (days 0,1) found.")
+        return
+    st.info(f"Training set: days {train_days}. Day 2 NOT loaded here.")
+
+    sub = st.tabs(["1. IV Surface", "2. Gamma Edge", "3. Mean Reversion", "4. Hybrid Sizing"])
+
+    iv_df = _compute_iv_surface(tuple(train_days))
+    if iv_df.empty:
+        st.error("Failed to compute IV surface.")
+        return
+
+    # --- Tab 1: IV surface + parabolic fit ---
+    with sub[0]:
+        st.subheader("Implied Vol Surface (per strike)")
+        st.markdown("**Fit** `IV = a*moneyness² + b*moneyness + c` per snapshot. Deviation = mispricing signal.")
+
+        iv_stats = iv_df.groupby("K")["iv"].agg(["mean", "std", "count"]).reset_index()
+        iv_stats.columns = ["Strike", "Mean IV", "Std IV", "N"]
+        st.dataframe(iv_stats, use_container_width=True, hide_index=True)
+
+        c1 = alt.Chart(iv_df).mark_circle(opacity=0.5, size=20).encode(
+            x=alt.X("moneyness:Q", title="log(K/S)"),
+            y=alt.Y("iv:Q", scale=alt.Scale(zero=False), title="Implied Vol"),
+            color=alt.Color("K:N", title="Strike"),
+            tooltip=["K", "iv", "moneyness", "S"],
+        ).properties(height=380, title="IV vs Moneyness")
+        st.altair_chart(c1, use_container_width=True)
+
+        # parabolic fit residuals
+        residuals = []
+        for (d, ts), grp in iv_df.groupby(["day", "ts"]):
+            if len(grp) < 4:
+                continue
+            try:
+                coefs = np.polyfit(grp["moneyness"].values, grp["iv"].values, 2)
+            except np.linalg.LinAlgError:
+                continue
+            for _, r in grp.iterrows():
+                fair = np.polyval(coefs, r["moneyness"])
+                residuals.append({"day": d, "ts": ts, "K": r["K"], "iv_dev": r["iv"] - fair,
+                                  "fair_iv": fair, "S": r["S"], "TTE": r["TTE"], "price": r["price"]})
+        res_df = pd.DataFrame(residuals)
+        st.markdown("**IV Deviation per Strike** (positive = overpriced vs smile)")
+        dev_stats = res_df.groupby("K")["iv_dev"].agg(["mean", "std", "count"]).reset_index()
+        st.dataframe(dev_stats, use_container_width=True, hide_index=True)
+
+        # autocorr
+        ac_rows = []
+        for K, g in res_df.groupby("K"):
+            s = g.sort_values(["day", "ts"])["iv_dev"].values
+            if len(s) > 20:
+                ac_rows.append({"K": K, "lag1_autocorr": float(np.corrcoef(s[:-1], s[1:])[0, 1]), "n": len(s)})
+        ac_df = pd.DataFrame(ac_rows)
+        st.markdown("**Lag-1 Autocorrelation of IV Deviation**")
+        st.caption("Negative = mean-reverting (good for IV scalping). Positive = trending (avoid naive entry).")
+        st.dataframe(ac_df, use_container_width=True, hide_index=True)
+
+    # --- Tab 2: Gamma scalping edge ---
+    with sub[1]:
+        st.subheader("Realised vs Implied Vol (Gamma Edge)")
+        data_dir = get_paths()["data_dir"]
+        s_frames = []
+        for d in train_days:
+            f = os.path.join(data_dir, f"prices_round_3_day_{d}.csv")
+            df = pd.read_csv(f, sep=";")
+            df = df[df["product"] == "VELVETFRUIT_EXTRACT"].dropna(subset=["bid_price_1", "ask_price_1"])
+            df["mid"] = (df["bid_price_1"] + df["ask_price_1"]) / 2.0
+            df["day"] = d
+            s_frames.append(df[["day", "timestamp", "mid"]])
+        S_df = pd.concat(s_frames, ignore_index=True).sort_values(["day", "timestamp"])
+        log_ret = np.log(S_df["mid"] / S_df["mid"].shift(1)).dropna()
+        real_vol = float(log_ret.std() * _math.sqrt(10000))  # per-day vol
+        atm_iv = float(iv_df[iv_df["K"].between(5000, 5500)]["iv"].mean())
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Realised Vol (per day)", f"{real_vol*100:.2f}%")
+        c2.metric("ATM Implied Vol (per day)", f"{atm_iv*100:.2f}%")
+        c3.metric("Gamma Edge (real - impl)", f"{(real_vol-atm_iv)*100:+.2f}%",
+                  help="Positive => buy gamma + delta-hedge profitable in expectation")
+        if real_vol > atm_iv:
+            st.success(f"Realised > Implied by {(real_vol-atm_iv)*100:.2f} pp/day. **Gamma scalping has positive expected value.**")
+        else:
+            st.warning("Implied >= Realised. Gamma scalping unprofitable; sell vol instead.")
+
+        st.markdown("**Suggested σ_model for fair-value pricing:** `0.018` (between realised and impl, conservative haircut).")
+
+    # --- Tab 3: Mean reversion check ---
+    with sub[2]:
+        st.subheader("EMA Mean Reversion (VFE underlying)")
+        S_series = S_df["mid"].reset_index(drop=True)
+        rows = []
+        for span in [50, 100, 200, 500, 1000]:
+            ema = S_series.ewm(span=span, adjust=False).mean()
+            dev = S_series - ema
+            for fwd_horizon in [50, 100, 200]:
+                fwd = S_series.shift(-fwd_horizon) - S_series
+                ev = pd.DataFrame({"dev": dev, "fwd": fwd}).dropna()
+                if len(ev) < 100:
+                    continue
+                rows.append({"EMA span": span, "Fwd horizon": fwd_horizon,
+                             "corr(dev, fwd)": float(ev["dev"].corr(ev["fwd"]))})
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.caption("Negative correlation = mean-reverting (price above EMA → falls). Useful only if magnitude > 0.05.")
+
+        st.subheader("HYDROGEL_PACK Stationarity")
+        h_frames = []
+        for d in train_days:
+            f = os.path.join(data_dir, f"prices_round_3_day_{d}.csv")
+            df = pd.read_csv(f, sep=";")
+            df = df[df["product"] == "HYDROGEL_PACK"].dropna(subset=["bid_price_1", "ask_price_1"])
+            df["mid"] = (df["bid_price_1"] + df["ask_price_1"]) / 2.0
+            df["day"] = d
+            h_frames.append(df[["day", "timestamp", "mid"]])
+        H_df = pd.concat(h_frames, ignore_index=True)
+        H = H_df["mid"]
+        h_ret = H.diff().dropna()
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Mean", f"{H.mean():.2f}")
+        c2.metric("Std", f"{H.std():.2f}")
+        c3.metric("Return Lag-1 AC", f"{float(np.corrcoef(h_ret[:-1], h_ret[1:])[0,1]):+.3f}")
+        st.caption("Stationary + negative return autocorr → market-making profitable around mean.")
+
+    # --- Tab 4: hybrid sizing ---
+    with sub[3]:
+        st.subheader("Hybrid Strategy Sizing")
+        st.markdown("""
+        Based on diagnostics:
+
+        | Module | Edge source | Size weight | Notes |
+        |---|---|---|---|
+        | HYDROGEL MM | stationarity + neg autocorr | 40% | Defensive base PnL |
+        | VEV gamma | realised >> implied | 40% | Buy ATM, hedge VFE |
+        | VFE EMA mean-rev | weak signal | 10% | Small fixed threshold |
+        | IV scalping (parabolic) | persistent mispricing | 10% | Trade only strikes with neg autocorr |
+
+        **Sanity check:** if backtest PnL > 200k on train, suspect overfit (oracle ceiling ~155k).
+        Train days 0+1, lock all params, run Day 2 ONCE.
+        """)
+        st.warning("Day 2 evaluation is INTENTIONALLY not exposed in this tab. Use `validate_trader2.py` once.")
 
 
 def render_rust_backtester_tab():
@@ -1372,8 +1607,9 @@ def main():
 
     # Final tab layout
 
-    tab_backtest, tab_rust, tab_manual, tab_archive = st.tabs([
+    tab_backtest, tab_strategy, tab_rust, tab_manual, tab_archive = st.tabs([
         "📉 Visual Backtester",
+        "🧪 Strategy Lab",
         "🦀 Rust Backtester",
         "♟️ Manual Optimizer",
         "📦 Archive"
@@ -2024,7 +2260,9 @@ def main():
                 render_chart(df_prices, df_trades, p, _color_for(p), show_mean=True)
 
             if vev_strikes:
-                with st.expander("🔦 View VEV Options Complex", expanded=False):
+                st.markdown(f"#### VEV Options Chain ({len(vev_strikes)} strikes)")
+                render_vev_chain_chart(df_prices, vev_strikes)
+                with st.expander("🔦 Per-strike detail", expanded=False):
                     for p in vev_strikes:
                         st.markdown(f"##### {p}")
                         render_chart(df_prices, df_trades, p, "#3498db", show_mean=False)
@@ -2037,6 +2275,9 @@ def main():
             round_num = _active_round_number() or "?"
             st.warning(f"Could not locate data for Day {selected_day} at: {data_dir}")
             st.code(f"Looking for pattern: prices_round_{round_num}_day_{selected_day}.csv")
+
+    with tab_strategy:
+        render_strategy_lab_tab()
 
     with tab_rust:
         render_rust_backtester_tab()
