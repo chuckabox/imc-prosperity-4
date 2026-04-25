@@ -1,31 +1,18 @@
-"""trader_ken_v4_full.py — combined HYDROGEL + VFE + VEV alpha stack.
+"""trader_ken_v6_scale.py — v4_full + scaled VEV (no hedge).
 
-Why this exists
-===============
-v3 (HYDROGEL only) backs up at +25k. The capsule analysis pointed at the
-VEV options as the headline alpha, but iso-tested:
+We tried delta-hedging in v5_hedge: it lost 2.6k vs v4_full because in
+this capsule VFE drifts +0.3%/day, so long-option-delta exposure is a
+*positive* expected return. Hedging it away costs more than the noise
+reduction is worth.
 
-  VFE OBI MM (4-tick spread capture, 3 days) ........... +9,938  XIRECs
-  VEV resting bids (4 strikes, no hedge, 3 days) .......   +808  XIRECs
+v6 doubles down: keep the unhedged stance from v4_full, but scale the
+VEV resting-bid book up so we capture more of the IV/RV spread alpha
+AND ride more of the VFE drift.
 
-VFE MM dwarfs the option alpha at our position-limit scale because it
-captures spread on a high-volume underlying every tick. Hedging the
-option deltas with VFE is a *cost* — VFE already swings between -80 and
-+80 from MM. So this trader runs:
-
-  1. HYDROGEL OBI-aware MM (engine identical to v3, params from sweep)
-  2. VFE OBI-aware MM (smaller passive sizes — VFE spread is 5-6 vs 15)
-  3. VEV resting bids on 4 strikes (5100/5200/5300/5400) — no explicit
-     delta hedge. Directional VFE risk is already managed by the VFE MM
-     module which gravitates toward flat.
-
-Estimated 3-day P&L on the capsule:
-  HYDROGEL     ......... +25,111
-  VFE          .........  +9,938
-  VEV          .........    +808
-  Cross-effects ........  TBD (positions interact; backtest tells us)
-                          --------
-  TARGET                  ~35,800
+Differences vs v4_full:
+  • VEV_PER_STRIKE_CAP: 30 → 50    (closer to the 60 limit)
+  • VEV_BID_SIZE:        8 → 12
+  • VEV_BID_EDGE_REQ:    2 → 1     (fill more often; smaller per-trade edge)
 """
 from __future__ import annotations
 
@@ -98,10 +85,10 @@ class Trader:
     # ── VEV knobs (resting bids, no hedge — VFE MM absorbs delta) ──────────
     VEV_SIGMA = 0.018
     VEV_ACTIVE_STRIKES = [5100, 5200, 5300, 5400]
-    VEV_BID_EDGE_REQ = 2.0
+    VEV_BID_EDGE_REQ = 1.0
     VEV_TAKE_EDGE = 8.0
-    VEV_PER_STRIKE_CAP = 30
-    VEV_BID_SIZE = 8
+    VEV_PER_STRIKE_CAP = 50
+    VEV_BID_SIZE = 12
 
     def __init__(self):
         self.history: Dict = {}
