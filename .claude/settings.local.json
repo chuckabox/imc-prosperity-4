@@ -48,7 +48,8 @@
       "Bash(python -c \"import prosperity4bt; help\\(prosperity4bt\\)\")",
       "Bash(python -m prosperity4bt --help)",
       "Bash(python -m prosperity4bt \"ROUND 3/traders/ken/trader_ken_v3.py\" 3 --data \"ROUND 3/data_capsule\" --no-out --no-progress)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(tasklist /FI \"IMAGENAME eq python.exe\")"
     ]
   }
 }
