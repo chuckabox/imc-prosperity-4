@@ -1972,12 +1972,9 @@ def main():
                 pnl_cols = [c for c in sample_df.columns if c.startswith("pnl_")]
                 display_cols = ["All"] + [c.replace("pnl_", "").title() for c in pnl_cols]
                 
-                p_filter_display = st.radio(
-                    "Product Filter",
-                    display_cols,
-                    horizontal=True,
-                    key="robust_product_filter",
-                )
+                col_f, _ = st.columns([2, 1])
+                with col_f:
+                    p_filter_display = st.radio("Product Filter", display_cols, horizontal=True, key="robust_product_filter")
                 
                 p_filter = p_filter_display if p_filter_display == "All" else f"pnl_{p_filter_display.lower().replace(' ', '_')}"
                 target_col = "final_pnl" if p_filter == "All" else p_filter
@@ -2348,6 +2345,7 @@ def main():
                         sel_trader = st.selectbox("Target Trader", trader_search, key="stress_trader", index=next((i for i, x in enumerate(trader_search) if "v2d" in x), 0))
                     with col_s3:
                         sel_source = st.selectbox("Base Dataset", ["All", -1, -2, 0], index=0)
+
                     # Discover available assets for stress testing
                     df_sample, _ = load_and_process_data(sel_source)
                     stress_products = sorted(df_sample["product"].unique()) if df_sample is not None else []
