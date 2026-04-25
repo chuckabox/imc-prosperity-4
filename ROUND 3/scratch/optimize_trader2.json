@@ -1,0 +1,176 @@
+{
+  "best_params": {
+    "HP_TAKE_EDGE": 2,
+    "HP_QUOTE_FRONT": 20,
+    "HP_EWMA_ALPHA": 0.2,
+    "VEV_SIGMA_MODEL": 0.014,
+    "VEV_GAMMA_EDGE_REQ": 1.5,
+    "VEV_TAKE_SIZE": 30,
+    "ENABLE_HYDROGEL": true,
+    "ENABLE_VFE_REVERSION": false,
+    "ENABLE_VEV_GAMMA": true,
+    "ENABLE_IV_SCALP": false,
+    "ENABLE_HEDGE": true
+  },
+  "best_pnl": 23021.0,
+  "robustness_score": 577.0833333333334,
+  "fd": {
+    "base_pnl": 23021.0,
+    "perturbations": {
+      "HP_TAKE_EDGE": {
+        "-1*1": {
+          "value": 1,
+          "pnl": 22419.0,
+          "delta_vs_base": -602.0
+        },
+        "+1*1": {
+          "value": 3,
+          "pnl": 23320.0,
+          "delta_vs_base": 299.0
+        }
+      },
+      "HP_QUOTE_FRONT": {
+        "-1*5": {
+          "value": 15,
+          "pnl": 22902.0,
+          "delta_vs_base": -119.0
+        },
+        "+1*5": {
+          "value": 25,
+          "pnl": 22899.0,
+          "delta_vs_base": -122.0
+        }
+      },
+      "HP_EWMA_ALPHA": {
+        "-1*0.05": {
+          "value": 0.15000000000000002,
+          "pnl": 21213.0,
+          "delta_vs_base": -1808.0
+        },
+        "+1*0.05": {
+          "value": 0.25,
+          "pnl": 24619.0,
+          "delta_vs_base": 1598.0
+        }
+      },
+      "VEV_SIGMA_MODEL": {
+        "-1*0.002": {
+          "value": 0.012,
+          "pnl": 24325.0,
+          "delta_vs_base": 1304.0
+        },
+        "+1*0.002": {
+          "value": 0.016,
+          "pnl": 22428.0,
+          "delta_vs_base": -593.0
+        }
+      },
+      "VEV_GAMMA_EDGE_REQ": {
+        "-1*0.5": {
+          "value": 1.0,
+          "pnl": 22587.0,
+          "delta_vs_base": -434.0
+        },
+        "+1*0.5": {
+          "value": 2.0,
+          "pnl": 22980.0,
+          "delta_vs_base": -41.0
+        }
+      },
+      "VEV_TAKE_SIZE": {
+        "-1*10": {
+          "value": 20,
+          "pnl": 23016.0,
+          "delta_vs_base": -5.0
+        },
+        "+1*10": {
+          "value": 40,
+          "pnl": 23021.0,
+          "delta_vs_base": 0.0
+        }
+      }
+    }
+  },
+  "top5": [
+    {
+      "pnl": 23021.0,
+      "params": {
+        "HP_TAKE_EDGE": 2,
+        "HP_QUOTE_FRONT": 20,
+        "HP_EWMA_ALPHA": 0.2,
+        "VEV_SIGMA_MODEL": 0.014,
+        "VEV_GAMMA_EDGE_REQ": 1.5,
+        "VEV_TAKE_SIZE": 30,
+        "ENABLE_HYDROGEL": true,
+        "ENABLE_VFE_REVERSION": false,
+        "ENABLE_VEV_GAMMA": true,
+        "ENABLE_IV_SCALP": false,
+        "ENABLE_HEDGE": true
+      }
+    },
+    {
+      "pnl": 22957.0,
+      "params": {
+        "HP_TAKE_EDGE": 2,
+        "HP_QUOTE_FRONT": 20,
+        "HP_EWMA_ALPHA": 0.2,
+        "VEV_SIGMA_MODEL": 0.014,
+        "VEV_GAMMA_EDGE_REQ": 1.5,
+        "VEV_TAKE_SIZE": 10,
+        "ENABLE_HYDROGEL": true,
+        "ENABLE_VFE_REVERSION": false,
+        "ENABLE_VEV_GAMMA": true,
+        "ENABLE_IV_SCALP": false,
+        "ENABLE_HEDGE": true
+      }
+    },
+    {
+      "pnl": 22902.0,
+      "params": {
+        "HP_TAKE_EDGE": 2,
+        "HP_QUOTE_FRONT": 15,
+        "HP_EWMA_ALPHA": 0.2,
+        "VEV_SIGMA_MODEL": 0.014,
+        "VEV_GAMMA_EDGE_REQ": 1.5,
+        "VEV_TAKE_SIZE": 30,
+        "ENABLE_HYDROGEL": true,
+        "ENABLE_VFE_REVERSION": false,
+        "ENABLE_VEV_GAMMA": true,
+        "ENABLE_IV_SCALP": false,
+        "ENABLE_HEDGE": true
+      }
+    },
+    {
+      "pnl": 22838.0,
+      "params": {
+        "HP_TAKE_EDGE": 2,
+        "HP_QUOTE_FRONT": 15,
+        "HP_EWMA_ALPHA": 0.2,
+        "VEV_SIGMA_MODEL": 0.014,
+        "VEV_GAMMA_EDGE_REQ": 1.5,
+        "VEV_TAKE_SIZE": 10,
+        "ENABLE_HYDROGEL": true,
+        "ENABLE_VFE_REVERSION": false,
+        "ENABLE_VEV_GAMMA": true,
+        "ENABLE_IV_SCALP": false,
+        "ENABLE_HEDGE": true
+      }
+    },
+    {
+      "pnl": 22509.0,
+      "params": {
+        "HP_TAKE_EDGE": 1,
+        "HP_QUOTE_FRONT": 15,
+        "HP_EWMA_ALPHA": 0.2,
+        "VEV_SIGMA_MODEL": 0.014,
+        "VEV_GAMMA_EDGE_REQ": 1.5,
+        "VEV_TAKE_SIZE": 30,
+        "ENABLE_HYDROGEL": true,
+        "ENABLE_VFE_REVERSION": false,
+        "ENABLE_VEV_GAMMA": true,
+        "ENABLE_IV_SCALP": false,
+        "ENABLE_HEDGE": true
+      }
+    }
+  ]
+}

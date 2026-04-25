@@ -1,0 +1,6 @@
+name,category,final_pnl,max_drawdown,sharpe,trade_count
+HP_only,baseline,24102,940,2.6,480
+VEV_gamma_active,gamma,23044,1150,2.2,610
+Full_Hybrid_v2,hybrid,21055,1480,1.9,790
+VFE_reversion_test,reversion,-30122,35000,-0.8,320
+All_on_collision,full,-933401,1020000,-4.5,1950
