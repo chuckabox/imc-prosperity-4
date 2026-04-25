@@ -1,9 +1,9 @@
-"""trader_ken_v77_local_champion.py
+"""trader_ken_v78_peter_burst_standalone.py
 
-Standalone champion variant for portal safety.
-- Cross-strike relative-value options core.
-- Light HYDROGEL OBI and VFE microprice overlays.
-- No base-class inheritance from older trader files.
+Standalone evolution of v77.
+- Keeps selective cross-strike RV core.
+- Adds Peter-inspired event burst only on extreme dislocations + fast underlying move.
+- Leaves older versions untouched to avoid confusion.
 """
 from __future__ import annotations
 
@@ -60,9 +60,14 @@ class Trader:
     VEV_SPREAD_MAX_BY_STRIKE: Dict[int, int] = {5000: 6, 5100: 6, 5200: 6, 5300: 6, 5400: 6}
     VEV_TAKER_MAX_BY_STRIKE: Dict[int, int] = {5000: 4, 5100: 5, 5200: 6, 5300: 6, 5400: 4}
     VEV_REL_Z_ENTRY = 0.90
-    VEV_REL_Z_BOOST = 1.70
+    VEV_REL_Z_BOOST = 1.65
     VEV_STRONG_SPREAD_MAX = 3
-    VEV_STRONG_PAIR_SIZE_MULT = 1.35
+    VEV_STRONG_PAIR_SIZE_MULT = 1.45
+
+    # Peter-inspired event burst (strictly gated).
+    PETER_BURST_REL_Z = 1.90
+    PETER_BURST_VFE_MOVE = 1.5
+    PETER_BURST_SIZE_MULT = 1.12
 
     # Risk governor
     RISK_NET_DELTA_TRIGGER = 55.0
@@ -131,7 +136,6 @@ class Trader:
         bb, ba = self._top(depth)
         if bb is None or ba is None:
             return []
-
         qbid = int(round(fair - edge))
         qask = int(round(fair + edge))
         if qbid >= ba:
@@ -140,13 +144,11 @@ class Trader:
             qask = bb + 1
         if qbid >= qask:
             qbid = qask - 1
-
         room_long = limit - pos
         room_short = limit + pos
         if max_qty is not None:
             room_long = min(room_long, max_qty)
             room_short = min(room_short, max_qty)
-
         if room_long > 0:
             orders.append(Order(symbol, qbid, room_long))
         if room_short > 0:
@@ -168,7 +170,6 @@ class Trader:
         score = 0.0
         score += 0.45 * min(1.0, hp_pos / float(self.HP_LIMIT))
         score += 0.55 * min(1.0, net_delta / float(self.VFE_LIMIT))
-
         last_vfe = self.history.get("last_vfe_mid")
         if vfe_mid is not None and last_vfe is not None:
             dv = float(vfe_mid) - float(last_vfe)
@@ -195,7 +196,6 @@ class Trader:
                 0.0,
                 float(self.history.get("vev_guard_level", 0.0)) * self.RISK_VEV_GUARD_DECAY,
             )
-
         risk_off = (
             hp_pos >= self.RISK_HP_POS_TRIGGER
             or net_delta >= self.RISK_NET_DELTA_TRIGGER
@@ -223,13 +223,11 @@ class Trader:
         bb, ba = self._top(depth)
         if bb is None or ba is None:
             return [], None
-
         mid = (bb + ba) / 2.0
         prev = self.history.get("hp_ewma")
         ewma = mid if prev is None else (1 - self.HP_EWMA_ALPHA) * prev + self.HP_EWMA_ALPHA * mid
         self.history["hp_ewma"] = ewma
         fair = 0.6 * ewma + 0.4 * self.HP_ANCHOR
-
         speed_limited = self._speed_limited(
             state, HYDROGEL, self.HP_SPEED_TRIGGER, "hp_speed_cooldown_until", "last_hp_pos"
         )
@@ -238,14 +236,12 @@ class Trader:
             local_scale *= self.OPEN_SCALE_MULT
         if speed_limited:
             local_scale *= self.SPEED_SCALE_MULT
-
         pos = state.position.get(HYDROGEL, 0)
         lim = self.HP_LIMIT
         orders: List[Order] = []
         taker_max = max(4, int(self.HP_TAKER_MAX * local_scale))
         maker_max = max(6, int(28 * local_scale))
         taker_enabled = not risk_off
-
         if taker_enabled and ba <= fair - self.HP_TAKER_EDGE and pos < lim:
             sz = min(taker_max, lim - pos, -depth.sell_orders[ba])
             if sz > 0:
@@ -256,7 +252,6 @@ class Trader:
             if sz > 0:
                 orders.append(Order(HYDROGEL, bb, -sz))
                 pos -= sz
-
         bvol = float(depth.buy_orders.get(bb, 0))
         avol = float(-depth.sell_orders.get(ba, 0))
         if (not risk_off) and (bvol + avol) > 0:
@@ -272,7 +267,6 @@ class Trader:
                 if sz > 0:
                     orders.append(Order(HYDROGEL, bb, -sz))
                     pos -= sz
-
         maker_edge = self.HP_MAKER_EDGE + (1.0 if risk_off else 0.0)
         orders.extend(self._guarded_maker(HYDROGEL, depth, pos, fair, lim, maker_edge, max_qty=maker_max))
         return orders, mid
@@ -284,7 +278,6 @@ class Trader:
         bb, ba = self._top(depth)
         if bb is None or ba is None:
             return [], None
-
         mid = (bb + ba) / 2.0
         prev = self.history.get("vfe_ewma")
         ewma = mid if prev is None else (1 - self.VFE_EWMA_ALPHA) * prev + self.VFE_EWMA_ALPHA * mid
@@ -296,7 +289,6 @@ class Trader:
         else:
             micro = mid
         fair = (1.0 - self.VFE_MICRO_TILT) * ewma + self.VFE_MICRO_TILT * micro
-
         speed_limited = self._speed_limited(
             state, VFE, self.VFE_SPEED_TRIGGER, "vfe_speed_cooldown_until", "last_vfe_pos"
         )
@@ -305,14 +297,11 @@ class Trader:
             local_scale *= self.OPEN_SCALE_MULT
         if speed_limited:
             local_scale *= self.SPEED_SCALE_MULT
-
         pos = state.position.get(VFE, 0)
         lim = self.VFE_LIMIT
         orders: List[Order] = []
-
         taker_max = max(3, int(self.VFE_TAKER_MAX * local_scale))
         maker_max = max(4, int(18 * local_scale))
-
         if (not risk_off) and ba <= fair - self.VFE_TAKER_EDGE and pos < lim:
             sz = min(taker_max, lim - pos, -depth.sell_orders[ba])
             if sz > 0:
@@ -323,7 +312,6 @@ class Trader:
             if sz > 0:
                 orders.append(Order(VFE, bb, -sz))
                 pos -= sz
-
         maker_edge = self.VFE_MAKER_EDGE + (1.0 if risk_off else 0.0)
         orders.extend(self._guarded_maker(VFE, depth, pos, fair, lim, maker_edge, max_qty=maker_max))
         return orders, mid
@@ -338,6 +326,9 @@ class Trader:
         local_scale = max(0.20, local_scale)
         rel_entry = self.VEV_REL_Z_ENTRY + (self.RISK_VEV_GUARD_REL_BUMP * guard_level if guard_active else 0.0)
         z_entry = self.VEV_Z_ENTRY + (self.RISK_VEV_GUARD_Z_BUMP * guard_level if guard_active else 0.0)
+        last_vfe = self.history.get("last_vfe_mid")
+        vfe_move = abs(vfe_mid - float(last_vfe)) if last_vfe is not None else 0.0
+
         cands: List[Tuple[float, int, int, int, float, float]] = []
         for strike in VEV_STRIKES:
             sym = f"VEV_{strike}"
@@ -350,7 +341,6 @@ class Trader:
             spread = ba - bb
             if spread <= 0 or spread > self.VEV_SPREAD_MAX_BY_STRIKE[strike]:
                 continue
-
             obs_mid = (bb + ba) / 2.0
             intrinsic = max(vfe_mid - strike, 0.0)
             obs_prem = obs_mid - intrinsic
@@ -360,7 +350,6 @@ class Trader:
             lo, hi = PREM_BOUNDS[strike]
             prem = max(lo, min(hi, prem))
             self.history["prem"][prem_key] = prem
-
             dev = obs_prem - prem
             prev_var = float(self.history["prem_var"][prem_key])
             var = (1 - self.PREM_VAR_ALPHA) * prev_var + self.PREM_VAR_ALPHA * (dev * dev)
@@ -371,14 +360,9 @@ class Trader:
             fair = intrinsic + prem
             mny_penalty = abs(strike - vfe_mid) / 200.0
             cands.append((abs(z) - 0.08 * mny_penalty, strike, bb, ba, z, fair))
-
         if not cands:
             return []
-
-        raw = []
-        for _, strike, bb, ba, z, fair in cands:
-            raw.append((strike, bb, ba, z, fair))
-
+        raw = [(strike, bb, ba, z, fair) for _, strike, bb, ba, z, fair in cands]
         rich = [x for x in raw if x[3] >= rel_entry]
         cheap = [x for x in raw if x[3] <= -rel_entry]
         rich.sort(key=lambda x: x[3], reverse=True)
@@ -399,14 +383,20 @@ class Trader:
                 buy_lim = STRIKE_CAP[buy_k]
                 strong_pair = (
                     (not guard_active)
-                    and
-                    abs(rich[0][3]) >= self.VEV_REL_Z_BOOST
+                    and abs(rich[0][3]) >= self.VEV_REL_Z_BOOST
                     and abs(cheap[0][3]) >= self.VEV_REL_Z_BOOST
-                    and (state.order_depths[sell_sym] and state.order_depths[buy_sym])
-                    and ((min(state.order_depths[sell_sym].sell_orders) - max(state.order_depths[sell_sym].buy_orders)) <= self.VEV_STRONG_SPREAD_MAX)
-                    and ((min(state.order_depths[buy_sym].sell_orders) - max(state.order_depths[buy_sym].buy_orders)) <= self.VEV_STRONG_SPREAD_MAX)
+                    and ((min(sell_d.sell_orders) - max(sell_d.buy_orders)) <= self.VEV_STRONG_SPREAD_MAX)
+                    and ((min(buy_d.sell_orders) - max(buy_d.buy_orders)) <= self.VEV_STRONG_SPREAD_MAX)
+                )
+                peter_burst = (
+                    strong_pair
+                    and abs(rich[0][3]) >= self.PETER_BURST_REL_Z
+                    and abs(cheap[0][3]) >= self.PETER_BURST_REL_Z
+                    and vfe_move >= self.PETER_BURST_VFE_MOVE
                 )
                 pair_scale = local_scale * (self.VEV_STRONG_PAIR_SIZE_MULT if strong_pair else 1.0)
+                if peter_burst:
+                    pair_scale *= self.PETER_BURST_SIZE_MULT
                 sell_mx = max(1, int(self.VEV_TAKER_MAX_BY_STRIKE[sell_k] * pair_scale))
                 buy_mx = max(1, int(self.VEV_TAKER_MAX_BY_STRIKE[buy_k] * pair_scale))
                 q_sell = min(sell_mx, sell_lim + sell_pos, sell_d.buy_orders.get(sell_bb, 0))
@@ -439,7 +429,6 @@ class Trader:
     def run(self, state: TradingState):
         self._load_state(state)
         result: Dict[str, List[Order]] = {}
-
         hp_mid = None
         vfe_mid_for_risk = None
         if HYDROGEL in state.order_depths:
@@ -450,26 +439,21 @@ class Trader:
             bb, ba = self._top(state.order_depths[VFE])
             if bb is not None and ba is not None:
                 vfe_mid_for_risk = (bb + ba) / 2.0
-
         scale, risk_off = self._risk_state(state, hp_mid, vfe_mid_for_risk)
-
         if self.ENABLE_HYDROGEL:
             hp_orders, hp_mid_exec = self._hydrogel_logic(state, scale, risk_off)
             for o in hp_orders:
                 result.setdefault(o.symbol, []).append(o)
             if hp_mid_exec is not None:
                 self.history["last_hp_mid"] = hp_mid_exec
-
         vfe_orders, vfe_mid = self._vfe_logic(state, scale, risk_off)
         if self.ENABLE_VFE:
             for o in vfe_orders:
                 result.setdefault(o.symbol, []).append(o)
         if vfe_mid is not None:
             self.history["last_vfe_mid"] = vfe_mid
-
         if self.ENABLE_VEV and vfe_mid is not None:
             for o in self._vev_logic(state, vfe_mid, scale, risk_off):
                 result.setdefault(o.symbol, []).append(o)
-
         return result, 0, self._save_state()
 
