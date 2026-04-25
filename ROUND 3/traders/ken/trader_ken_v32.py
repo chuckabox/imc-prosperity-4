@@ -113,7 +113,69 @@ class Trader:
     # ── Module 1: HYDROGEL ─────────────────────────────────────────────────────
 
     def _hp_logic(self, state: TradingState) -> List[Order]:
-        return []
+        depth = state.order_depths.get(HP)
+        if depth is None:
+            return []
+        bb, ba = self._top(depth)
+        if bb is None or ba is None:
+            return []
+
+        mid = (bb + ba) / 2.0
+
+        # EWMA fair — no static anchor
+        prev = self._state["hp_ewma"]
+        ewma = mid if prev is None else (1 - HP_EWMA_ALPHA) * prev + HP_EWMA_ALPHA * mid
+        self._state["hp_ewma"] = ewma
+        fair = ewma
+
+        # L1 imbalance signal
+        bv, av = self._top_vol(depth)
+        total_vol = bv + av
+        imb = (bv - av) / total_vol if total_vol > 0 else 0.0
+
+        # Inventory skew — lean against large positions
+        pos = state.position.get(HP, 0)
+        inv_lean = 0.0
+        if abs(pos) > HP_INV_TRIGGER:
+            inv_lean = pos * HP_INV_FACTOR
+
+        # Quote prices: shift both quotes in direction of imbalance
+        skew = HP_SKEW * (1 if imb > 0 else -1 if imb < 0 else 0)
+        q_bid = round(fair - HP_EDGE + skew - inv_lean)
+        q_ask = round(fair + HP_EDGE + skew - inv_lean)
+
+        # Clamp: never cross the existing inside market
+        if q_bid >= ba:
+            q_bid = ba - 1
+        if q_ask <= bb:
+            q_ask = bb + 1
+        if q_bid >= q_ask:
+            q_bid = q_ask - 1
+
+        orders: List[Order] = []
+
+        # Defensive taker: reduce wrong-side exposure when imbalance is present
+        if imb != 0.0:
+            if imb < 0 and pos > 0:  # price moving down, we are long → hit bid to reduce
+                reduce = min(HP_TAKER_MAX, pos, depth.buy_orders.get(bb, 0))
+                if reduce > 0:
+                    orders.append(Order(HP, bb, -reduce))
+                    pos -= reduce
+            elif imb > 0 and pos < 0:  # price moving up, we are short → lift ask to reduce
+                reduce = min(HP_TAKER_MAX, -pos, abs(depth.sell_orders.get(ba, 0)))
+                if reduce > 0:
+                    orders.append(Order(HP, ba, reduce))
+                    pos += reduce
+
+        # Passive maker quotes
+        room_long  = HP_LIMIT - pos
+        room_short = HP_LIMIT + pos
+        if room_long > 0:
+            orders.append(Order(HP, q_bid, room_long))
+        if room_short > 0:
+            orders.append(Order(HP, q_ask, -room_short))
+
+        return orders
 
     # ── Module 2: VFE ─────────────────────────────────────────────────────────
 
