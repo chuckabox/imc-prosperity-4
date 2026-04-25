@@ -354,20 +354,22 @@ class Trader:
         if len(fit_iv) < 4:
             return [], None, S, T
 
-        pts = [(math.log(x / S), fit_iv[x]) for x in fit_iv]
-        xs = [p[0] for p in pts]
-        ys = [p[1] for p in pts]
-        smile_coefs = _solve_3x3([[sum(x**4 for x in xs), sum(x**3 for x in xs), sum(x**2 for x in xs)], 
-                                  [sum(x**3 for x in xs), sum(x**2 for x in xs), sum(x for x in xs)], 
-                                  [sum(x**2 for x in xs), sum(x for x in xs), len(xs)]], 
-                                 [sum(x**2 * y for x, y in zip(xs, ys)), sum(x * y for x, y in zip(xs, ys)), sum(ys)])
+        # GLOBAL FIT
+        pts_all = [(math.log(x / S), fit_iv[x]) for x in fit_iv]
+        xs_all = [p[0] for p in pts_all]
+        ys_all = [p[1] for p in pts_all]
+        n_all = len(xs_all)
+        smile_coefs = _solve_3x3([[sum(x**4 for x in xs_all), sum(x**3 for x in xs_all), sum(x**2 for x in xs_all)], 
+                                  [sum(x**3 for x in xs_all), sum(x**2 for x in xs_all), sum(x for x in xs_all)], 
+                                  [sum(x**2 for x in xs_all), sum(x for x in xs_all), n_all]], 
+                                 [sum(x**2 * y for x, y in zip(xs_all, ys_all)), sum(x * y for x, y in zip(xs_all, ys_all)), sum(ys_all)])
         
         if not smile_coefs:
             return [], None, S, T
 
         mis: Dict[int, float] = {}
         top: Dict[int, Tuple[Optional[int], Optional[int], int, int]] = {}
-        greeks: Dict[int, Tuple[float, float, float]] = {}
+        greeks: Dict[int, Tuple[float, float, float, float]] = {}
         
         for k in self.VEV_FIT_STRIKES:
             sym = f"VEV_{k}"
@@ -380,6 +382,7 @@ class Trader:
             
             mny = math.log(k / S)
             iv_k = smile_coefs[0] * mny * mny + smile_coefs[1] * mny + smile_coefs[2]
+            iv_k = max(0.01, min(2.0, iv_k))
             fair = bs_call(S, k, T, iv_k)
             mid = 0.5 * (bb + ba)
             mis[k] = mid - fair
@@ -514,23 +517,25 @@ class Trader:
             # Position-based skew: tighten against inventory
             skew = self.SMM_SKEW_FACTOR * (pos / max(self.SMM_POS_CAP, 1))
             
-            # Bid side: buy below fair
-            bid_px = int(math.floor(fair - self.SMM_EDGE - skew))
-            if bid_px >= ba:
-                bid_px = ba - 1
-            if bid_px >= 1 and pos < self.SMM_POS_CAP and pos < lim:
-                qty = min(self.SMM_QTY, self.SMM_POS_CAP - pos, lim - pos)
-                if qty > 0:
-                    orders.append(Order(sym, bid_px, qty))
+            # Bid side: buy below fair (Only for 5400, or if not in the known overpriced list)
+            if k != 5300:
+                bid_px = int(math.floor(fair - self.SMM_EDGE - skew))
+                if bid_px >= ba:
+                    bid_px = ba - 1
+                if bid_px >= 1 and pos < self.SMM_POS_CAP and pos < lim:
+                    qty = min(self.SMM_QTY, self.SMM_POS_CAP - pos, lim - pos)
+                    if qty > 0:
+                        orders.append(Order(sym, bid_px, qty))
             
-            # Ask side: sell above fair
-            ask_px = int(math.ceil(fair + self.SMM_EDGE - skew))
-            if ask_px <= bb:
-                ask_px = bb + 1
-            if ask_px >= 1 and pos > -self.SMM_POS_CAP and pos > -lim:
-                qty = min(self.SMM_QTY, self.SMM_POS_CAP + pos, lim + pos)
-                if qty > 0:
-                    orders.append(Order(sym, ask_px, -qty))
+            # Ask side: sell above fair (Only for 5200, 5300, 5500, or if not in known underpriced list)
+            if k != 5400:
+                ask_px = int(math.ceil(fair + self.SMM_EDGE - skew))
+                if ask_px <= bb:
+                    ask_px = bb + 1
+                if ask_px >= 1 and pos > -self.SMM_POS_CAP and pos > -lim:
+                    qty = min(self.SMM_QTY, self.SMM_POS_CAP + pos, lim + pos)
+                    if qty > 0:
+                        orders.append(Order(sym, ask_px, -qty))
         
         return orders
 
