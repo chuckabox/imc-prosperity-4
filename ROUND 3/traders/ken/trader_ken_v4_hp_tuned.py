@@ -1,4 +1,11 @@
 """
+trader_ken_v4_hp_tuned.py — v3 with sweep-tuned HYDROGEL knobs.
+
+Identical to v3 except HP_OBI_THRESHOLD=0.10 (was 0.15) and
+HP_LEAN_OFFSET_DEFENSIVE=2 (was 3). Sweep over 108 combos showed those two
+tweaks lift 3-day total from +25,111 to +25,248. Marginal but free.
+
+Original v3 docstring follows ──────────────────────────────────────────
 trader_ken_v3.py — OBI-aware market making on HYDROGEL.
 
 Why this exists
@@ -100,7 +107,7 @@ class Trader:
     # ── HYDROGEL v3: OBI-aware MM ──────────────────────────────────────────
     HP_EWMA_ALPHA = 0.20            # fast-reacting fair
     HP_TAKE_EDGE = 2
-    HP_OBI_THRESHOLD = 0.15         # magnitude above which we trust the signal
+    HP_OBI_THRESHOLD = 0.10         # tuned (was 0.15) — sweep top-10 all use 0.10
     HP_OBI_STRONG = 0.35            # extra-aggressive tier
 
     # Passive sizing when OBI is neutral
@@ -110,7 +117,7 @@ class Trader:
     # Lean sizing when OBI is directional
     HP_LEAN_AGGRESSIVE = 30         # favoured side
     HP_LEAN_DEFENSIVE = 6           # opposite side (still quote a little to avoid 0 P&L)
-    HP_LEAN_OFFSET_DEFENSIVE = 3    # push the disfavoured quote 3 ticks away from touch
+    HP_LEAN_OFFSET_DEFENSIVE = 2    # tuned (was 3)
 
     # Inventory management
     HP_SKEW_SOFT = 25               # start skewing quotes toward flat
