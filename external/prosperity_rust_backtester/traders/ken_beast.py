@@ -100,14 +100,14 @@ TS_PER_DAY = 1_000_000
 
 
 class Trader:
-    LIMITS = {HYDROGEL: 80, VFE: 200, **{s: 100 for s in VEV_SYMBOLS}}
+    LIMITS = {HYDROGEL: 200, VFE: 200, **{s: 100 for s in VEV_SYMBOLS}}
 
     # ── HYDROGEL (Adin v2 discipline) ────────────────────────────────────────
     HP_ANCHOR = 9993.0
     HP_BLEND = 0.4
     HP_EWMA_ALPHA = 0.20
     HP_TAKE_EDGE = 2.0
-    HP_TAKER_MAX = 20        # Back to safe cap
+    HP_TAKER_MAX = 50        # Uncapped aggression
     HP_GAMMA = 0.04
     HP_MAKER_EDGE = 2.0
 
