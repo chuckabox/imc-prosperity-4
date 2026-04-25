@@ -103,7 +103,7 @@ class Trader:
     VFE_TAKER_EDGE = 1.6
     VFE_TAKER_MAX = 64
     VFE_MICRO_TILT = 0.24
-    VFE_HEDGE_BAND = 30
+    VFE_HEDGE_BAND = 35
     VFE_HEDGE_AGGRO_BAND = 40
     VFE_HEDGE_MAX = 64
     OPEN_PHASE_TS = 100_000
@@ -142,7 +142,7 @@ class Trader:
 
     # Smile-Based Passive MM Parameters
     SMM_ENABLE = True
-    SMM_STRIKES = [5300, 5400]  # Strikes with persistent mispricing
+    SMM_STRIKES = [5200, 5300, 5400, 5500]  # Strikes with persistent mispricing
     SMM_EDGE = 0.5              # Minimum edge over fair to quote
     SMM_QTY = 15                # Passive quote size per strike
     SMM_POS_CAP = 50            # Max absolute position per strike from MM

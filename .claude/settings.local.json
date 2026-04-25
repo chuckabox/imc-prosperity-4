@@ -122,7 +122,8 @@
       "Bash(mkdir -p /tmp/rustlibs)",
       "Bash('C:/Program Files/LLVM/bin/llvm-dlltool.exe' -m i386:x86-64 -D msvcrt.dll -d /tmp/msvcrt.def -l /tmp/rustlibs/msvcrt.lib)",
       "Read(//tmp/rustlibs/**)",
-      "Bash(cmd.exe /c \"echo %TEMP%\")"
+      "Bash(cmd.exe /c \"echo %TEMP%\")",
+      "Bash(cygpath -w /tmp/rustlibs/)"
     ]
   }
 }
