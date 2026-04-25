@@ -1,4 +1,4 @@
-"""trader_ken_v30_standalone.py
+"""ken v31 we hit ceilling.
 
 Standalone simulator-safe version:
 - Based on v22 core architecture

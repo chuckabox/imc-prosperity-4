@@ -91,8 +91,8 @@ class Trader:
     HP_SPEED_TRIGGER = 18
     VFE_SPEED_TRIGGER = 16
     SPEED_COOLDOWN_TS = 40_000
-    OPEN_SCALE_MULT = 0.70
-    SPEED_SCALE_MULT = 0.80
+    OPEN_SCALE_MULT = 0.7
+    SPEED_SCALE_MULT = 0.8
 
     def __init__(self):
         self.history: Dict = {}

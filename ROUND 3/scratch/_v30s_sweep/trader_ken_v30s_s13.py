@@ -64,15 +64,15 @@ class Trader:
     HP_LIMIT = 80
     HP_ANCHOR = 9993.0
     HP_EWMA_ALPHA = 0.20
-    HP_TAKER_EDGE = 2.0
-    HP_MAKER_EDGE = 2.5
+    HP_TAKER_EDGE = 2.5
+    HP_MAKER_EDGE = 3.0
     HP_TAKER_MAX = 20
 
     # VFE
     VFE_LIMIT = 80
     VFE_EWMA_ALPHA = 0.20
     VFE_MAKER_EDGE = 2.0
-    VFE_TAKER_EDGE = 3.5
+    VFE_TAKER_EDGE = 4.0
     VFE_TAKER_MAX = 15
 
     # VEV
@@ -88,11 +88,11 @@ class Trader:
 
     # Soft safety
     OPEN_PHASE_TS = 120_000
-    HP_SPEED_TRIGGER = 18
+    HP_SPEED_TRIGGER = 22
     VFE_SPEED_TRIGGER = 16
     SPEED_COOLDOWN_TS = 40_000
-    OPEN_SCALE_MULT = 0.70
-    SPEED_SCALE_MULT = 0.80
+    OPEN_SCALE_MULT = 0.8
+    SPEED_SCALE_MULT = 0.7
 
     def __init__(self):
         self.history: Dict = {}

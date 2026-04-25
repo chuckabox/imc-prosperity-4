@@ -64,7 +64,7 @@ class Trader:
     HP_LIMIT = 80
     HP_ANCHOR = 9993.0
     HP_EWMA_ALPHA = 0.20
-    HP_TAKER_EDGE = 2.0
+    HP_TAKER_EDGE = 3.0
     HP_MAKER_EDGE = 2.5
     HP_TAKER_MAX = 20
 
@@ -72,16 +72,16 @@ class Trader:
     VFE_LIMIT = 80
     VFE_EWMA_ALPHA = 0.20
     VFE_MAKER_EDGE = 2.0
-    VFE_TAKER_EDGE = 3.5
+    VFE_TAKER_EDGE = 4.5
     VFE_TAKER_MAX = 15
 
     # VEV
     PREM_ALPHA = 0.05
-    VEV_MAKER_EDGE = 2.2
+    VEV_MAKER_EDGE = 1.8
 
     # Risk governor (v28 tune)
-    RISK_NET_DELTA_TRIGGER = 55.0
-    RISK_HP_POS_TRIGGER = 62
+    RISK_NET_DELTA_TRIGGER = 60.0
+    RISK_HP_POS_TRIGGER = 70
     RISK_ADVERSE_MOVE = 2.5
     RISK_MIN_SCALE = 0.35
     RISK_UNWIND_MAX = 10
@@ -91,8 +91,8 @@ class Trader:
     HP_SPEED_TRIGGER = 18
     VFE_SPEED_TRIGGER = 16
     SPEED_COOLDOWN_TS = 40_000
-    OPEN_SCALE_MULT = 0.70
-    SPEED_SCALE_MULT = 0.80
+    OPEN_SCALE_MULT = 0.8
+    SPEED_SCALE_MULT = 0.7
 
     def __init__(self):
         self.history: Dict = {}
