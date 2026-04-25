@@ -70,7 +70,7 @@ class Trader:
     # ── Feature flags ──────────────────────────────────────────────────────
     ENABLE_HYDROGEL = True
     ENABLE_VEV = True
-    ENABLE_HEDGE = True
+    ENABLE_HEDGE = False
 
     LIMITS: Dict[str, int] = {
         HYDROGEL: 80,
