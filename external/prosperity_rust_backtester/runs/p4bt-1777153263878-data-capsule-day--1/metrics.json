@@ -1,0 +1,19 @@
+{
+  "dataset_id": "prices_round_2_day_-1",
+  "dataset_path": "C:\\Users\\ductv\\Desktop\\Projects\\imc prosperity\\imc-prosperity-4\\ROUND 2\\data_capsule\\prices_round_2_day_-1.csv",
+  "day": -1,
+  "engine": "prosperity4bt",
+  "final_pnl_by_product": {
+    "ASH_COATED_OSMIUM": 14013.0,
+    "INTARIAN_PEPPER_ROOT": 79226.0
+  },
+  "final_pnl_total": 93239.0,
+  "generated_at": "2026-04-25T21:41:05+00:00",
+  "matching": {
+    "trade_match_mode": "all"
+  },
+  "own_trade_count": 661,
+  "run_id": "p4bt-1777153263878-data-capsule-day--1",
+  "tick_count": 20000,
+  "trader_path": "C:\\Users\\ductv\\Desktop\\Projects\\imc prosperity\\imc-prosperity-4\\ROUND 2\\traders\\suvin\\trader_stable_suvin_v2.py"
+}
