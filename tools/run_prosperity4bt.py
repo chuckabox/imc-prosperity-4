@@ -66,6 +66,20 @@ POSITION_LIMITS: dict[str, int] = {
     "VOLCANIC_ROCK_VOUCHER_10250": 200,
     "VOLCANIC_ROCK_VOUCHER_10500": 200,
     "MAGNIFICENT_MACARONS": 75,
+    # Round 3 — limits unverified, guessed from R2 / Prosperity options conventions.
+    # First live tick should log actual caps and update these.
+    "HYDROGEL_PACK": 80,
+    "VELVETFRUIT_EXTRACT": 80,
+    "VEV_4000": 60,
+    "VEV_4500": 60,
+    "VEV_5000": 60,
+    "VEV_5100": 60,
+    "VEV_5200": 60,
+    "VEV_5300": 60,
+    "VEV_5400": 60,
+    "VEV_5500": 60,
+    "VEV_6000": 60,
+    "VEV_6500": 60,
 }
 
 
