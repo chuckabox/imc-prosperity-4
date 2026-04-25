@@ -70,7 +70,12 @@
       "Bash(awk -F';' '{ask=$10; if\\(ask<=9995\\) count++} END {print \"HP ask<=9995 count:\", count, \"/ 10000 ticks\"}')",
       "Bash(awk -F';' '{bid=$4; ask=$10; if\\(bid>=10000\\) sell++; if\\(ask<=9995\\) buy++} END {print \"buy opps\\(ask<=9995\\):\"buy, \"sell opps\\(bid>=10000\\):\"sell}')",
       "Bash(awk -F';' '{bid=$4; ask=$10; if\\(bid>=10000\\) sell++; if\\(ask<=9995\\) buy++} END {print \"day1 buy:\"buy, \"sell:\"sell}')",
-      "Bash(awk -F';' '{bid=$4; ask=$10; if\\(bid>=10000\\) sell++; if\\(ask<=9995\\) buy++} END {print \"day2 buy:\"buy, \"sell:\"sell}')"
+      "Bash(awk -F';' '{bid=$4; ask=$10; if\\(bid>=10000\\) sell++; if\\(ask<=9995\\) buy++} END {print \"day2 buy:\"buy, \"sell:\"sell}')",
+      "Bash(awk -F';' 'NR>1{print $3}' \"/Users/Adin/Library/CloudStorage/OneDrive-TheUniversityofQueensland/IMC Prosperity/imc-prosperity-4/ROUND 3/data_capsule/prices_round_3_day_0.csv\")",
+      "Bash(awk -F';' 'NR>1 && $3==\"VELVETFRUIT_EXTRACT\"{print $2\";\"$4\";\"$10\";\"$16}' \"/Users/Adin/Library/CloudStorage/OneDrive-TheUniversityofQueensland/IMC Prosperity/imc-prosperity-4/ROUND 3/data_capsule/prices_round_3_day_0.csv\")",
+      "Bash(awk -F';' 'NR>1 && $3==\"VELVETFRUIT_EXTRACT\"{print $16}' \"/Users/Adin/Library/CloudStorage/OneDrive-TheUniversityofQueensland/IMC Prosperity/imc-prosperity-4/ROUND 3/data_capsule/prices_round_3_day_0.csv\")",
+      "Bash(awk 'BEGIN{c=0;s=0;mn=1e9;mx=0}{c++;s+=$1; if\\($1<mn\\)mn=$1; if\\($1>mx\\)mx=$1}END{print \"n=\",c,\"mean=\",s/c,\"min=\",mn,\"max=\",mx}')",
+      "Bash(awk -F';' 'NR>1 && $3==\"HYDROGEL_PACK\"{print $16}' \"/Users/Adin/Library/CloudStorage/OneDrive-TheUniversityofQueensland/IMC Prosperity/imc-prosperity-4/ROUND 3/data_capsule/prices_round_3_day_0.csv\")"
     ]
   }
 }
