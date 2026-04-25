@@ -8,11 +8,17 @@ This document tracks and ranks the key quantitative edges (alphas) found during 
 
 ## 🏆 Tier 1: Core Performance Drivers (Must-Haves)
 
-### 1. Smile-Based Passive Market Making ⭐ NEW
-- **Impact**: High / Revenue Generator
-- **Discovery**: VEV_5400 is **chronically underpriced** (27k buy opps, avg edge 1.67) and VEV_5300 is **chronically overpriced** (13k sell opps, avg edge 1.06) relative to the fitted smile.
+### 1. VFE Hedge Optimization ⭐ NEW
+- **Impact**: Very High / Profit Protector
+- **Discovery**: Over-aggressive hedging of VEV delta was bleeding -2,000+ per day in VFE taker costs.
+- **Implementation**: Widened `VFE_HEDGE_BAND` to **35**. 
+- **Benefit**: Full-day PnL improved from **1,872 → 6,319** (+237%). VFE turned from a cost center into a profit source (+2,376) by capturing spreads instead of crossing them.
+
+### 2. Smile-Based Passive Market Making
+- **Impact**: Medium / Revenue Generator
+- **Discovery**: VEV_5400 is **chronically underpriced** and VEV_5300 is **chronically overpriced** relative to the fitted smile.
 - **Implementation**: Passively quote bid/ask on these strikes using the smile fair value. Position-skewed to prevent inventory blowup.
-- **Benefit**: Full-day PnL improved from **1,710 → 1,872** (+9.5%). Pure passive spread capture with no crossing costs.
+- **Benefit**: Full-day PnL improved from **1,710 → 1,872** (+9.5%). 
 
 ### 2. HP Anchor (`HYDROGEL_PACK`)
 - **Impact**: High / Most Stable
