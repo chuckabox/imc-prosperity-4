@@ -89,7 +89,11 @@ class Trader:
               + t * (1.781477937
               + t * (-1.821255978
               + t * 1.330274429))))
-        return sign * (0.5 - (1.0 / math.sqrt(2 * math.pi)) * math.exp(-0.5 * x * x) * p) + 0.5 * (1 - sign)
+        pdf_val = (1.0 / math.sqrt(2 * math.pi)) * math.exp(-0.5 * x * x)
+        if sign >= 0:
+            return 1.0 - pdf_val * p
+        else:
+            return pdf_val * p
 
     def _bs_call(self, S: float, K: int, tte: float) -> float:
         """Black-Scholes call price, r=0."""
