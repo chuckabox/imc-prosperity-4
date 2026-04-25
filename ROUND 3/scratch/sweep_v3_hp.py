@@ -94,11 +94,22 @@ def _run_one_day(trader_module, day: int, reader, match_mode) -> float:
     return _summarise_pnl(result)
 
 
+LOG_PATH = REPO_ROOT / "ROUND 3" / "scratch" / "sweep_v3_hp.log"
+
+
+def _log(msg: str) -> None:
+    print(msg, flush=True)
+    with open(LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(msg + "\n")
+
+
 def main() -> int:
     _install_datamodel_alias()
     _patch_position_limits()
 
     from prosperity4bt.models import TradeMatchingMode
+
+    LOG_PATH.write_text("", encoding="utf-8")  # truncate prior log
 
     trader_mod = _load_trader_module()
     Trader = trader_mod.Trader
@@ -112,8 +123,8 @@ def main() -> int:
     LEAN_OFF = [2, 3, 4]
 
     combos = list(itertools.product(OBI_THR, NEUTRAL, LEAN_AGG, LEAN_OFF))
-    print(f"Sweeping {len(combos)} combos x {len(DAYS)} days "
-          f"= {len(combos) * len(DAYS)} runs")
+    _log(f"Sweeping {len(combos)} combos x {len(DAYS)} days "
+         f"= {len(combos) * len(DAYS)} runs")
 
     rows: list[tuple[float, dict, dict]] = []
     t0 = time.time()
@@ -130,21 +141,21 @@ def main() -> int:
         rows.append((total, params, per_day))
         elapsed = time.time() - t0
         eta = elapsed / (i + 1) * (len(combos) - i - 1)
-        print(f"  [{i+1:>3}/{len(combos)}] thr={thr:.2f} nf={nf:>2} lagg={lagg:>2} "
-              f"loff={loff} | d0={per_day[0]:>+7.0f} d1={per_day[1]:>+7.0f} "
-              f"d2={per_day[2]:>+7.0f}  SUM={total:>+7.0f}  (eta {eta:.0f}s)")
+        _log(f"  [{i+1:>3}/{len(combos)}] thr={thr:.2f} nf={nf:>2} lagg={lagg:>2} "
+             f"loff={loff} | d0={per_day[0]:>+7.0f} d1={per_day[1]:>+7.0f} "
+             f"d2={per_day[2]:>+7.0f}  SUM={total:>+7.0f}  (eta {eta:.0f}s)")
 
     rows.sort(key=lambda r: r[0], reverse=True)
-    print("\n=== TOP 10 ===")
+    _log("\n=== TOP 10 ===")
     for total, params, per_day in rows[:10]:
-        print(f"  SUM={total:>+7.0f}  d0={per_day[0]:>+7.0f} d1={per_day[1]:>+7.0f} "
-              f"d2={per_day[2]:>+7.0f}  thr={params['thr']:.2f} nf={params['nf']:>2} "
-              f"lagg={params['lagg']:>2} loff={params['loff']}")
-    print("\n=== BOTTOM 5 ===")
+        _log(f"  SUM={total:>+7.0f}  d0={per_day[0]:>+7.0f} d1={per_day[1]:>+7.0f} "
+             f"d2={per_day[2]:>+7.0f}  thr={params['thr']:.2f} nf={params['nf']:>2} "
+             f"lagg={params['lagg']:>2} loff={params['loff']}")
+    _log("\n=== BOTTOM 5 ===")
     for total, params, per_day in rows[-5:]:
-        print(f"  SUM={total:>+7.0f}  d0={per_day[0]:>+7.0f} d1={per_day[1]:>+7.0f} "
-              f"d2={per_day[2]:>+7.0f}  thr={params['thr']:.2f} nf={params['nf']:>2} "
-              f"lagg={params['lagg']:>2} loff={params['loff']}")
+        _log(f"  SUM={total:>+7.0f}  d0={per_day[0]:>+7.0f} d1={per_day[1]:>+7.0f} "
+             f"d2={per_day[2]:>+7.0f}  thr={params['thr']:.2f} nf={params['nf']:>2} "
+             f"lagg={params['lagg']:>2} loff={params['loff']}")
     return 0
 
 
