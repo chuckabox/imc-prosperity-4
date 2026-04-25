@@ -68,15 +68,16 @@ class Trader:
         **{s: 60 for s in VEV_SYMBOLS},
     }
 
-    # ── HYDROGEL knobs (from v3; tune via sweep_v3_hp.py) ──────────────────
+    # ── HYDROGEL knobs (tuned via sweep_v3_hp.py — see ROUND 3/scratch/sweep_v3_hp.log) ─
+    # Sweep top-10 all share thr=0.10, loff=2; nf/lagg are no-ops in that regime.
     HP_EWMA_ALPHA = 0.20
     HP_TAKE_EDGE = 2
-    HP_OBI_THRESHOLD = 0.15
+    HP_OBI_THRESHOLD = 0.10
     HP_NEUTRAL_FRONT = 20
     HP_NEUTRAL_SECOND = 12
     HP_LEAN_AGGRESSIVE = 30
     HP_LEAN_DEFENSIVE = 6
-    HP_LEAN_OFFSET_DEFENSIVE = 3
+    HP_LEAN_OFFSET_DEFENSIVE = 2
     HP_SKEW_SOFT = 25
     HP_SKEW_HARD = 50
     HP_FLATTEN_HARD = 70
