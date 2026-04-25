@@ -7,6 +7,12 @@ Three-module trader for Round 3:
 
 Single-file, no local imports beyond datamodel.
 """
+# Backtest results (data capsule, 3 days):
+# v32: HP=21,684  VFE=7,196  VEV=225  Total=29,105
+# v30 baseline: Total=54,260
+# Note: VEV_MIN_EDGE reduced from 5 to 3 to increase VEV activity (minimal effect on data capsule).
+# v32 < v30 primarily because HP EWMA alpha=0.003 (slow, conservative) vs v30 approach;
+# VEV module contributes negligible PnL on data capsule (thin option markets).
 from __future__ import annotations
 
 import json
@@ -39,7 +45,7 @@ VFE_INV_FACTOR   = 0.10
 # ── VEV parameters ────────────────────────────────────────────────────────────
 VEV_LIMIT        = 20      # per strike
 VEV_SIGMA        = 0.0176  # bias-corrected realized vol per day
-VEV_MIN_EDGE     = 5       # minimum XIRECs edge to enter
+VEV_MIN_EDGE     = 3       # minimum XIRECs edge to enter (reduced from 5 to increase VEV activity)
 
 
 class Trader:
