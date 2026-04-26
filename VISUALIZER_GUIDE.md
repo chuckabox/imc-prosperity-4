@@ -38,6 +38,10 @@ Left sidebar:
 - Strategy list: click one or more strategies to include in analytics
 - `RESET ALL`: clear current strategy selection
 
+Header actions:
+
+- `EXPORT SNAPSHOT`: downloads an AI-friendly JSON snapshot with computed analytics
+
 ## Global Table Behavior
 
 All leaderboard tables use:
@@ -75,6 +79,7 @@ Columns:
 - `GREEN TICKS`: percentage of positive curve deltas
 - `SELECTION SCORE`: custom 0-100 readiness score (see below)
 - `STATUS`: `GREEN / AMBER / RED` risk-gated classification
+- `WHY`: short reason text for status classification
 - `READINESS`: legacy bar score retained for quick visual scan
 
 ### Quick Stats Tiles
@@ -111,7 +116,7 @@ This tab has two separate panels.
 
 Per trader (within selected round):
 
-- `D0 / D1 / D2 PNL`
+- `D* PNL` columns are dynamic and follow available days in selected round (for example `D1 / D2 / D3` in Round 4)
 - `AVG`: mean across available days
 - `RANGE`: `max(day pnl) - min(day pnl)`
 - `CONSISTENCY`: inverse normalized range heuristic
@@ -124,7 +129,7 @@ Interpretation:
 
 For each asset:
 
-- Average PnL on D0, D1, D2
+- Average PnL on the same dynamic day set used in Cross-Day Matrix
 - Spread across days
 
 Color coding:
@@ -163,6 +168,17 @@ Note:
 5. In `ATTRIBUTION`, inspect spread and asset dependence.
 6. In `STABILITY`, validate cross-day robustness and per-asset consistency.
 7. Keep a shortlist of `GREEN` and strongest `AMBER` with acceptable drawdown.
+
+## Export Snapshot
+
+Use `EXPORT SNAPSHOT` to download:
+
+- active filters and selected strategy ids
+- computed performance rows (including score/status/reasons)
+- attribution table rows
+- stability panel rows and day labels
+
+This export is designed to be directly consumed by AI tools for deeper analysis.
 
 ## Current Limitations
 
