@@ -28,8 +28,14 @@ This file tracks candidate alphas and status for quick iteration.
 ## Latest Backtest Snapshot (`table.py`)
 
 - Dataset: `round4` (day1-day3)
-- Total PnL: `+15,571.5`
-- Day PnL: `D+1 +10,819.5`, `D+2 +736.0`, `D+3 +4,016.0`
-- Main driver: `HYDROGEL_PACK +15,940.0`
+- Total PnL: `+18,035.0`
+- Day PnL: `D+1 +10,796.0`, `D+2 +1,074.0`, `D+3 +6,165.0`
+- Main drivers: `HYDROGEL_PACK +15,164.0`, `VELVETFRUIT_EXTRACT +3,239.5`
 - Minor drag: `VEV_4000 -471.5`
+
+Tuning notes:
+
+- Added opportunistic take-edge logic around fair value for Hydrogel and VFE.
+- Added light momentum tilt to fair-value skew.
+- Kept constrained VEV strike universe to avoid previous losses in 5000/5100/5200.
 

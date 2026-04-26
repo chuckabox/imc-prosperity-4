@@ -43,6 +43,21 @@
     }
     .tab.active { background: var(--accent); color: #000; }
     .header-actions { display: flex; align-items: center; }
+    .refresh-btn {
+        background: rgba(255,255,255,0.06);
+        color: var(--text);
+        border: 1px solid rgba(255,255,255,0.18);
+        padding: 7px 12px;
+        border-radius: 4px;
+        font-size: 0.62rem;
+        font-weight: 700;
+        cursor: pointer;
+        letter-spacing: 0.8px;
+        line-height: 1;
+        margin-right: 8px;
+    }
+    .refresh-btn:hover { background: rgba(255,255,255,0.12); }
+    .refresh-btn:disabled { opacity: 0.5; cursor: default; }
     .export-btn {
         background: rgba(0, 255, 157, 0.08);
         color: var(--accent);
@@ -182,7 +197,10 @@
             <button class="tab" onclick="switchTab('attribution')">ATTRIBUTION</button>
             <button class="tab" onclick="switchTab('stability')">STABILITY</button>
         </div>
-        <div class="header-actions"><button class="export-btn" onclick="exportAnalytics()">EXPORT SNAPSHOT</button></div>
+        <div class="header-actions">
+            <button id="refreshBtn" class="refresh-btn" onclick="refreshBacktestData()">REFRESH DATA</button>
+            <button class="export-btn" onclick="exportAnalytics()">EXPORT SNAPSHOT</button>
+        </div>
     </header>
 
     <aside>
@@ -605,6 +623,32 @@
         a.remove();
         URL.revokeObjectURL(url);
     }
+    function refreshBacktestData() {
+        const btn = document.getElementById('refreshBtn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'REFRESHING...';
+        }
+        const script = document.createElement('script');
+        script.src = `backtest_comparison.js?t=${Date.now()}`;
+        script.onload = () => {
+            selectedIds = [];
+            setFilter('round', currentFilters.round);
+            renderSidebar();
+            renderActiveTab();
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'REFRESH DATA';
+            }
+        };
+        script.onerror = () => {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'REFRESH FAILED';
+            }
+        };
+        document.body.appendChild(script);
+    }
 
     function renderActiveTab() {
         if (activeTab === 'performance') renderPerformance();
@@ -660,9 +704,9 @@
         const bestSharpe = metricRows.reduce((a, b) => (a.sharpe > b.sharpe ? a : b));
         const avgGreen = Math.round(metricRows.reduce((acc, row) => acc + row.greenTicks, 0) / metricRows.length);
         quickStats.innerHTML = `
-            <div class="metric-tile"><div class="metric-label">Top PnL</div><div class="metric-value">${bestPnl.trader}</div></div>
-            <div class="metric-tile"><div class="metric-label">Best Sharpe*</div><div class="metric-value">${bestSharpe.trader} (${bestSharpe.sharpe.toFixed(2)})</div></div>
-            <div class="metric-tile"><div class="metric-label">Lowest Drawdown</div><div class="metric-value">${safest.trader}</div></div>
+            <div class="metric-tile"><div class="metric-label">Top PnL</div><div class="metric-value">${Math.round(bestPnl.pnl).toLocaleString()} (${bestPnl.trader})</div></div>
+            <div class="metric-tile"><div class="metric-label">Best Sharpe*</div><div class="metric-value">${bestSharpe.sharpe.toFixed(2)} (${bestSharpe.trader})</div></div>
+            <div class="metric-tile"><div class="metric-label">Lowest Drawdown</div><div class="metric-value">${Math.round(Math.abs(safest.mdd)).toLocaleString()} (${safest.trader})</div></div>
             <div class="metric-tile"><div class="metric-label">Avg Green Ticks</div><div class="metric-value">${avgGreen}%</div></div>
         `;
     }
