@@ -20,14 +20,17 @@ This document tracks and ranks the key quantitative edges (alphas) found during 
 - **Implementation**: Passively quote bid/ask on these strikes using the smile fair value. Position-skewed to prevent inventory blowup.
 - **Benefit**: Full-day PnL improved from **1,710 → 1,872** (+9.5%). 
 
-### 2. HP Anchor (`HYDROGEL_PACK`)
-- **Impact**: High / Most Stable
-- **Discovery**: The price mean-reverts heavily around a hard baseline of **9991.0**.
-- **Benefit**: Foundation of the bot's base PnL. Prevents chasing noise in the highest-volume instrument.
+### 1. The VEV "Voucher" Alpha (Smile Residuals)
+- **Impact**: Critical / High
+- **Discovery**: Option prices in `round3` exhibit a consistent smile skew relative to Black-Scholes. By fitting a second-order parabola to the IV smile, we identify "Voucher" opportunities where specific strikes are mispriced by 1.5+ seashells.
+- **Implementation**: Smile-based passive MM + Aggressive Taker triggers for high-conviction mispricing.
+- **Benefit**: Foundation for 50k+ PnL rounds.
 
-### 3. Quadratic Smile Fitting
-- **Impact**: High / Foundation
-- **Discovery**: Individual strike IVs are too noisy for precision trading. A global quadratic fit ($IV = ax^2 + bx + c$) on log-moneyness reveals the "true" fair value.
+### 2. Adin-Sync Hydrogel (AS-Maker)
+- **Impact**: High / Stability
+- **Discovery**: Hydrogel follows a tight mean-reversion around anchor **9993.0**. Using the Avellaneda-Stoikov (AS) model for inventory-skewed quoting captures 13k+ PnL per day.
+- **Lesson**: Rust backtester enforces a strict **80-unit limit** for Hydrogel. Exceeding this causes silent order rejection.
+- **Benefit**: Provides the 13k "Base" PnL that Adin v2 relies on.
 - **Benefit**: Powers both the RV engine and the new passive MM. Enables stable fair pricing across all 10 strikes.
 
 ### 4. Gamma-Weighted Sizing
@@ -74,13 +77,22 @@ This document tracks and ranks the key quantitative edges (alphas) found during 
 ---
 
 ## 📈 Performance Progression
-| Trader | Upload (10%) | Full Day 2 | Key Alpha Added |
-| :--- | :--- | :--- | :--- |
-| `we found epsilon` | 11,450 | 1,513 | Baseline |
-| `we found greek` | 11,583 | 1,612 | Gamma + Vega |
-| `we found theta` | 11,583 | 1,710 | Theta exit |
-| `we found smile mm` | 11,583 | 1,872 | Passive MM |
-| `we found vfe gold` | **12,028** | **6,328** | **VFE Hedge Opt + Side-Aware MM** |
+| Trader | Upload (10%) | Day 0 | Day 1 | Day 2 | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `we found epsilon` | 11,450 | - | - | 1,513 | Baseline |
+| `we found greek` | 11,583 | - | - | 1,612 | Gamma + Vega |
+| `we found theta` | 11,583 | - | - | 1,710 | Theta exit |
+| `we found smile mm` | 11,583 | - | - | 1,872 | Passive MM |
+| we found vfe gold (Gold v2) | 40,042 | 15.3k | 18.4k | 6.3k | **Oracle Tier**. Optimized for all days. |
+| **Ken Gold v2.1 (Rust)** | **~47k** | **~15k** | **~18k** | **14.8k** | **RUST CHAMPION**. Beats Adin v2. |
+
+---
+
+## 🗝️ Key Discovery: The "Rust Reality" Gap
+During the Round 3 optimization, we identified why many high-performing Python bots fail in Rust:
+1. **Passive Fills**: Rust uses a queue-based model. Passive orders at the touch (Bid/Ask) often have **zero fill rate**.
+2. **Aggressive Hedging**: You **must** be a Taker for the VFE Delta hedge. Saving 2 seashells in maker fees isn't worth losing 500 seashells in unhedged price movement.
+3. **The 80-Limit Wall**: The Rust `round3` dataset rejects orders for `HYDROGEL_PACK` if the limit exceeds 80, even though the official competition limit is 200. Staying at 80 is the "Secret" to the 13k/day Hydrogel run.
 
 ---
 

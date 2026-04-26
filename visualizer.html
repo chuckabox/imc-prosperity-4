@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROSPERITY — STRATEGY INTELLIGENCE v5.5</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600&family=Outfit:wght@300;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    :root {
+        --bg: #040508;
+        --surface: #0a0c10;
+        --border: #1a1e26;
+        --accent: #00ff9d;
+        --danger: #ff4757;
+        --warning: #ffa502;
+        --info: #00d1ff;
+        --text: #e2e8f0;
+        --text-dim: #545d6a;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'IBM Plex Mono', monospace; }
+    body { background-color: var(--bg); color: var(--text); overflow: hidden; height: 100vh; }
+
+    .app-container {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        grid-template-rows: 60px 1fr;
+        height: 100vh;
+    }
+
+    header {
+        grid-column: 1 / -1;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; padding: 0 30px; justify-content: space-between; z-index: 100;
+    }
+    .brand { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 1.1rem; color: var(--accent); }
+    .nav-tabs { display: flex; gap: 2px; background: #111; padding: 4px; border-radius: 6px; }
+    .tab { 
+        padding: 6px 15px; font-size: 0.65rem; color: var(--text-dim); cursor: pointer; border-radius: 4px; transition: 0.2s;
+        border: none; background: none; font-weight: 600;
+    }
+    .tab.active { background: var(--accent); color: #000; }
+
+    aside {
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        display: flex; flex-direction: column; height: calc(100vh - 60px); overflow: hidden;
+    }
+    
+    .sidebar-inner { padding: 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 25px; }
+
+    .section-label { font-size: 0.55rem; text-transform: uppercase; color: var(--text-dim); letter-spacing: 2px; display: block; margin-bottom: 10px; }
+    
+    .filter-row { display: flex; gap: 10px; margin-bottom: 10px; }
+    .select-pill { 
+        flex: 1; padding: 5px; background: #111; border: 1px solid var(--border); border-radius: 4px; 
+        font-size: 0.6rem; color: var(--text-dim); text-align: center; cursor: pointer;
+    }
+    .select-pill.active { border-color: var(--accent); color: var(--accent); }
+
+    .sticky-header {
+        position: sticky; top: 0; background: var(--surface); padding: 5px 0 15px; z-index: 50;
+        display: flex; justify-content: space-between; align-items: center;
+        border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 15px;
+    }
+
+    /* REAL BUTTON STYLE FOR RESET */
+    .reset-btn {
+        background: rgba(255, 71, 87, 0.05);
+        color: var(--danger);
+        border: 1px solid var(--danger);
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 0.55rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .reset-btn:hover {
+        background: var(--danger);
+        color: white;
+        box-shadow: 0 0 10px rgba(255, 71, 87, 0.3);
+    }
+    .reset-btn:active { transform: scale(0.95); }
+
+    .strategy-card {
+        padding: 10px; border-radius: 6px; background: rgba(255,255,255,0.02); border: 1px solid transparent;
+        margin-bottom: 5px; cursor: pointer; transition: 0.2s; position: relative;
+    }
+    .strategy-card:hover { background: rgba(255,255,255,0.04); }
+    .strategy-card.active { border-color: var(--accent); background: rgba(0, 255, 157, 0.05); }
+    .card-color { width: 3px; height: 100%; position: absolute; left: 0; top: 0; border-radius: 3px 0 0 3px; }
+    .card-name { font-size: 0.7rem; font-weight: 600; display: block; }
+    .card-stats { font-size: 0.55rem; color: var(--text-dim); }
+
+    main { padding: 20px; overflow: hidden; height: calc(100vh - 60px); }
+    .tab-content { height: 100%; display: flex; flex-direction: column; gap: 20px; }
+    
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; overflow: hidden; display: flex; flex-direction: column; }
+    .chart-container { position: relative; width: 100%; flex: 1; min-height: 0; }
+
+    .analytics-grid { display: grid; grid-template-columns: 1fr; grid-template-rows: 1.5fr 1fr; gap: 20px; height: 100%; }
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .metric-tile { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; }
+    .metric-label { color: var(--text-dim); font-size: 0.55rem; text-transform: uppercase; letter-spacing: 1px; }
+    .metric-value { font-size: 0.9rem; font-weight: 700; margin-top: 6px; }
+    .chart-note { color: var(--text-dim); font-size: 0.55rem; letter-spacing: 0.8px; margin: 6px 0 8px; }
+    .heatmap-table td.heat-cell { font-weight: 700; text-align: center; border-radius: 4px; }
+    .panel-sticky-title {
+        position: sticky;
+        top: 0;
+        z-index: 45;
+        background: var(--surface);
+        margin: -20px -20px 8px;
+        padding: 12px 20px 10px;
+        display: block;
+        margin-bottom: 8px;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .panel-sticky-title.section-gap { margin-top: 20px; }
+    .sticky-table thead {
+        position: sticky;
+        top: 42px;
+        z-index: 34;
+    }
+    .sticky-table thead tr {
+        background: var(--surface);
+        box-shadow: 0 1px 0 rgba(255,255,255,0.05);
+    }
+    .sticky-table thead th {
+        position: sticky;
+        top: 42px;
+        background: var(--surface);
+        z-index: 35;
+        padding-top: 8px;
+    }
+    .sortable-th { cursor: pointer; user-select: none; white-space: nowrap; }
+    .sort-icon { margin-left: 6px; opacity: 0.45; font-size: 0.62rem; }
+    .sortable-th.active .sort-icon { opacity: 1; color: var(--accent); }
+    .baseline-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .baseline-select {
+        background: #111;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 5px 8px;
+        font-size: 0.62rem;
+    }
+
+    table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.7rem; }
+    th { text-align: left; color: var(--text-dim); padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+    td { padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.02); }
+
+    .hidden { display: none !important; }
+
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-thumb { background: #222; }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+    <header>
+        <div class="brand">PROSPERITY <span>INTELLIGENCE v5.5</span></div>
+        <div class="nav-tabs">
+            <button class="tab active" onclick="switchTab('performance')">OVERLAY</button>
+            <button class="tab" onclick="switchTab('attribution')">ATTRIBUTION</button>
+            <button class="tab" onclick="switchTab('stability')">STABILITY</button>
+        </div>
+        <div style="font-size: 0.6rem; color: var(--text-dim);">SYSTEM STABLE v5.5</div>
+    </header>
+
+    <aside>
+        <div class="sidebar-inner">
+            <div>
+                <span class="section-label">Context Filter</span>
+                <div class="filter-row">
+                    <div id="r3-btn" class="select-pill active" onclick="setFilter('round', 3)">R3</div>
+                    <div id="r4-btn" class="select-pill" onclick="setFilter('round', 4)">R4</div>
+                    <div id="r5-btn" class="select-pill" onclick="setFilter('round', 5)">R5</div>
+                </div>
+                <div class="filter-row">
+                    <div id="d0-btn" class="select-pill active" onclick="setFilter('day', 0)">D0</div>
+                    <div id="d1-btn" class="select-pill" onclick="setFilter('day', 1)">D1</div>
+                    <div id="d2-btn" class="select-pill" onclick="setFilter('day', 2)">D2</div>
+                </div>
+            </div>
+
+            <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                <div class="sticky-header">
+                    <span class="section-label" style="margin:0;">Strategies</span>
+                    <button class="reset-btn" onclick="resetSelection()">RESET ALL</button>
+                </div>
+                <div id="strategyList" style="overflow-y: auto; flex: 1;"></div>
+            </div>
+        </div>
+    </aside>
+
+    <main id="mainView">
+        <div id="tab-performance" class="tab-content">
+            <div class="panel" style="flex: 1.5;">
+                <span class="section-label">PnL Overlay</span>
+                <div id="quickStats" class="summary-grid" style="margin: 10px 0 14px;"></div>
+                <div class="chart-container"><canvas id="performanceChart"></canvas></div>
+                <div id="pairwisePanel" class="hidden" style="margin-top: 14px;">
+                    <div class="baseline-row">
+                        <span class="section-label" style="margin:0;">Baseline</span>
+                        <select id="baselineSelect" class="baseline-select" onchange="setPairwiseBaseline(this.value)"></select>
+                    </div>
+                    <div id="pairwiseNote" class="chart-note"></div>
+                    <div class="chart-container" style="height: 140px; flex: unset;"><canvas id="pairwiseChart"></canvas></div>
+                </div>
+            </div>
+            <div class="panel" style="flex: 1; overflow-y: auto;">
+                <span class="section-label panel-sticky-title">Batch Metrics</span>
+                <table id="leaderboardTable" class="sticky-table">
+                    <thead><tr><th>STRATEGY</th><th class="sortable-th" onclick="setSortMetric('pnl')">PNL <span class="sort-icon" data-sort-key="pnl">-</span></th><th>MAX DD</th><th class="sortable-th" onclick="setSortMetric('ratio')">CALMAR <span class="sort-icon" data-sort-key="ratio">-</span></th><th class="sortable-th" onclick="setSortMetric('sharpe')">SHARPE* <span class="sort-icon" data-sort-key="sharpe">-</span></th><th class="sortable-th" onclick="setSortMetric('greenTicks')">GREEN TICKS <span class="sort-icon" data-sort-key="greenTicks">-</span></th><th class="sortable-th" onclick="setSortMetric('readiness')">READINESS <span class="sort-icon" data-sort-key="readiness">-</span></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="tab-attribution" class="tab-content hidden">
+            <div class="analytics-grid">
+                <div class="panel">
+                    <span class="section-label">Grouped Product Attribution</span>
+                    <div class="chart-container"><canvas id="attributionChart"></canvas></div>
+                </div>
+                <div class="panel" style="overflow-y: auto;">
+                    <span class="section-label panel-sticky-title">Asset Performance Leaderboard</span>
+                    <table id="assetLeaderboard" class="sticky-table">
+                        <thead><tr><th>ASSET</th><th>BEST STRATEGY</th><th>MAX PROFIT</th><th>LEAST PROFIT</th><th>SPREAD</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-stability" class="tab-content hidden">
+            <div class="panel" style="height: 100%; overflow-y: auto;">
+                <span class="section-label panel-sticky-title">Cross-Day Matrix</span>
+                <table id="stabilityTable" class="sticky-table">
+                    <thead><tr><th>STRATEGY</th><th>D0 PNL</th><th>D1 PNL</th><th>D2 PNL</th><th>AVG</th><th>RANGE</th><th>CONSISTENCY</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+                <span class="section-label panel-sticky-title section-gap">Per-Asset Day Stability Heatmap</span>
+                <table id="assetStabilityTable" class="heatmap-table sticky-table">
+                    <thead><tr><th>ASSET</th><th>D0</th><th>D1</th><th>D2</th><th>SPREAD</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="backtest_comparison.js"></script>
+<script>
+    const COLORS = ['#00ff9d', '#00d1ff', '#ff4757', '#ffa502', '#cc44ff', '#eccc68', '#7bed9f', '#ff6b81', '#1e90ff', '#ffffff'];
+    let currentFilters = { round: 3, day: 0 };
+    let selectedIds = [];
+    let activeTab = 'performance';
+    let sortMetric = 'pnl';
+    let sortDirection = 'desc';
+    let baselineStrategyId = null;
+    let charts = {};
+
+    function init() { updateSortIndicators(); renderSidebar(); renderActiveTab(); }
+    function switchTab(t) { 
+        activeTab = t; 
+        document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+        document.querySelector(`.tab[onclick*="${t}"]`).classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+        document.getElementById(`tab-${t}`).classList.remove('hidden');
+        renderActiveTab();
+    }
+    function setFilter(type, val) {
+        currentFilters[type] = val;
+        document.querySelectorAll(`.select-pill`).forEach(p => p.classList.remove('active'));
+        document.getElementById(`r${currentFilters.round}-btn`).classList.add('active');
+        document.getElementById(`d${currentFilters.day}-btn`).classList.add('active');
+        resetSelection();
+    }
+    function resetSelection() { 
+        selectedIds = []; 
+        baselineStrategyId = null;
+        renderSidebar(); 
+        renderActiveTab(); 
+        if (selectedIds.length === 0) {
+            if (charts.perf) charts.perf.destroy();
+            if (charts.attr) charts.attr.destroy();
+            if (charts.diff) charts.diff.destroy();
+            const lb = document.querySelector('#leaderboardTable tbody'); if (lb) lb.innerHTML = '';
+            const alb = document.querySelector('#assetLeaderboard tbody'); if (alb) alb.innerHTML = '';
+        }
+    }
+    function setSortMetric(metric) {
+        if (sortMetric === metric) sortDirection = sortDirection === 'desc' ? 'asc' : 'desc';
+        else {
+            sortMetric = metric;
+            sortDirection = 'desc';
+        }
+        updateSortIndicators();
+        renderPerformance();
+    }
+    function updateSortIndicators() {
+        document.querySelectorAll('.sortable-th').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.sort-icon').forEach(el => { el.textContent = '-'; });
+        const icon = document.querySelector(`.sort-icon[data-sort-key="${sortMetric}"]`);
+        if (!icon) return;
+        icon.textContent = sortDirection === 'desc' ? 'v' : '^';
+        icon.parentElement.classList.add('active');
+    }
+    function renderSidebar() {
+        const container = document.getElementById('strategyList'); container.innerHTML = '';
+        const filtered = Object.keys(BACKTEST_DATA).filter(id => {
+            const r = BACKTEST_DATA[id]; return r.round === currentFilters.round && r.day === currentFilters.day;
+        }).sort((a,b) => BACKTEST_DATA[b].final_pnl - BACKTEST_DATA[a].final_pnl);
+        filtered.forEach(id => {
+            const r = BACKTEST_DATA[id]; const isActive = selectedIds.includes(id);
+            const card = document.createElement('div'); card.className = `strategy-card ${isActive ? 'active' : ''}`;
+            const color = isActive ? COLORS[selectedIds.indexOf(id) % COLORS.length] : 'transparent';
+            card.innerHTML = `<div class="card-color" style="background:${color}"></div><span class="card-name">${r.trader}</span><span class="card-stats">PnL: ${Math.round(r.final_pnl).toLocaleString()}</span>`;
+            card.onclick = () => toggleSelect(id); container.appendChild(card);
+        });
+    }
+    function toggleSelect(id) {
+        const idx = selectedIds.indexOf(id); if (idx > -1) selectedIds.splice(idx, 1); else selectedIds.push(id);
+        if (baselineStrategyId && !selectedIds.includes(baselineStrategyId)) baselineStrategyId = null;
+        if (!baselineStrategyId && selectedIds.length) baselineStrategyId = selectedIds[0];
+        renderSidebar(); renderActiveTab();
+    }
+    function setPairwiseBaseline(id) {
+        baselineStrategyId = id;
+        renderPairwiseDiff();
+    }
+    function buildEquityCurve(history) {
+        const byTs = new Map();
+        history.forEach(point => {
+            if (!byTs.has(point.ts)) byTs.set(point.ts, new Map());
+            byTs.get(point.ts).set(point.symbol, point.pnl);
+        });
+        const symbols = new Map();
+        const orderedTs = [...byTs.keys()].sort((a, b) => a - b);
+        return orderedTs.map(ts => {
+            byTs.get(ts).forEach((pnl, symbol) => symbols.set(symbol, pnl));
+            const total = [...symbols.values()].reduce((acc, val) => acc + val, 0);
+            return { ts, pnl: total };
+        });
+    }
+    function calcMDD(curve) {
+        let peak = -Infinity;
+        let maxDrawdown = 0;
+        curve.forEach(point => {
+            if (point.pnl > peak) peak = point.pnl;
+            const drawdown = point.pnl - peak;
+            if (drawdown < maxDrawdown) maxDrawdown = drawdown;
+        });
+        return maxDrawdown;
+    }
+    function calcReturns(curve) {
+        const returns = [];
+        for (let i = 1; i < curve.length; i += 1) returns.push(curve[i].pnl - curve[i - 1].pnl);
+        return returns;
+    }
+    function calcSharpe(returns) {
+        if (returns.length < 2) return 0;
+        const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+        const variance = returns.reduce((acc, val) => acc + (val - mean) ** 2, 0) / (returns.length - 1);
+        const std = Math.sqrt(variance);
+        if (!std) return 0;
+        return (mean / std) * Math.sqrt(returns.length);
+    }
+
+    function renderActiveTab() {
+        if (activeTab === 'performance') renderPerformance();
+        if (activeTab === 'attribution') renderAttribution();
+        if (activeTab === 'stability') renderStability();
+    }
+
+    function renderPerformance() {
+        const datasets = []; const tbody = document.querySelector('#leaderboardTable tbody'); tbody.innerHTML = '';
+        const metricRows = [];
+        selectedIds.forEach((id, i) => {
+            const r = BACKTEST_DATA[id];
+            const color = COLORS[i % COLORS.length];
+            const equityCurve = buildEquityCurve(r.history);
+            const mdd = calcMDD(equityCurve);
+            const ratio = (r.final_pnl / (Math.abs(mdd) || 1)).toFixed(2);
+            const returns = calcReturns(equityCurve);
+            const sharpe = calcSharpe(returns);
+            const greenTicks = returns.length ? Math.round((returns.filter(v => v > 0).length / returns.length) * 100) : 0;
+            const readiness = Math.min(100, Math.max(0, Math.round(((Number(ratio) * 0.6) + (Math.max(-2, Math.min(2, sharpe)) + 2) * 10 + (greenTicks / 5)))));
+            datasets.push({ label: r.trader, data: equityCurve.map(h => h.pnl), borderColor: color, borderWidth: 2, pointRadius: 0 });
+            metricRows.push({ trader: r.trader, pnl: r.final_pnl, mdd, sharpe, greenTicks, readiness, ratio: Number(ratio), color, id });
+        });
+        metricRows.sort((a, b) => {
+            const delta = (a[sortMetric] || 0) - (b[sortMetric] || 0);
+            return sortDirection === 'desc' ? -delta : delta;
+        });
+        metricRows.forEach(row => {
+            tbody.innerHTML += `<tr><td style="color:${row.color}; font-weight:700;">● ${row.trader}</td><td style="color:${row.pnl > 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.pnl).toLocaleString()}</td><td style="color:var(--danger)">${Math.round(row.mdd).toLocaleString()}</td><td>${row.ratio.toFixed(2)}x</td><td>${row.sharpe.toFixed(2)}</td><td>${row.greenTicks}%</td><td><div style="height:4px; width:100px; background:#111;"><div style="height:100%; width:${row.readiness}%; background:var(--accent);"></div></div></td></tr>`;
+        });
+        if (charts.perf) charts.perf.destroy();
+        const labels = selectedIds.length > 0 ? buildEquityCurve(BACKTEST_DATA[selectedIds[0]].history).map(h => h.ts) : [];
+        charts.perf = new Chart(document.getElementById('performanceChart'), { type: 'line', data: { labels, datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.03)' } } }, plugins: { legend: { display: false } } } });
+        const quickStats = document.getElementById('quickStats');
+        if (!metricRows.length) {
+            quickStats.innerHTML = '';
+            return;
+        }
+        const bestPnl = metricRows.reduce((a, b) => (a.pnl > b.pnl ? a : b));
+        const safest = metricRows.reduce((a, b) => (Math.abs(a.mdd) < Math.abs(b.mdd) ? a : b));
+        const bestSharpe = metricRows.reduce((a, b) => (a.sharpe > b.sharpe ? a : b));
+        const avgGreen = Math.round(metricRows.reduce((acc, row) => acc + row.greenTicks, 0) / metricRows.length);
+        quickStats.innerHTML = `
+            <div class="metric-tile"><div class="metric-label">Top PnL</div><div class="metric-value">${bestPnl.trader}</div></div>
+            <div class="metric-tile"><div class="metric-label">Best Sharpe*</div><div class="metric-value">${bestSharpe.trader} (${bestSharpe.sharpe.toFixed(2)})</div></div>
+            <div class="metric-tile"><div class="metric-label">Lowest Drawdown</div><div class="metric-value">${safest.trader}</div></div>
+            <div class="metric-tile"><div class="metric-label">Avg Green Ticks</div><div class="metric-value">${avgGreen}%</div></div>
+        `;
+        renderPairwiseDiff();
+    }
+    function renderPairwiseDiff() {
+        const pairwisePanel = document.getElementById('pairwisePanel');
+        const baselineSelect = document.getElementById('baselineSelect');
+        const pairwiseNote = document.getElementById('pairwiseNote');
+        if (selectedIds.length < 2) {
+            pairwisePanel.classList.add('hidden');
+            if (charts.diff) charts.diff.destroy();
+            return;
+        }
+        if (!baselineStrategyId || !selectedIds.includes(baselineStrategyId)) baselineStrategyId = selectedIds[0];
+        baselineSelect.innerHTML = selectedIds.map(id => `<option value="${id}" ${id === baselineStrategyId ? 'selected' : ''}>${BACKTEST_DATA[id].trader}</option>`).join('');
+        pairwisePanel.classList.remove('hidden');
+        const baseline = BACKTEST_DATA[baselineStrategyId];
+        const baselineCurve = buildEquityCurve(baseline.history);
+        const labels = baselineCurve.map(p => p.ts);
+        const datasets = [];
+        selectedIds.filter(id => id !== baselineStrategyId).forEach((id, idx) => {
+            const challenger = BACKTEST_DATA[id];
+            const challengerCurve = buildEquityCurve(challenger.history);
+            const len = Math.min(baselineCurve.length, challengerCurve.length);
+            const diffData = [];
+            for (let i = 0; i < len; i += 1) diffData.push(challengerCurve[i].pnl - baselineCurve[i].pnl);
+            datasets.push({
+                label: `${challenger.trader} - ${baseline.trader}`,
+                data: diffData,
+                borderColor: COLORS[(idx + 3) % COLORS.length],
+                borderWidth: 2,
+                pointRadius: 0
+            });
+        });
+        pairwiseNote.textContent = datasets.length === 1
+            ? 'PAIRWISE DIFFERENCE CURVE (CHALLENGER - BASELINE)'
+            : 'BASELINE DIFFERENCE CURVES (ALL SELECTED STRATEGIES VS BASELINE)';
+        if (charts.diff) charts.diff.destroy();
+        charts.diff = new Chart(document.getElementById('pairwiseChart'), {
+            type: 'line',
+            data: { labels, datasets },
+            options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.03)' } } }, plugins: { legend: { display: datasets.length > 1 } } }
+        });
+    }
+
+    function renderAttribution() {
+        if (selectedIds.length === 0) return;
+        const assets = [...new Set(selectedIds.flatMap(id => Object.keys(BACKTEST_DATA[id].final_pnl_by_product)))].sort();
+        const datasets = selectedIds.map((id, i) => {
+            const r = BACKTEST_DATA[id]; return { label: r.trader, data: assets.map(a => r.final_pnl_by_product[a] || 0), backgroundColor: COLORS[i % COLORS.length], borderRadius: 4 };
+        });
+        if (charts.attr) charts.attr.destroy();
+        charts.attr = new Chart(document.getElementById('attributionChart'), { type: 'bar', data: { labels: assets, datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { grid: { color: 'rgba(255,255,255,0.03)' } } } } });
+        const tbody = document.querySelector('#assetLeaderboard tbody'); tbody.innerHTML = '';
+        assets.forEach(a => {
+            const scores = selectedIds.map(id => ({ name: BACKTEST_DATA[id].trader, val: BACKTEST_DATA[id].final_pnl_by_product[a] || 0 }));
+            scores.sort((x,y) => y.val - x.val);
+            const spread = scores[0].val - scores[scores.length - 1].val;
+            tbody.innerHTML += `<tr><td><b>${a}</b></td><td>${scores[0].name}</td><td style="color:var(--accent)">${Math.round(scores[0].val).toLocaleString()}</td><td style="color:var(--danger)">${Math.round(scores[scores.length-1].val).toLocaleString()}</td><td>${Math.round(spread).toLocaleString()}</td></tr>`;
+        });
+    }
+
+    function renderStability() {
+        const tbody = document.querySelector('#stabilityTable tbody'); tbody.innerHTML = '';
+        const assetTbody = document.querySelector('#assetStabilityTable tbody'); assetTbody.innerHTML = '';
+        const traders = [...new Set(Object.values(BACKTEST_DATA).map(r => r.trader))];
+        traders.forEach(t => {
+            const runs = Object.values(BACKTEST_DATA).filter(r => r.trader === t && r.round === currentFilters.round);
+            if (runs.length < 2) return;
+            const d0 = runs.find(r => r.day === 0)?.final_pnl || 0;
+            const d1 = runs.find(r => r.day === 1)?.final_pnl || 0;
+            const d2 = runs.find(r => r.day === 2)?.final_pnl || 0;
+            const avg = (d0 + d1 + d2) / 3;
+            const range = Math.max(d0, d1, d2) - Math.min(d0, d1, d2);
+            const consistency = Math.max(0, 100 - Math.round((Math.abs(range) / (Math.abs(avg) + 1)) * 100));
+            tbody.innerHTML += `<tr><td><b>${t}</b></td><td>${Math.round(d0).toLocaleString()}</td><td>${Math.round(d1).toLocaleString()}</td><td>${Math.round(d2).toLocaleString()}</td><td>${Math.round(avg).toLocaleString()}</td><td style="color:${range > 50000 ? 'var(--danger)' : 'var(--warning)'}">${Math.round(range).toLocaleString()}</td><td style="color:${consistency < 40 ? 'var(--danger)' : 'var(--accent)'}">${consistency}%</td></tr>`;
+        });
+        const roundRuns = Object.values(BACKTEST_DATA).filter(r => r.round === currentFilters.round);
+        const assets = [...new Set(roundRuns.flatMap(r => Object.keys(r.final_pnl_by_product || {})))].sort();
+        assets.forEach(asset => {
+            const dayVals = [0, 1, 2].map(day => {
+                const vals = roundRuns.filter(r => r.day === day).map(r => r.final_pnl_by_product?.[asset] || 0);
+                if (!vals.length) return 0;
+                return vals.reduce((a, b) => a + b, 0) / vals.length;
+            });
+            const spread = Math.max(...dayVals) - Math.min(...dayVals);
+            const cell = v => {
+                const alpha = Math.min(0.7, Math.abs(v) / 12000);
+                const base = v >= 0 ? `rgba(0,255,157,${alpha})` : `rgba(255,71,87,${alpha})`;
+                return `<td class="heat-cell" style="background:${base};">${Math.round(v).toLocaleString()}</td>`;
+            };
+            assetTbody.innerHTML += `<tr><td><b>${asset}</b></td>${cell(dayVals[0])}${cell(dayVals[1])}${cell(dayVals[2])}<td>${Math.round(spread).toLocaleString()}</td></tr>`;
+        });
+    }
+    init();
+</script>
+
+</body>
+</html>
