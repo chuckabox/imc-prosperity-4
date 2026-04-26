@@ -96,10 +96,16 @@ class Trader:
 
     # VEV from Peter baseline with selective 5200 override
     VEV_TTE_START = 8.0
+    VEV_DAY_INIT = 2              # upload slice is day 2 start
     VEV_FIT_STRIKES = [5000, 5100, 5200, 5300, 5400, 5500]
     VEV_TAKE_EDGE_DEFAULT = 1.0   # Peter v100
-    VEV_TAKE_EDGE_5200 = 1.5      # Peter v200 for 5200 only
+    VEV_TAKE_EDGE_5200 = 2.0      # stricter 5200 entry
     VEV_CAP = 60
+    VEV_5200_CAP = 40             # known leak strike: run tighter inventory
+    VEV_GLOBAL_ABS_CAP = 320      # keep total voucher risk bounded
+    VEV_PHASE_SWITCH_TS = 200_000 # after ~20% of day, prioritize retention
+    VEV_PHASE2_CAP_SCALE = 0.65   # cut inventory limits in late session
+    VEV_PHASE2_EDGE_BUMP = 0.6    # require more edge to add risk in phase 2
 
     # For v79b-style VFE hedge target
     DELTA_APPROX: Dict[int, float] = {
@@ -130,12 +136,20 @@ class Trader:
         self.history.setdefault("vfe_mids", [])
         self.history.setdefault("last_vfe_pos", 0)
         self.history.setdefault("vfe_speed_cooldown_until", -1)
+        self.history.setdefault("day_index", self.VEV_DAY_INIT)
+        self.history.setdefault("last_ts", -1)
 
     def _save(self) -> str:
         h = dict(self.history)
         if "vfe_mids" in h and len(h["vfe_mids"]) > 500:
             h["vfe_mids"] = h["vfe_mids"][-500:]
         return json.dumps(h)
+
+    def _update_day(self, ts: int) -> None:
+        last = int(self.history.get("last_ts", -1))
+        if last >= 0 and ts < last:
+            self.history["day_index"] = int(self.history.get("day_index", self.VEV_DAY_INIT)) + 1
+        self.history["last_ts"] = ts
 
     @staticmethod
     def _top(d: OrderDepth) -> Tuple[Optional[int], Optional[int], int, int]:
@@ -316,7 +330,9 @@ class Trader:
         S = self._mid(state.order_depths[VFE])
         if S is None:
             return []
-        T = max(0.5, self.VEV_TTE_START - state.timestamp / TS_PER_DAY)
+        day = int(self.history.get("day_index", self.VEV_DAY_INIT))
+        T = max(0.5, (self.VEV_TTE_START - day) - state.timestamp / TS_PER_DAY)
+        phase2 = int(state.timestamp) >= self.VEV_PHASE_SWITCH_TS
 
         all_iv: Dict[int, float] = {}
         for K in self.VEV_FIT_STRIKES:
@@ -331,6 +347,9 @@ class Trader:
 
         orders: List[Order] = []
 
+        global_cap = int(self.VEV_GLOBAL_ABS_CAP * (self.VEV_PHASE2_CAP_SCALE if phase2 else 1.0))
+        abs_vev_pos = sum(abs(state.position.get(f"VEV_{k}", 0)) for k in VEV_STRIKES)
+
         # 4000/4500 from Peter baseline
         for K in [4000, 4500]:
             sym = f"VEV_{K}"
@@ -339,16 +358,24 @@ class Trader:
                 continue
             fair = max(S - K, 0.0)
             pos = state.position.get(sym, 0)
-            lim = self.VEV_CAP
+            lim = int(self.VEV_CAP * (self.VEV_PHASE2_CAP_SCALE if phase2 else 1.0))
             bb, ba, _, _ = self._top(od)
             if ba and ba < fair:
-                orders.append(Order(sym, ba, min(lim - pos, -od.sell_orders[ba])))
+                qty = min(lim - pos, -od.sell_orders[ba], global_cap - abs_vev_pos)
+                if qty > 0:
+                    orders.append(Order(sym, ba, qty))
+                    abs_vev_pos += qty
             if bb and bb > fair + 1:
                 orders.append(Order(sym, bb, -min(lim + pos, od.buy_orders[bb])))
             if lim - pos > 0:
-                orders.append(Order(sym, int(fair), min(20, lim - pos)))
+                maker_cap = 12 if phase2 else 20
+                qty = min(maker_cap, lim - pos, global_cap - abs_vev_pos)
+                if qty > 0:
+                    orders.append(Order(sym, int(fair), qty))
+                    abs_vev_pos += qty
             if lim + pos > 0:
-                orders.append(Order(sym, int(fair + 2), -min(20, lim + pos)))
+                maker_cap = 12 if phase2 else 20
+                orders.append(Order(sym, int(fair + 2), -min(maker_cap, lim + pos)))
 
         # Smile module for 5000..5500 from Peter, with 5200 using v200 take edge
         for K in self.VEV_FIT_STRIKES:
@@ -377,16 +404,24 @@ class Trader:
             fit_iv = coefs[0] * mny * mny + coefs[1] * mny + coefs[2]
             fair = bs_call(S, K, T, fit_iv)
             pos = state.position.get(sym, 0)
-            lim = self.VEV_CAP
+            base_lim = self.VEV_5200_CAP if K == 5200 else self.VEV_CAP
+            lim = int(base_lim * (self.VEV_PHASE2_CAP_SCALE if phase2 else 1.0))
             bb, ba, _, _ = self._top(od)
 
             take_edge = self.VEV_TAKE_EDGE_5200 if K == 5200 else self.VEV_TAKE_EDGE_DEFAULT
+            if phase2:
+                take_edge += self.VEV_PHASE2_EDGE_BUMP
             if ba and ba <= fair - take_edge:
-                orders.append(Order(sym, ba, min(30, lim - pos, -od.sell_orders[ba])))
+                taker_cap = 18 if phase2 else 30
+                qty = min(taker_cap, lim - pos, -od.sell_orders[ba], global_cap - abs_vev_pos)
+                if qty > 0:
+                    orders.append(Order(sym, ba, qty))
+                    abs_vev_pos += qty
             if bb and bb >= fair + take_edge:
                 orders.append(Order(sym, bb, -min(30, lim + pos, od.buy_orders[bb])))
 
-            q_bid, q_ask = int(round(fair - 1)), int(round(fair + 1))
+            base_edge = 2 if K == 5200 else 1
+            q_bid, q_ask = int(round(fair - base_edge)), int(round(fair + base_edge))
             if bb:
                 q_bid = min(q_bid, bb + 1)
             if ba:
@@ -394,9 +429,18 @@ class Trader:
             if q_bid >= q_ask:
                 q_bid = q_ask - 1
             if lim - pos > 0:
-                orders.append(Order(sym, q_bid, min(20, lim - pos)))
+                maker_cap = 12 if K == 5200 else 20
+                if phase2:
+                    maker_cap = max(6, int(maker_cap * 0.6))
+                qty = min(maker_cap, lim - pos, global_cap - abs_vev_pos)
+                if qty > 0:
+                    orders.append(Order(sym, q_bid, qty))
+                    abs_vev_pos += qty
             if lim + pos > 0:
-                orders.append(Order(sym, q_ask, -min(20, lim + pos)))
+                maker_cap = 12 if K == 5200 else 20
+                if phase2:
+                    maker_cap = max(6, int(maker_cap * 0.6))
+                orders.append(Order(sym, q_ask, -min(maker_cap, lim + pos)))
 
         # 6000/6500 remain "as-is" (Peter baseline has no active logic here)
         return orders
@@ -411,6 +455,7 @@ class Trader:
 
     def run(self, state: TradingState) -> Tuple[Dict[str, List[Order]], int, str]:
         self._load(state)
+        self._update_day(int(state.timestamp))
         result: Dict[str, List[Order]] = {}
 
         h = self._hp(state)
