@@ -25,8 +25,8 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_TRADER = REPO_ROOT / "ROUND 2" / "traders" / "ken" / "trader_ken_v6.py"
-DEFAULT_DATASET = REPO_ROOT / "ROUND 2" / "data_capsule"
+DEFAULT_TRADER = REPO_ROOT / "ROUND 3" / "traders" / "ken" / "we_found_vfe_gold2.py"
+DEFAULT_DATASET = REPO_ROOT / "ROUND 3" / "data_capsule"
 DEFAULT_RUNS_DIR = REPO_ROOT / "external" / "prosperity_rust_backtester" / "runs"
 
 
