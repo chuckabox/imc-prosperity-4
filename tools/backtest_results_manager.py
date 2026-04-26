@@ -1,14 +1,14 @@
 import argparse
 import hashlib
 import json
-import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Tuple
 
 
-RUNS_DIR = Path("external/prosperity_rust_backtester/runs")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+RUNS_DIR = REPO_ROOT / "external" / "prosperity_rust_backtester" / "runs"
 
 
 @dataclass
@@ -40,7 +40,6 @@ def _safe_float(value, default=0.0):
 
 
 def _build_fingerprint(metrics: Dict) -> str:
-    # Compact deterministic signature of "same run result".
     payload = {
         "trader_path": metrics.get("trader_path"),
         "dataset_id": metrics.get("dataset_id"),
@@ -110,7 +109,6 @@ def choose_keep_and_delete(dupe_groups: Dict[Tuple[str, str, int, str], List[Run
     keep: List[RunInfo] = []
     delete: List[RunInfo] = []
     for _, items in dupe_groups.items():
-        # Keep newest by metrics mtime (if tied, lexicographically largest run_id).
         sorted_items = sorted(items, key=lambda x: (x.metrics_mtime, x.run_id), reverse=True)
         keep.append(sorted_items[0])
         delete.extend(sorted_items[1:])
@@ -138,12 +136,6 @@ def apply_delete(delete_runs: List[RunInfo]):
         shutil.rmtree(r.path, ignore_errors=True)
 
 
-def load_manifest_run_ids(manifest_path: Path) -> Set[str]:
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    run_ids = payload.get("run_ids", [])
-    return {str(x) for x in run_ids}
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Manage rust backtester results and remove duplicate runs safely."
@@ -158,45 +150,10 @@ def main():
         action="store_true",
         help="Actually delete duplicate runs (without this flag, dry-run only).",
     )
-    parser.add_argument(
-        "--manifest",
-        default="",
-        help="Optional JSON manifest with run_ids exported from visualizer manager.",
-    )
     args = parser.parse_args()
 
     runs_dir = Path(args.runs_dir)
     runs = collect_runs(runs_dir)
-    run_map = {r.run_id: r for r in runs}
-
-    if args.manifest:
-        manifest_path = Path(args.manifest)
-        if not manifest_path.exists():
-            raise FileNotFoundError(f"Manifest not found: {manifest_path}")
-        target_ids = load_manifest_run_ids(manifest_path)
-        delete = [run_map[rid] for rid in sorted(target_ids) if rid in run_map]
-        print(f"Manifest mode: {manifest_path}")
-        print(f"Requested run_ids: {len(target_ids)}")
-        print(f"Found run folders: {len(delete)}")
-        if delete:
-            print()
-            print("Planned deletions:")
-            for r in delete:
-                print(
-                    f"- {r.run_id} | trader={Path(r.trader_path).name} | dataset={r.dataset_id} "
-                    f"| day={r.day} | pnl={r.final_pnl:.2f}"
-                )
-        if args.apply and delete:
-            apply_delete(delete)
-            print()
-            print(f"Deleted {len(delete)} run folders from manifest.")
-        elif args.apply:
-            print()
-            print("Nothing deleted from manifest.")
-        else:
-            print()
-            print("Dry-run mode only. Re-run with --apply to delete manifest run_ids.")
-        return
 
     dupe_groups = group_duplicates(runs)
     keep, delete = choose_keep_and_delete(dupe_groups)
@@ -216,4 +173,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

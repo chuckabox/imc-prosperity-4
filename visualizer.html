@@ -89,6 +89,29 @@
         cursor: pointer;
     }
     .manager-btn:hover { background: rgba(255,255,255,0.12); }
+    .manager-btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+        background: rgba(255,255,255,0.03);
+    }
+    .manager-btn-accent {
+        background: rgba(0, 255, 157, 0.12);
+        color: var(--accent);
+        border-color: rgba(0, 255, 157, 0.55);
+    }
+    .manager-btn-accent:hover {
+        background: rgba(0, 255, 157, 0.2);
+        color: #b8ffe3;
+    }
+    .manager-btn-danger {
+        background: rgba(255, 71, 87, 0.12);
+        color: #ff8f99;
+        border-color: rgba(255, 71, 87, 0.55);
+    }
+    .manager-btn-danger:hover {
+        background: rgba(255, 71, 87, 0.22);
+        color: #ffd6da;
+    }
     .manager-input {
         background: #111;
         color: var(--text);
@@ -96,7 +119,104 @@
         border-radius: 4px;
         padding: 6px 8px;
         font-size: 0.62rem;
+        font-weight: 600;
+        height: 30px;
+        line-height: 1.1;
         min-width: 130px;
+    }
+    .manager-input:focus {
+        outline: none;
+        border-color: rgba(0, 255, 157, 0.7);
+        box-shadow: 0 0 0 2px rgba(0, 255, 157, 0.12);
+    }
+    .manager-round-dropdown {
+        position: relative;
+        min-width: 130px;
+    }
+    .manager-dropdown-trigger {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        background: #111;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-size: 0.62rem;
+        font-weight: 600;
+        height: 30px;
+        cursor: pointer;
+    }
+    .manager-dropdown-trigger .caret {
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 5px solid var(--text-dim);
+    }
+    .manager-round-dropdown.open .manager-dropdown-trigger {
+        border-color: rgba(0, 255, 157, 0.7);
+        box-shadow: 0 0 0 2px rgba(0, 255, 157, 0.12);
+    }
+    .manager-dropdown-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        background: #0f1218;
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 6px;
+        padding: 4px;
+        z-index: 300;
+        display: none;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+    }
+    .manager-round-dropdown.open .manager-dropdown-menu { display: block; }
+    .manager-dropdown-item {
+        width: 100%;
+        text-align: left;
+        border: none;
+        background: transparent;
+        color: var(--text);
+        border-radius: 4px;
+        padding: 7px 8px;
+        font-size: 0.62rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .manager-dropdown-item:hover {
+        background: rgba(0, 255, 157, 0.14);
+        color: #d9ffef;
+    }
+    .manager-dropdown-item.active {
+        background: rgba(0, 255, 157, 0.2);
+        color: var(--accent);
+        box-shadow: inset 0 0 0 1px rgba(0, 255, 157, 0.45);
+    }
+    #managerTable th:last-child,
+    #managerTable td:last-child {
+        width: 78px;
+        text-align: center;
+    }
+    .manager-checkbox {
+        width: 15px;
+        height: 15px;
+        margin: 0;
+        cursor: pointer;
+        accent-color: var(--accent);
+        vertical-align: middle;
+        filter: drop-shadow(0 0 2px rgba(0, 255, 157, 0.25));
+    }
+    .manager-checkbox:focus-visible {
+        outline: 2px solid rgba(0, 255, 157, 0.7);
+        outline-offset: 2px;
+        border-radius: 2px;
+    }
+    .manager-checkbox:disabled {
+        cursor: default;
+        opacity: 0.45;
     }
 
     aside {
@@ -316,19 +436,25 @@
                 <div class="manager-filters">
                     <input id="managerTraderFilter" class="manager-input" placeholder="Filter trader..." oninput="renderManagerTable()" />
                     <input id="managerRunFilter" class="manager-input" placeholder="Filter run id..." oninput="renderManagerTable()" />
-                    <select id="managerRoundFilter" class="manager-input" onchange="renderManagerTable()">
-                        <option value="">All rounds</option>
-                        <option value="3">Round 3</option>
-                        <option value="4">Round 4</option>
-                        <option value="5">Round 5</option>
-                    </select>
+                    <input id="managerRoundFilter" type="hidden" value="" />
+                    <div id="managerRoundDropdown" class="manager-round-dropdown">
+                        <button class="manager-dropdown-trigger" onclick="toggleManagerRoundDropdown(event)">
+                            <span id="managerRoundLabel">All rounds</span>
+                            <span class="caret"></span>
+                        </button>
+                        <div class="manager-dropdown-menu">
+                            <button class="manager-dropdown-item active" data-value="" onclick="setManagerRoundFilter('', 'All rounds')">All rounds</button>
+                            <button class="manager-dropdown-item" data-value="3" onclick="setManagerRoundFilter('3', 'Round 3')">Round 3</button>
+                            <button class="manager-dropdown-item" data-value="4" onclick="setManagerRoundFilter('4', 'Round 4')">Round 4</button>
+                            <button class="manager-dropdown-item" data-value="5" onclick="setManagerRoundFilter('5', 'Round 5')">Round 5</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="manager-actions">
-                    <button class="manager-btn" onclick="refreshDuplicateManager()">SCAN DUPLICATES</button>
+                    <button class="manager-btn manager-btn-accent" onclick="refreshDuplicateManager()">SCAN DUPLICATES</button>
                     <button class="manager-btn" onclick="selectAllManagerDeletes()">SELECT ALL DELETE CANDIDATES</button>
-                    <button class="manager-btn" onclick="deselectAllManagerDeletes()">DESELECT ALL</button>
-                    <button class="manager-btn" onclick="clearManagerSelection()">CLEAR SELECTION + FILTERS</button>
-                    <button class="manager-btn" onclick="exportDeletionManifest()">EXPORT DELETE MANIFEST</button>
+                    <button id="managerDeselectBtn" class="manager-btn" onclick="deselectAllManagerDeletes()">DESELECT ALL</button>
+                    <button id="managerRemoveBtn" class="manager-btn manager-btn-danger" onclick="removeSelectedManagerRuns()">REMOVE SELECTED</button>
                 </div>
                 <div class="table-scroll">
                     <table id="managerTable" class="sticky-table">
@@ -388,6 +514,10 @@
         renderSidebar();
         renderActiveTab();
         refreshDuplicateManager();
+        document.addEventListener('click', event => {
+            const dd = document.getElementById('managerRoundDropdown');
+            if (!dd || !dd.contains(event.target)) dd.classList.remove('open');
+        });
         // Clean temporary refresh query params for file:// usage.
         if (window.location.search.includes('refresh=')) {
             const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`;
@@ -803,9 +933,28 @@
         managerState = { groups, selectedDeleteIds: selected };
         renderManagerTable();
     }
+    function toggleManagerRoundDropdown(event) {
+        event.preventDefault();
+        const dd = document.getElementById('managerRoundDropdown');
+        if (dd) dd.classList.toggle('open');
+    }
+    function setManagerRoundFilter(value, label) {
+        const input = document.getElementById('managerRoundFilter');
+        const labelEl = document.getElementById('managerRoundLabel');
+        if (input) input.value = value;
+        if (labelEl) labelEl.textContent = label;
+        document.querySelectorAll('.manager-dropdown-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.value === value);
+        });
+        const dd = document.getElementById('managerRoundDropdown');
+        if (dd) dd.classList.remove('open');
+        renderManagerTable();
+    }
     function renderManagerTable() {
         const tbody = document.querySelector('#managerTable tbody');
         const summary = document.getElementById('managerSummary');
+        const deselectBtn = document.getElementById('managerDeselectBtn');
+        const removeBtn = document.getElementById('managerRemoveBtn');
         const traderFilter = (document.getElementById('managerTraderFilter')?.value || '').trim().toLowerCase();
         const runFilter = (document.getElementById('managerRunFilter')?.value || '').trim().toLowerCase();
         const roundFilter = (document.getElementById('managerRoundFilter')?.value || '').trim();
@@ -837,7 +986,7 @@
                     : '<span style="color:var(--danger);font-weight:700;">DELETE</span>';
                 const selectCell = isKeep
                     ? ''
-                    : `<input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleManagerDelete('${entry.id}')" />`;
+                    : `<input class="manager-checkbox" type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleManagerDelete('${entry.id}')" />`;
                 tbody.innerHTML += `<tr>
                     <td>${!groupRowPrinted ? `G${idx + 1}` : ''}</td>
                     <td>${entry.id}</td>
@@ -853,6 +1002,8 @@
             if (groupVisible) visibleGroups += 1;
         });
         summary.textContent = `Duplicate groups: ${visibleGroups} | Visible rows: ${visibleRows} | Delete candidates: ${visibleDeleteCandidates} | Selected: ${visibleSelected}`;
+        if (deselectBtn) deselectBtn.disabled = managerState.selectedDeleteIds.size === 0;
+        if (removeBtn) removeBtn.disabled = managerState.selectedDeleteIds.size === 0;
     }
     function toggleManagerDelete(runId) {
         if (managerState.selectedDeleteIds.has(runId)) managerState.selectedDeleteIds.delete(runId);
@@ -869,34 +1020,17 @@
         managerState.selectedDeleteIds = new Set();
         renderManagerTable();
     }
-    function clearManagerSelection() {
+    function removeSelectedManagerRuns() {
+        const targets = [...managerState.selectedDeleteIds];
+        if (!targets.length) return;
+        if (!confirm(`Remove ${targets.length} selected run(s) from current visualizer view?`)) return;
+        targets.forEach(runId => { delete BACKTEST_DATA[runId]; });
+        selectedIds = selectedIds.filter(id => BACKTEST_DATA[id]);
         managerState.selectedDeleteIds = new Set();
-        const tf = document.getElementById('managerTraderFilter');
-        const rf = document.getElementById('managerRunFilter');
-        const rrf = document.getElementById('managerRoundFilter');
-        if (tf) tf.value = '';
-        if (rf) rf.value = '';
-        if (rrf) rrf.value = '';
-        renderManagerTable();
+        refreshDuplicateManager();
+        renderSidebar();
+        renderActiveTab();
     }
-    function exportDeletionManifest() {
-        const payload = {
-            exportedAt: new Date().toISOString(),
-            source: 'visualizer_manager',
-            run_ids: [...managerState.selectedDeleteIds].sort()
-        };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-        a.download = `backtest_delete_manifest_${stamp}.json`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-    }
-
     function renderActiveTab() {
         if (activeTab === 'performance') renderPerformance();
         if (activeTab === 'attribution') renderAttribution();
