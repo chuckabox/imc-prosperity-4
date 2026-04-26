@@ -11,6 +11,19 @@ python -m streamlit run tools/dashboard.py
 ```
 Open the **Rust Backtester** tab to see leaderboards and best/safest trader analysis.
 
+## Docs
+
+- Visualizer: `docs/VISUALIZER_GUIDE.md`
+- Backtesting: `docs/BACKTEST_GUIDE.md`
+
+## Common Commands
+
+```bash
+python tools/runbacktest.py "ROUND 4/traders/ken/table.py" --products summary
+python tools/parse_runs.py
+python tools/backtest_results_manager.py
+```
+
 ---
 
 ## Backtest a Trader (Round 3)

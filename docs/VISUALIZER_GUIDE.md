@@ -31,7 +31,7 @@ Top tabs:
 - `OVERLAY` -> performance and ranking
 - `ATTRIBUTION` -> product contribution comparison
 - `STABILITY` -> cross-day consistency and heatmap
-- `MANAGER` -> duplicate backtest run review and cleanup manifest export
+- `MANAGER` -> duplicate backtest run review
 
 Left sidebar:
 
@@ -197,20 +197,6 @@ Capabilities:
   - `SELECT ALL DELETE CANDIDATES`
   - `DESELECT ALL`
   - `CLEAR SELECTION + FILTERS`
-  - `EXPORT DELETE MANIFEST`
-
-### What Export Delete Manifest does
-
-`EXPORT DELETE MANIFEST` downloads a JSON file containing selected run ids:
-
-- `run_ids`: the run folder ids chosen for deletion
-- `exportedAt`: timestamp
-- `source`: `visualizer_manager`
-
-Use this manifest with:
-
-- `python backtest_results_manager.py --manifest "<manifest_path>"` (dry-run)
-- `python backtest_results_manager.py --manifest "<manifest_path>" --apply` (delete selected runs)
 
 ## Current Limitations
 
@@ -222,4 +208,3 @@ Use this manifest with:
 
 - UI + logic: `visualizer.html`
 - Data payload: `backtest_comparison.js`
-
