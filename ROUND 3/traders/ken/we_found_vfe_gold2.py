@@ -111,18 +111,18 @@ class Trader:
     HP_BLEND = 0.8
     HP_EWMA_ALPHA = 0.20
     HP_VOL_ALPHA = 0.10
-    HP_TAKE_EDGE = 1
-    HP_QUOTE_SIZE = 85
+    HP_TAKE_EDGE = 0
+    HP_QUOTE_SIZE = 20
 
     # VFE
     VFE_EWMA_ALPHA = 0.3
     VFE_MAKER_EDGE = 0.9
-    VFE_TAKER_EDGE = 1.6
-    VFE_TAKER_MAX = 64
+    VFE_TAKER_EDGE = 0.1
+    VFE_TAKER_MAX = 100
     VFE_MICRO_TILT = 0.24
     # FIX 1: tighter hedge band + always-on micro-hedge proportional to delta gap
-    VFE_HEDGE_BAND = 18           # was 35 — halved
-    VFE_MICRO_HEDGE_BAND = 6      # below this still nudge proportionally
+    VFE_HEDGE_BAND = 0            # Hedge every single unit of delta
+    VFE_MICRO_HEDGE_BAND = 0
     VFE_HEDGE_AGGRO_BAND = 40
     VFE_HEDGE_MAX = 64
     OPEN_PHASE_TS = 100_000
@@ -137,11 +137,11 @@ class Trader:
     VEV_TTE_START = 8.0
     VEV_DAY_INIT = 2
     VEV_FIT_STRIKES = [5000, 5100, 5200, 5300, 5400, 5500]
-    VEV_ENTRY_MISPRICING = 0.9
-    VEV_EXIT_MISPRICING = 0.3
-    VEV_PAIR_MAX_QTY = 22
-    VEV_PAIR_CAP_PER_STRIKE = 45
-    VEV_GLOBAL_ABS_CAP = 420
+    VEV_ENTRY_MISPRICING = 0.01
+    VEV_EXIT_MISPRICING = 0.0
+    VEV_PAIR_MAX_QTY = 60
+    VEV_PAIR_CAP_PER_STRIKE = 100
+    VEV_GLOBAL_ABS_CAP = 800
     VEV_PHASE_SWITCH_TS = 140_000
     VEV_PHASE2_CAP_SCALE = 0.9
     VEV_PHASE2_ENTRY_BUMP = 0.35
@@ -338,12 +338,10 @@ class Trader:
         ewma = mid if prev is None else (1 - self.VFE_EWMA_ALPHA) * prev + self.VFE_EWMA_ALPHA * mid
         self.history["vfe_ewma"] = ewma
         micro = (bb * av + ba * bv) / (bv + av) if (bv + av) > 0 else mid
+        # Max Participation: eliminate edge requirement for hedges
+        vfe_taker_edge = 0.0 
         fair = (1.0 - self.VFE_MICRO_TILT) * ewma + self.VFE_MICRO_TILT * micro
-
-        # FIX 6: tilt fair toward Olivia direction (fade catching her knife)
         oli = self._olivia_signal(int(state.timestamp))
-        if oli != 0:
-            fair = fair + oli * self.OLIVIA_FAIR_TILT
 
         local_scale = 1.0
         if self._in_open_phase(state):
@@ -371,14 +369,13 @@ class Trader:
         if oli != 0 and ((residual > 0 and oli < 0) or (residual < 0 and oli > 0)):
             hmx = int(hmx * 0.4)  # Olivia is moving against us — go light
 
-        if hmx > 0:
             if residual > 0 and pos < lim:
-                hq = min(hmx, residual, lim - pos, -od.sell_orders[ba])
+                hq = min(abs(residual), lim - pos, -od.sell_orders[ba])
                 if hq > 0:
                     orders.append(Order(VFE, ba, hq))
                     pos += hq
             elif residual < 0 and pos > -lim:
-                hq = min(hmx, -residual, lim + pos, od.buy_orders[bb])
+                hq = min(abs(residual), lim + pos, od.buy_orders[bb])
                 if hq > 0:
                     orders.append(Order(VFE, bb, -hq))
                     pos -= hq
@@ -387,8 +384,6 @@ class Trader:
         if abs(target_pos - pos) <= self.VFE_HEDGE_AGGRO_BAND:
             rem = taker_max
             for ask in sorted(od.sell_orders):
-                if ask > fair - self.VFE_TAKER_EDGE or rem <= 0 or pos >= lim:
-                    break
                 qty = min(-od.sell_orders[ask], lim - pos, rem)
                 if qty > 0:
                     orders.append(Order(VFE, ask, qty))
@@ -396,8 +391,6 @@ class Trader:
                     rem -= qty
             rem = taker_max
             for bid in sorted(od.buy_orders, reverse=True):
-                if bid < fair + self.VFE_TAKER_EDGE or rem <= 0 or pos <= -lim:
-                    break
                 qty = min(od.buy_orders[bid], lim + pos, rem)
                 if qty > 0:
                     orders.append(Order(VFE, bid, -qty))
