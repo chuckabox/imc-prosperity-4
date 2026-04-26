@@ -1,0 +1,29 @@
+{
+  "dataset_id": "prices_round_3_day_1",
+  "dataset_path": "C:\\Users\\ductv\\Desktop\\Projects\\imc prosperity\\imc-prosperity-4\\ROUND 3\\data_capsule\\prices_round_3_day_1.csv",
+  "day": 1,
+  "engine": "prosperity4bt",
+  "final_pnl_by_product": {
+    "HYDROGEL_PACK": 19188.0,
+    "VELVETFRUIT_EXTRACT": -2170.5,
+    "VEV_4000": 0.0,
+    "VEV_4500": 0.0,
+    "VEV_5000": 332.0,
+    "VEV_5100": 398.0,
+    "VEV_5200": -447.0,
+    "VEV_5300": -374.0,
+    "VEV_5400": 0.0,
+    "VEV_5500": 0.0,
+    "VEV_6000": 0.0,
+    "VEV_6500": 0.0
+  },
+  "final_pnl_total": 16926.5,
+  "generated_at": "2026-04-25T22:14:27+00:00",
+  "matching": {
+    "trade_match_mode": "all"
+  },
+  "own_trade_count": 955,
+  "run_id": "p4bt-1777155252840-data-capsule-day-1",
+  "tick_count": 120000,
+  "trader_path": "C:\\Users\\ductv\\Desktop\\Projects\\imc prosperity\\imc-prosperity-4\\ROUND 3\\traders\\ken\\we found epsilon.py"
+}
