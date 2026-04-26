@@ -1,0 +1,362 @@
+[
+  {
+    "file": "trader_ken_v83s_5.py",
+    "edge5200": 1.8,
+    "cap5200": 40,
+    "switch_ts": 150000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": 1226.0,
+    "score": 10718.5
+  },
+  {
+    "file": "trader_ken_v83s_9.py",
+    "edge5200": 1.8,
+    "cap5200": 45,
+    "switch_ts": 150000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": 1226.0,
+    "score": 10718.5
+  },
+  {
+    "file": "trader_ken_v83s_17.py",
+    "edge5200": 2.0,
+    "cap5200": 40,
+    "switch_ts": 150000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": 1226.0,
+    "score": 10718.5
+  },
+  {
+    "file": "trader_ken_v83s_21.py",
+    "edge5200": 2.0,
+    "cap5200": 45,
+    "switch_ts": 150000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": 1226.0,
+    "score": 10718.5
+  },
+  {
+    "file": "trader_ken_v83s_33.py",
+    "edge5200": 2.2,
+    "cap5200": 45,
+    "switch_ts": 150000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": 1226.0,
+    "score": 10718.5
+  },
+  {
+    "file": "trader_ken_v83s_29.py",
+    "edge5200": 2.2,
+    "cap5200": 40,
+    "switch_ts": 150000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": 1202.0,
+    "score": 10712.5
+  },
+  {
+    "file": "trader_ken_v83s_6.py",
+    "edge5200": 1.8,
+    "cap5200": 40,
+    "switch_ts": 150000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": 754.0,
+    "score": 10600.5
+  },
+  {
+    "file": "trader_ken_v83s_10.py",
+    "edge5200": 1.8,
+    "cap5200": 45,
+    "switch_ts": 150000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": 754.0,
+    "score": 10600.5
+  },
+  {
+    "file": "trader_ken_v83s_18.py",
+    "edge5200": 2.0,
+    "cap5200": 40,
+    "switch_ts": 150000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": 754.0,
+    "score": 10600.5
+  },
+  {
+    "file": "trader_ken_v83s_22.py",
+    "edge5200": 2.0,
+    "cap5200": 45,
+    "switch_ts": 150000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": 754.0,
+    "score": 10600.5
+  },
+  {
+    "file": "trader_ken_v83s_34.py",
+    "edge5200": 2.2,
+    "cap5200": 45,
+    "switch_ts": 150000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": 754.0,
+    "score": 10600.5
+  },
+  {
+    "file": "trader_ken_v83s_30.py",
+    "edge5200": 2.2,
+    "cap5200": 40,
+    "switch_ts": 150000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": 634.0,
+    "score": 10570.5
+  },
+  {
+    "file": "trader_ken_v83s_11.py",
+    "edge5200": 1.8,
+    "cap5200": 45,
+    "switch_ts": 200000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": 494.0,
+    "score": 10535.5
+  },
+  {
+    "file": "trader_ken_v83s_23.py",
+    "edge5200": 2.0,
+    "cap5200": 45,
+    "switch_ts": 200000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": 494.0,
+    "score": 10535.5
+  },
+  {
+    "file": "trader_ken_v83s_35.py",
+    "edge5200": 2.2,
+    "cap5200": 45,
+    "switch_ts": 200000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": 494.0,
+    "score": 10535.5
+  },
+  {
+    "file": "trader_ken_v83s_7.py",
+    "edge5200": 1.8,
+    "cap5200": 40,
+    "switch_ts": 200000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": 424.0,
+    "score": 10518.0
+  },
+  {
+    "file": "trader_ken_v83s_19.py",
+    "edge5200": 2.0,
+    "cap5200": 40,
+    "switch_ts": 200000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": 424.0,
+    "score": 10518.0
+  },
+  {
+    "file": "trader_ken_v83s_12.py",
+    "edge5200": 1.8,
+    "cap5200": 45,
+    "switch_ts": 200000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": 383.0,
+    "score": 10507.75
+  },
+  {
+    "file": "trader_ken_v83s_24.py",
+    "edge5200": 2.0,
+    "cap5200": 45,
+    "switch_ts": 200000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": 383.0,
+    "score": 10507.75
+  },
+  {
+    "file": "trader_ken_v83s_36.py",
+    "edge5200": 2.2,
+    "cap5200": 45,
+    "switch_ts": 200000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": 383.0,
+    "score": 10507.75
+  },
+  {
+    "file": "trader_ken_v83s_8.py",
+    "edge5200": 1.8,
+    "cap5200": 40,
+    "switch_ts": 200000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": 164.0,
+    "score": 10453.0
+  },
+  {
+    "file": "trader_ken_v83s_20.py",
+    "edge5200": 2.0,
+    "cap5200": 40,
+    "switch_ts": 200000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": 164.0,
+    "score": 10453.0
+  },
+  {
+    "file": "trader_ken_v83s_1.py",
+    "edge5200": 1.8,
+    "cap5200": 35,
+    "switch_ts": 150000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": -1805.0,
+    "score": 9960.75
+  },
+  {
+    "file": "trader_ken_v83s_13.py",
+    "edge5200": 2.0,
+    "cap5200": 35,
+    "switch_ts": 150000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": -1805.0,
+    "score": 9960.75
+  },
+  {
+    "file": "trader_ken_v83s_25.py",
+    "edge5200": 2.2,
+    "cap5200": 35,
+    "switch_ts": 150000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": -1805.0,
+    "score": 9960.75
+  },
+  {
+    "file": "trader_ken_v83s_3.py",
+    "edge5200": 1.8,
+    "cap5200": 35,
+    "switch_ts": 200000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": -2111.0,
+    "score": 9884.25
+  },
+  {
+    "file": "trader_ken_v83s_15.py",
+    "edge5200": 2.0,
+    "cap5200": 35,
+    "switch_ts": 200000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": -2111.0,
+    "score": 9884.25
+  },
+  {
+    "file": "trader_ken_v83s_27.py",
+    "edge5200": 2.2,
+    "cap5200": 35,
+    "switch_ts": 200000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": -2111.0,
+    "score": 9884.25
+  },
+  {
+    "file": "trader_ken_v83s_2.py",
+    "edge5200": 1.8,
+    "cap5200": 35,
+    "switch_ts": 150000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": -2300.0,
+    "score": 9837.0
+  },
+  {
+    "file": "trader_ken_v83s_14.py",
+    "edge5200": 2.0,
+    "cap5200": 35,
+    "switch_ts": 150000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": -2300.0,
+    "score": 9837.0
+  },
+  {
+    "file": "trader_ken_v83s_26.py",
+    "edge5200": 2.2,
+    "cap5200": 35,
+    "switch_ts": 150000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": -2300.0,
+    "score": 9837.0
+  },
+  {
+    "file": "trader_ken_v83s_4.py",
+    "edge5200": 1.8,
+    "cap5200": 35,
+    "switch_ts": 200000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": -2385.0,
+    "score": 9815.75
+  },
+  {
+    "file": "trader_ken_v83s_16.py",
+    "edge5200": 2.0,
+    "cap5200": 35,
+    "switch_ts": 200000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": -2385.0,
+    "score": 9815.75
+  },
+  {
+    "file": "trader_ken_v83s_28.py",
+    "edge5200": 2.2,
+    "cap5200": 35,
+    "switch_ts": 200000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": -2385.0,
+    "score": 9815.75
+  },
+  {
+    "file": "trader_ken_v83s_31.py",
+    "edge5200": 2.2,
+    "cap5200": 40,
+    "switch_ts": 200000,
+    "phase2_scale": 0.6,
+    "p10": 10412.0,
+    "pfull": -2531.0,
+    "score": 9779.25
+  },
+  {
+    "file": "trader_ken_v83s_32.py",
+    "edge5200": 2.2,
+    "cap5200": 40,
+    "switch_ts": 200000,
+    "phase2_scale": 0.7,
+    "p10": 10412.0,
+    "pfull": -2894.0,
+    "score": 9688.5
+  }
+]

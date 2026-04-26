@@ -94,7 +94,11 @@
       "Bash(PYTHONIOENCODING=utf-8 python \"ROUND 3/scratch/deep_analysis.py\")",
       "Bash(PYTHONIOENCODING=utf-8 python \"ROUND 3/scratch/hp_imbalance_signal.py\")",
       "Bash(git commit *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(awk END{print NR} *)",
+      "Bash(awk -F',' 'NR>1 && NR<=20 {print \"K=\"$3\" day=\"$1\" IV=\"$6\" IV_dev=\"$7\" price=\"$9\" price_edge=\"$10}')",
+      "Bash(awk -F, ' *)",
+      "Bash(sort -t'_' -k2 -n)"
     ]
   }
 }
