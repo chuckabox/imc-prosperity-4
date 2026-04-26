@@ -1,6 +1,6 @@
-"""we found gamma.py
+"""we found delta.py
 
-Aggressive variant of we found alpha:
+Delta generation tuned for 11k upload target:
 - lower VEV entry threshold
 - larger pair size and inventory caps
 - later/slower decay so inventory is held longer
@@ -71,40 +71,40 @@ class Trader:
 
     # HYDROGEL
     HP_ANCHOR = 9991.0
-    HP_BLEND = 0.75
+    HP_BLEND = 0.8
     HP_EWMA_ALPHA = 0.20
     HP_VOL_ALPHA = 0.10
-    HP_TAKE_EDGE = 2
-    HP_QUOTE_SIZE = 65
+    HP_TAKE_EDGE = 1
+    HP_QUOTE_SIZE = 85
 
     # VFE
     VFE_EWMA_ALPHA = 0.22
-    VFE_MAKER_EDGE = 1.0
-    VFE_TAKER_EDGE = 1.6
-    VFE_TAKER_MAX = 48
-    VFE_MICRO_TILT = 0.24
-    VFE_HEDGE_BAND = 8
-    VFE_HEDGE_AGGRO_BAND = 52
+    VFE_MAKER_EDGE = 0.7
+    VFE_TAKER_EDGE = 1.4
+    VFE_TAKER_MAX = 72
+    VFE_MICRO_TILT = 0.2
+    VFE_HEDGE_BAND = 10
+    VFE_HEDGE_AGGRO_BAND = 40
     VFE_HEDGE_MAX = 64
     OPEN_PHASE_TS = 120_000
     VFE_SPEED_TRIGGER = 54
     SPEED_COOLDOWN_TS = 40_000
-    OPEN_SCALE_MULT = 0.97
-    SPEED_SCALE_MULT = 0.90
+    OPEN_SCALE_MULT = 1.0
+    SPEED_SCALE_MULT = 0.86
 
     # VEV cross-strike RV (aggressive)
     VEV_TTE_START = 8.0
     VEV_DAY_INIT = 2
     VEV_FIT_STRIKES = [5000, 5100, 5200, 5300, 5400, 5500]
-    VEV_ENTRY_MISPRICING = 1.05
+    VEV_ENTRY_MISPRICING = 1.0
     VEV_EXIT_MISPRICING = 0.3
     VEV_PAIR_MAX_QTY = 16
-    VEV_PAIR_CAP_PER_STRIKE = 55
-    VEV_GLOBAL_ABS_CAP = 400
-    VEV_PHASE_SWITCH_TS = 100_000
-    VEV_PHASE2_CAP_SCALE = 0.8
-    VEV_PHASE2_ENTRY_BUMP = 0.35
-    VEV_DECAY_CLIP = 3
+    VEV_PAIR_CAP_PER_STRIKE = 50
+    VEV_GLOBAL_ABS_CAP = 340
+    VEV_PHASE_SWITCH_TS = 120_000
+    VEV_PHASE2_CAP_SCALE = 0.9
+    VEV_PHASE2_ENTRY_BUMP = 0.4
+    VEV_DECAY_CLIP = 4
 
     DELTA_APPROX: Dict[int, float] = {
         4000: 1.00,
