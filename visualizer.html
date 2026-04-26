@@ -109,7 +109,6 @@
     .metric-label { color: var(--text-dim); font-size: 0.55rem; text-transform: uppercase; letter-spacing: 1px; }
     .metric-value { font-size: 0.9rem; font-weight: 700; margin-top: 6px; }
     .chart-note { color: var(--text-dim); font-size: 0.55rem; letter-spacing: 0.8px; margin: 6px 0 8px; }
-    .chart-note-inline { color: var(--text-dim); font-size: 0.55rem; margin-top: 6px; }
     .heatmap-table td.heat-cell { font-weight: 700; text-align: center; border-radius: 4px; }
     .panel-header {
         margin: -20px -20px 10px;
@@ -198,13 +197,12 @@
                 <span class="section-label">PnL Overlay</span>
                 <div id="quickStats" class="summary-grid" style="margin: 10px 0 14px;"></div>
                 <div class="chart-container"><canvas id="performanceChart"></canvas></div>
-                <div id="tradeMarkerNote" class="chart-note-inline"></div>
             </div>
             <div class="panel" style="flex: 1;">
                 <div class="panel-header"><span class="section-label" style="margin:0;">Batch Metrics</span></div>
                 <div class="table-scroll">
                     <table id="leaderboardTable" class="sticky-table">
-                        <thead><tr><th>STRATEGY</th><th class="sortable-th" onclick="setSortMetric('pnl')">PNL <span class="sort-icon" data-sort-key="pnl">-</span></th><th>MAX DD</th><th class="sortable-th" onclick="setSortMetric('ratio')">CALMAR <span class="sort-icon" data-sort-key="ratio">-</span></th><th class="sortable-th" onclick="setSortMetric('sharpe')">SHARPE* <span class="sort-icon" data-sort-key="sharpe">-</span></th><th class="sortable-th" onclick="setSortMetric('greenTicks')">GREEN TICKS <span class="sort-icon" data-sort-key="greenTicks">-</span></th><th class="sortable-th" onclick="setSortMetric('readiness')">READINESS <span class="sort-icon" data-sort-key="readiness">-</span></th></tr></thead>
+                        <thead><tr><th>STRATEGY</th><th class="sortable-th" onclick="setSortMetric('pnl')">PNL <span class="sort-icon" data-sort-key="pnl">-</span></th><th>MAX DD</th><th class="sortable-th" onclick="setSortMetric('ratio')">CALMAR <span class="sort-icon" data-sort-key="ratio">-</span></th><th class="sortable-th" onclick="setSortMetric('sharpe')">SHARPE* <span class="sort-icon" data-sort-key="sharpe">-</span></th><th class="sortable-th" onclick="setSortMetric('greenTicks')">GREEN TICKS <span class="sort-icon" data-sort-key="greenTicks">-</span></th><th class="sortable-th" onclick="setSortMetric('selectionScore')">SELECTION SCORE <span class="sort-icon" data-sort-key="selectionScore">-</span></th><th class="sortable-th" onclick="setSortMetric('statusRank')">STATUS <span class="sort-icon" data-sort-key="statusRank">-</span></th><th class="sortable-th" onclick="setSortMetric('readiness')">READINESS <span class="sort-icon" data-sort-key="readiness">-</span></th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -253,7 +251,6 @@
 </div>
 
 <script src="backtest_comparison.js"></script>
-<script src="visualizer_market_trades.js"></script>
 <script>
     const COLORS = ['#00ff9d', '#00d1ff', '#ff4757', '#ffa502', '#cc44ff', '#eccc68', '#7bed9f', '#ff6b81', '#1e90ff', '#ffffff'];
     let currentFilters = { round: 3, day: 0 };
@@ -419,46 +416,43 @@
         if (!std) return 0;
         return (mean / std) * Math.sqrt(returns.length);
     }
-    function detectInferredTradeMarkers(curve) {
-        if (curve.length < 5) return { buys: [], sells: [] };
-        const returns = calcReturns(curve);
-        const meanAbsMove = returns.length ? returns.reduce((acc, v) => acc + Math.abs(v), 0) / returns.length : 0;
-        const moveThreshold = Math.max(10, meanAbsMove * 1.2);
-        const buys = [];
-        const sells = [];
-        let lastSignalIndex = -9999;
-        for (let i = 1; i < curve.length - 1; i += 1) {
-            const prev = curve[i - 1].pnl;
-            const curr = curve[i].pnl;
-            const next = curve[i + 1].pnl;
-            if (i - lastSignalIndex < 12) continue; // keep markers sparse/readable
-            if (curr <= prev && curr <= next && ((Math.max(prev, next) - curr) >= moveThreshold)) {
-                buys.push({ x: curve[i].ts, y: curr });
-                lastSignalIndex = i;
-            } else if (curr >= prev && curr >= next && (curr - Math.min(prev, next) >= moveThreshold)) {
-                sells.push({ x: curve[i].ts, y: curr });
-                lastSignalIndex = i;
-            }
-        }
-        return { buys, sells };
+    function calcConcentration(finalPnlByProduct) {
+        const absValues = Object.values(finalPnlByProduct || {}).map(v => Math.abs(v));
+        const total = absValues.reduce((a, b) => a + b, 0);
+        if (!total) return 0;
+        return Math.max(...absValues) / total;
     }
-    function buildMarketFlowMarkers(day, curve) {
-        if (!window.MARKET_TRADE_FLOW || !MARKET_TRADE_FLOW[String(day)] || !curve.length) return { buys: [], sells: [] };
-        const pnlByTs = new Map(curve.map(p => [p.ts, p.pnl]));
-        const fallbackPnl = curve[curve.length - 1].pnl;
-        const picks = MARKET_TRADE_FLOW[String(day)]
-            .filter(row => row.buy_qty > 0 || row.sell_qty > 0)
-            .sort((a, b) => (b.buy_qty + b.sell_qty) - (a.buy_qty + a.sell_qty))
-            .slice(0, 60)
-            .sort((a, b) => a.ts - b.ts);
-        const buys = [];
-        const sells = [];
-        picks.forEach(row => {
-            const y = pnlByTs.get(row.ts) ?? fallbackPnl;
-            if (row.buy_qty > row.sell_qty) buys.push({ x: row.ts, y, tradeCount: row.trade_count, qty: row.buy_qty });
-            else if (row.sell_qty > row.buy_qty) sells.push({ x: row.ts, y, tradeCount: row.trade_count, qty: row.sell_qty });
-        });
-        return { buys, sells };
+    function evaluateSelectionScore(run, mdd, sharpe, greenTicks, ratio) {
+        const peerRuns = Object.values(BACKTEST_DATA).filter(r => r.round === run.round && r.trader === run.trader);
+        const pnls = peerRuns.map(r => r.final_pnl);
+        const avgPnl = pnls.length ? pnls.reduce((a, b) => a + b, 0) / pnls.length : run.final_pnl;
+        const worstDay = pnls.length ? Math.min(...pnls) : run.final_pnl;
+        const range = pnls.length ? Math.max(...pnls) - Math.min(...pnls) : 0;
+        const concentration = calcConcentration(run.final_pnl_by_product);
+        const reasons = [];
+
+        // Hard gates for risk control.
+        const redGate = mdd <= -45000 || worstDay <= -25000 || concentration >= 0.72 || sharpe < -0.3;
+        const amberGate = mdd <= -25000 || worstDay <= -8000 || concentration >= 0.58 || sharpe < 0.1;
+        if (mdd <= -25000) reasons.push(`High drawdown (${Math.round(mdd).toLocaleString()})`);
+        if (worstDay <= -8000) reasons.push(`Weak worst-day (${Math.round(worstDay).toLocaleString()})`);
+        if (concentration >= 0.58) reasons.push(`Concentrated PnL (${Math.round(concentration * 100)}%)`);
+        if (sharpe < 0.1) reasons.push(`Low Sharpe (${sharpe.toFixed(2)})`);
+        if (reasons.length === 0) reasons.push('Balanced return/risk profile');
+
+        const score = Math.max(0, Math.min(100, Math.round(
+            24
+            + (Math.max(-2, Math.min(4, ratio)) * 9)
+            + (Math.max(-1.5, Math.min(2.5, sharpe)) * 12)
+            + (greenTicks * 0.22)
+            + (avgPnl > 0 ? 8 : -8)
+            - (Math.min(50000, Math.abs(worstDay)) / 5000)
+            - (Math.min(90000, Math.abs(range)) / 9000)
+            - (concentration * 28)
+        )));
+        if (redGate || score < 40) return { score, statusLabel: 'RED', statusRank: 0, reason: reasons.join(' | ') };
+        if (amberGate || score < 65) return { score, statusLabel: 'AMBER', statusRank: 1, reason: reasons.join(' | ') };
+        return { score, statusLabel: 'GREEN', statusRank: 2, reason: reasons.join(' | ') };
     }
 
     function renderActiveTab() {
@@ -469,8 +463,6 @@
 
     function renderPerformance() {
         const datasets = []; const tbody = document.querySelector('#leaderboardTable tbody'); tbody.innerHTML = '';
-        const tradeMarkerNote = document.getElementById('tradeMarkerNote');
-        tradeMarkerNote.textContent = '';
         const metricRows = [];
         selectedIds.forEach((id, i) => {
             const r = BACKTEST_DATA[id];
@@ -482,67 +474,18 @@
             const sharpe = calcSharpe(returns);
             const greenTicks = returns.length ? Math.round((returns.filter(v => v > 0).length / returns.length) * 100) : 0;
             const readiness = Math.min(100, Math.max(0, Math.round(((Number(ratio) * 0.6) + (Math.max(-2, Math.min(2, sharpe)) + 2) * 10 + (greenTicks / 5)))));
+            const selection = evaluateSelectionScore(r, mdd, sharpe, greenTicks, Number(ratio));
             datasets.push({ label: r.trader, data: equityCurve.map(h => h.pnl), borderColor: color, borderWidth: 2, pointRadius: 0 });
-            metricRows.push({ trader: r.trader, pnl: r.final_pnl, mdd, sharpe, greenTicks, readiness, ratio: Number(ratio), color, id });
+            metricRows.push({ trader: r.trader, pnl: r.final_pnl, mdd, sharpe, greenTicks, readiness, ratio: Number(ratio), color, id, selectionScore: selection.score, statusLabel: selection.statusLabel, statusRank: selection.statusRank, statusReason: selection.reason });
         });
         metricRows.sort((a, b) => {
             const delta = (a[sortMetric] || 0) - (b[sortMetric] || 0);
             return sortDirection === 'desc' ? -delta : delta;
         });
         metricRows.forEach(row => {
-            tbody.innerHTML += `<tr><td style="color:${row.color}; font-weight:700;">● ${row.trader}</td><td style="color:${row.pnl > 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.pnl).toLocaleString()}</td><td style="color:var(--danger)">${Math.round(row.mdd).toLocaleString()}</td><td>${row.ratio.toFixed(2)}x</td><td>${row.sharpe.toFixed(2)}</td><td>${row.greenTicks}%</td><td><div style="height:4px; width:100px; background:#111;"><div style="height:100%; width:${row.readiness}%; background:var(--accent);"></div></div></td></tr>`;
+            const statusColor = row.statusLabel === 'GREEN' ? 'var(--accent)' : row.statusLabel === 'AMBER' ? 'var(--warning)' : 'var(--danger)';
+            tbody.innerHTML += `<tr><td style="color:${row.color}; font-weight:700;">● ${row.trader}</td><td style="color:${row.pnl > 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.pnl).toLocaleString()}</td><td style="color:var(--danger)">${Math.round(row.mdd).toLocaleString()}</td><td>${row.ratio.toFixed(2)}x</td><td>${row.sharpe.toFixed(2)}</td><td>${row.greenTicks}%</td><td><b>${row.selectionScore}</b></td><td title="${row.statusReason}" style="color:${statusColor}; font-weight:700; cursor:help;">${row.statusLabel}</td><td><div style="height:4px; width:100px; background:#111;"><div style="height:100%; width:${row.readiness}%; background:var(--accent);"></div></div></td></tr>`;
         });
-        if (selectedIds.length === 1) {
-            const single = BACKTEST_DATA[selectedIds[0]];
-            const curve = buildEquityCurve(single.history);
-            const inferred = detectInferredTradeMarkers(curve);
-            const marketFlow = buildMarketFlowMarkers(single.day, curve);
-            datasets.push({
-                type: 'scatter',
-                label: 'Inferred Buy Zone',
-                data: inferred.buys,
-                pointStyle: 'triangle',
-                rotation: 0,
-                pointRadius: 4,
-                pointHoverRadius: 5,
-                borderWidth: 0,
-                backgroundColor: '#00ff9d'
-            });
-            datasets.push({
-                type: 'scatter',
-                label: 'Inferred Sell Zone',
-                data: inferred.sells,
-                pointStyle: 'rectRot',
-                pointRadius: 4,
-                pointHoverRadius: 5,
-                borderWidth: 0,
-                backgroundColor: '#ff4757'
-            });
-            datasets.push({
-                type: 'scatter',
-                label: 'Market Buy Pressure',
-                data: marketFlow.buys,
-                pointStyle: 'circle',
-                pointRadius: 3,
-                pointHoverRadius: 4,
-                borderWidth: 0,
-                backgroundColor: '#00d1ff'
-            });
-            datasets.push({
-                type: 'scatter',
-                label: 'Market Sell Pressure',
-                data: marketFlow.sells,
-                pointStyle: 'crossRot',
-                pointRadius: 4,
-                pointHoverRadius: 5,
-                borderWidth: 1,
-                borderColor: '#ff8f1f',
-                backgroundColor: '#ff8f1f'
-            });
-            tradeMarkerNote.textContent = `Markers for ${single.trader}: inferred buy/sell zones + market buy/sell pressure events (from day ${single.day} trades).`;
-        } else {
-            tradeMarkerNote.textContent = 'Select one strategy to show inferred zones and market pressure buy/sell markers on the PnL curve.';
-        }
         if (charts.perf) charts.perf.destroy();
         const labels = selectedIds.length > 0 ? buildEquityCurve(BACKTEST_DATA[selectedIds[0]].history).map(h => h.ts) : [];
         charts.perf = new Chart(document.getElementById('performanceChart'), {
