@@ -76,6 +76,18 @@
         transform: translateY(-1px);
     }
     .export-btn:active { transform: translateY(0); }
+    .manager-actions { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .manager-btn {
+        background: rgba(255,255,255,0.06);
+        color: var(--text);
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 4px;
+        padding: 6px 10px;
+        font-size: 0.62rem;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .manager-btn:hover { background: rgba(255,255,255,0.12); }
 
     aside {
         background: var(--surface);
@@ -196,6 +208,7 @@
             <button class="tab active" onclick="switchTab('performance')">OVERLAY</button>
             <button class="tab" onclick="switchTab('attribution')">ATTRIBUTION</button>
             <button class="tab" onclick="switchTab('stability')">STABILITY</button>
+            <button class="tab" onclick="switchTab('manager')">MANAGER</button>
         </div>
         <div class="header-actions">
             <button id="refreshBtn" class="refresh-btn" onclick="refreshBacktestData()">REFRESH DATA</button>
@@ -286,6 +299,34 @@
                 </div>
             </div>
         </div>
+        <div id="tab-manager" class="tab-content hidden">
+            <div class="panel" style="height: 100%;">
+                <div class="panel-header"><span class="section-label" style="margin:0;">Backtest Results Manager</span></div>
+                <div id="managerSummary" style="font-size:0.7rem; color:var(--text-dim); margin-bottom:10px;"></div>
+                <div class="manager-actions">
+                    <button class="manager-btn" onclick="refreshDuplicateManager()">SCAN DUPLICATES</button>
+                    <button class="manager-btn" onclick="selectAllManagerDeletes()">SELECT ALL DELETE CANDIDATES</button>
+                    <button class="manager-btn" onclick="clearManagerSelection()">CLEAR SELECTION</button>
+                    <button class="manager-btn" onclick="exportDeletionManifest()">EXPORT DELETE MANIFEST</button>
+                </div>
+                <div class="table-scroll">
+                    <table id="managerTable" class="sticky-table">
+                        <thead>
+                            <tr>
+                                <th>GROUP</th>
+                                <th>RUN ID</th>
+                                <th>TRADER</th>
+                                <th>ROUND</th>
+                                <th>DAY</th>
+                                <th>PNL</th>
+                                <th>ACTION</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </main>
 </div>
 
@@ -303,16 +344,33 @@
     let stabilitySortDirection = 'desc';
     let heatmapSortMetric = 'spread';
     let heatmapSortDirection = 'desc';
+    let managerState = { groups: [], selectedDeleteIds: new Set() };
     let charts = {};
 
     function init() {
+        try {
+            const saved = sessionStorage.getItem('visualizer_refresh_state');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed && parsed.currentFilters) currentFilters = parsed.currentFilters;
+                if (parsed && parsed.activeTab) activeTab = parsed.activeTab;
+                sessionStorage.removeItem('visualizer_refresh_state');
+            }
+        } catch (e) {}
         updateSortIndicators();
         updateAssetSortIndicators();
         updateStabilitySortIndicators();
         updateHeatmapSortIndicators();
         setFilter('round', currentFilters.round);
+        if (activeTab !== 'performance') switchTab(activeTab);
         renderSidebar();
         renderActiveTab();
+        refreshDuplicateManager();
+        // Clean temporary refresh query params for file:// usage.
+        if (window.location.search.includes('refresh=')) {
+            const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`;
+            window.history.replaceState({}, '', cleanUrl);
+        }
     }
     function switchTab(t) { 
         activeTab = t; 
@@ -623,37 +681,158 @@
         a.remove();
         URL.revokeObjectURL(url);
     }
-    function refreshBacktestData() {
+    async function refreshBacktestData() {
         const btn = document.getElementById('refreshBtn');
         if (btn) {
             btn.disabled = true;
             btn.textContent = 'REFRESHING...';
         }
-        const script = document.createElement('script');
-        script.src = `backtest_comparison.js?t=${Date.now()}`;
-        script.onload = () => {
-            selectedIds = [];
+        // file:// pages cannot fetch local files due to browser CORS restrictions.
+        if (window.location.protocol === 'file:') {
+            window.location.reload();
+            return;
+        }
+        try {
+            const res = await fetch(`backtest_comparison.js?t=${Date.now()}`, { cache: 'no-store' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const text = await res.text();
+            const eqIdx = text.indexOf('=');
+            if (eqIdx === -1) throw new Error('Missing assignment in backtest file');
+            const jsonStart = text.indexOf('{', eqIdx);
+            if (jsonStart === -1) throw new Error('Missing JSON start in backtest file');
+            let jsonEnd = text.lastIndexOf('};');
+            if (jsonEnd === -1) jsonEnd = text.lastIndexOf('}');
+            if (jsonEnd === -1 || jsonEnd <= jsonStart) throw new Error('Missing JSON end in backtest file');
+            const jsonText = text.slice(jsonStart, jsonEnd + 1);
+            const freshData = JSON.parse(jsonText);
+
+            // Mutate in place so existing references keep working.
+            Object.keys(BACKTEST_DATA).forEach(k => delete BACKTEST_DATA[k]);
+            Object.assign(BACKTEST_DATA, freshData);
+
+            // Keep valid selections only after refresh.
+            selectedIds = selectedIds.filter(id => BACKTEST_DATA[id]);
             setFilter('round', currentFilters.round);
             renderSidebar();
             renderActiveTab();
+
             if (btn) {
                 btn.disabled = false;
                 btn.textContent = 'REFRESH DATA';
             }
-        };
-        script.onerror = () => {
+        } catch (e) {
             if (btn) {
                 btn.disabled = false;
                 btn.textContent = 'REFRESH FAILED';
             }
+            console.error('Refresh failed:', e);
+            setTimeout(() => {
+                if (btn) btn.textContent = 'REFRESH DATA';
+            }, 1800);
+        }
+    }
+    function runIdScore(id) {
+        const m = id.match(/(\d{10,})/);
+        return m ? Number(m[1]) : 0;
+    }
+    function fingerprintRun(run) {
+        return JSON.stringify({
+            trader: run.trader,
+            dataset: run.dataset,
+            day: run.day,
+            round: run.round,
+            pnl: Math.round((run.final_pnl || 0) * 100) / 100,
+            byProd: run.final_pnl_by_product || {}
+        });
+    }
+    function buildDuplicateGroups() {
+        const buckets = {};
+        Object.entries(BACKTEST_DATA).forEach(([id, run]) => {
+            const fp = fingerprintRun(run);
+            if (!buckets[fp]) buckets[fp] = [];
+            buckets[fp].push({ id, run });
+        });
+        const groups = Object.values(buckets).filter(items => items.length > 1).map(items => {
+            const sorted = [...items].sort((a, b) => runIdScore(b.id) - runIdScore(a.id));
+            return { keep: sorted[0].id, items: sorted };
+        });
+        groups.sort((a, b) => a.items[0].run.trader.localeCompare(b.items[0].run.trader));
+        return groups;
+    }
+    function refreshDuplicateManager() {
+        const groups = buildDuplicateGroups();
+        const selected = new Set();
+        groups.forEach(g => g.items.forEach(x => { if (x.id !== g.keep) selected.add(x.id); }));
+        managerState = { groups, selectedDeleteIds: selected };
+        renderManagerTable();
+    }
+    function renderManagerTable() {
+        const tbody = document.querySelector('#managerTable tbody');
+        const summary = document.getElementById('managerSummary');
+        if (!tbody || !summary) return;
+        tbody.innerHTML = '';
+        const groups = managerState.groups || [];
+        const selectedCount = managerState.selectedDeleteIds.size;
+        const totalDeleteCandidates = groups.reduce((acc, g) => acc + Math.max(0, g.items.length - 1), 0);
+        summary.textContent = `Duplicate groups: ${groups.length} | Delete candidates: ${totalDeleteCandidates} | Selected: ${selectedCount}`;
+        groups.forEach((g, idx) => {
+            g.items.forEach((entry, itemIdx) => {
+                const r = entry.run;
+                const isKeep = entry.id === g.keep;
+                const isSelected = managerState.selectedDeleteIds.has(entry.id);
+                const actionCell = isKeep
+                    ? '<span style="color:var(--accent);font-weight:700;">KEEP</span>'
+                    : `<label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleManagerDelete('${entry.id}')"/><span style="color:var(--danger);">DELETE</span></label>`;
+                tbody.innerHTML += `<tr>
+                    <td>${itemIdx === 0 ? `G${idx + 1}` : ''}</td>
+                    <td>${entry.id}</td>
+                    <td>${r.trader}</td>
+                    <td>${r.round}</td>
+                    <td>${r.day}</td>
+                    <td>${Math.round(r.final_pnl).toLocaleString()}</td>
+                    <td>${actionCell}</td>
+                </tr>`;
+            });
+        });
+    }
+    function toggleManagerDelete(runId) {
+        if (managerState.selectedDeleteIds.has(runId)) managerState.selectedDeleteIds.delete(runId);
+        else managerState.selectedDeleteIds.add(runId);
+        renderManagerTable();
+    }
+    function selectAllManagerDeletes() {
+        const selected = new Set();
+        managerState.groups.forEach(g => g.items.forEach(x => { if (x.id !== g.keep) selected.add(x.id); }));
+        managerState.selectedDeleteIds = selected;
+        renderManagerTable();
+    }
+    function clearManagerSelection() {
+        managerState.selectedDeleteIds = new Set();
+        renderManagerTable();
+    }
+    function exportDeletionManifest() {
+        const payload = {
+            exportedAt: new Date().toISOString(),
+            source: 'visualizer_manager',
+            run_ids: [...managerState.selectedDeleteIds].sort()
         };
-        document.body.appendChild(script);
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        a.download = `backtest_delete_manifest_${stamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
     }
 
     function renderActiveTab() {
         if (activeTab === 'performance') renderPerformance();
         if (activeTab === 'attribution') renderAttribution();
         if (activeTab === 'stability') renderStability();
+        if (activeTab === 'manager') renderManagerTable();
     }
 
     function renderPerformance() {
