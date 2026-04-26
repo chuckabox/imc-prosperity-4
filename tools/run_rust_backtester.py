@@ -42,11 +42,11 @@ RUST_CRATE = REPO_ROOT / "external" / "prosperity_rust_backtester"
 
 
 def _default_trader() -> Path:
-    return REPO_ROOT / "ROUND 2" / "traders" / "ken" / "trader_ken_v6.py"
+    return REPO_ROOT / "ROUND 3" / "traders" / "ken" / "we_found_vfe_gold2.py"
 
 
 def _default_dataset() -> Path:
-    return REPO_ROOT / "ROUND 2" / "data_capsule"
+    return REPO_ROOT / "ROUND 3" / "data_capsule"
 
 
 def _release_binary() -> Path:
@@ -128,7 +128,7 @@ def _run_via_wsl(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Build (unless --no-build) and run external/prosperity_rust_backtester against Round 2 capsule data by default.",
+        description="Build (unless --no-build) and run external/prosperity_rust_backtester against Round 3 capsule data by default.",
     )
     parser.add_argument(
         "--trader",
