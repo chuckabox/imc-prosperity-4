@@ -109,22 +109,24 @@
     .metric-label { color: var(--text-dim); font-size: 0.55rem; text-transform: uppercase; letter-spacing: 1px; }
     .metric-value { font-size: 0.9rem; font-weight: 700; margin-top: 6px; }
     .chart-note { color: var(--text-dim); font-size: 0.55rem; letter-spacing: 0.8px; margin: 6px 0 8px; }
+    .chart-note-inline { color: var(--text-dim); font-size: 0.55rem; margin-top: 6px; }
     .heatmap-table td.heat-cell { font-weight: 700; text-align: center; border-radius: 4px; }
-    .panel-sticky-title {
-        position: sticky;
-        top: 0;
-        z-index: 45;
-        background: var(--surface);
-        margin: -20px -20px 8px;
+    .panel-header {
+        margin: -20px -20px 10px;
         padding: 12px 20px 10px;
-        display: block;
-        margin-bottom: 8px;
         border-bottom: 1px solid rgba(255,255,255,0.05);
+        background: var(--surface);
+        flex-shrink: 0;
     }
-    .panel-sticky-title.section-gap { margin-top: 20px; }
+    .panel-header.section-gap { margin-top: 20px; }
+    .table-scroll {
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+    }
     .sticky-table thead {
         position: sticky;
-        top: 42px;
+        top: 0;
         z-index: 34;
     }
     .sticky-table thead tr {
@@ -133,7 +135,7 @@
     }
     .sticky-table thead th {
         position: sticky;
-        top: 42px;
+        top: 0;
         background: var(--surface);
         z-index: 35;
         padding-top: 8px;
@@ -141,15 +143,6 @@
     .sortable-th { cursor: pointer; user-select: none; white-space: nowrap; }
     .sort-icon { margin-left: 6px; opacity: 0.45; font-size: 0.62rem; }
     .sortable-th.active .sort-icon { opacity: 1; color: var(--accent); }
-    .baseline-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-    .baseline-select {
-        background: #111;
-        color: var(--text);
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        padding: 5px 8px;
-        font-size: 0.62rem;
-    }
 
     table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.7rem; }
     th { text-align: left; color: var(--text-dim); padding-bottom: 10px; border-bottom: 1px solid var(--border); }
@@ -165,13 +158,12 @@
 
 <div class="app-container">
     <header>
-        <div class="brand">PROSPERITY <span>INTELLIGENCE v5.5</span></div>
+        <div class="brand">PROSPERITY <span>VISUALIZER</span></div>
         <div class="nav-tabs">
             <button class="tab active" onclick="switchTab('performance')">OVERLAY</button>
             <button class="tab" onclick="switchTab('attribution')">ATTRIBUTION</button>
             <button class="tab" onclick="switchTab('stability')">STABILITY</button>
         </div>
-        <div style="font-size: 0.6rem; color: var(--text-dim);">SYSTEM STABLE v5.5</div>
     </header>
 
     <aside>
@@ -206,21 +198,16 @@
                 <span class="section-label">PnL Overlay</span>
                 <div id="quickStats" class="summary-grid" style="margin: 10px 0 14px;"></div>
                 <div class="chart-container"><canvas id="performanceChart"></canvas></div>
-                <div id="pairwisePanel" class="hidden" style="margin-top: 14px;">
-                    <div class="baseline-row">
-                        <span class="section-label" style="margin:0;">Baseline</span>
-                        <select id="baselineSelect" class="baseline-select" onchange="setPairwiseBaseline(this.value)"></select>
-                    </div>
-                    <div id="pairwiseNote" class="chart-note"></div>
-                    <div class="chart-container" style="height: 140px; flex: unset;"><canvas id="pairwiseChart"></canvas></div>
-                </div>
+                <div id="tradeMarkerNote" class="chart-note-inline"></div>
             </div>
-            <div class="panel" style="flex: 1; overflow-y: auto;">
-                <span class="section-label panel-sticky-title">Batch Metrics</span>
-                <table id="leaderboardTable" class="sticky-table">
-                    <thead><tr><th>STRATEGY</th><th class="sortable-th" onclick="setSortMetric('pnl')">PNL <span class="sort-icon" data-sort-key="pnl">-</span></th><th>MAX DD</th><th class="sortable-th" onclick="setSortMetric('ratio')">CALMAR <span class="sort-icon" data-sort-key="ratio">-</span></th><th class="sortable-th" onclick="setSortMetric('sharpe')">SHARPE* <span class="sort-icon" data-sort-key="sharpe">-</span></th><th class="sortable-th" onclick="setSortMetric('greenTicks')">GREEN TICKS <span class="sort-icon" data-sort-key="greenTicks">-</span></th><th class="sortable-th" onclick="setSortMetric('readiness')">READINESS <span class="sort-icon" data-sort-key="readiness">-</span></th></tr></thead>
-                    <tbody></tbody>
-                </table>
+            <div class="panel" style="flex: 1;">
+                <div class="panel-header"><span class="section-label" style="margin:0;">Batch Metrics</span></div>
+                <div class="table-scroll">
+                    <table id="leaderboardTable" class="sticky-table">
+                        <thead><tr><th>STRATEGY</th><th class="sortable-th" onclick="setSortMetric('pnl')">PNL <span class="sort-icon" data-sort-key="pnl">-</span></th><th>MAX DD</th><th class="sortable-th" onclick="setSortMetric('ratio')">CALMAR <span class="sort-icon" data-sort-key="ratio">-</span></th><th class="sortable-th" onclick="setSortMetric('sharpe')">SHARPE* <span class="sort-icon" data-sort-key="sharpe">-</span></th><th class="sortable-th" onclick="setSortMetric('greenTicks')">GREEN TICKS <span class="sort-icon" data-sort-key="greenTicks">-</span></th><th class="sortable-th" onclick="setSortMetric('readiness')">READINESS <span class="sort-icon" data-sort-key="readiness">-</span></th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -230,34 +217,43 @@
                     <span class="section-label">Grouped Product Attribution</span>
                     <div class="chart-container"><canvas id="attributionChart"></canvas></div>
                 </div>
-                <div class="panel" style="overflow-y: auto;">
-                    <span class="section-label panel-sticky-title">Asset Performance Leaderboard</span>
-                    <table id="assetLeaderboard" class="sticky-table">
-                        <thead><tr><th>ASSET</th><th>BEST STRATEGY</th><th>MAX PROFIT</th><th>LEAST PROFIT</th><th>SPREAD</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
+                <div class="panel">
+                    <div class="panel-header"><span class="section-label" style="margin:0;">Asset Performance Leaderboard</span></div>
+                    <div class="table-scroll">
+                        <table id="assetLeaderboard" class="sticky-table">
+                            <thead><tr><th class="sortable-th" onclick="setAssetSortMetric('asset')">ASSET <span class="sort-icon asset-sort-icon" data-sort-key="asset">-</span></th><th>BEST STRATEGY</th><th class="sortable-th" onclick="setAssetSortMetric('max')">MAX PROFIT <span class="sort-icon asset-sort-icon" data-sort-key="max">-</span></th><th class="sortable-th" onclick="setAssetSortMetric('min')">LEAST PROFIT <span class="sort-icon asset-sort-icon" data-sort-key="min">-</span></th><th class="sortable-th" onclick="setAssetSortMetric('spread')">SPREAD <span class="sort-icon asset-sort-icon" data-sort-key="spread">-</span></th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div id="tab-stability" class="tab-content hidden">
-            <div class="panel" style="height: 100%; overflow-y: auto;">
-                <span class="section-label panel-sticky-title">Cross-Day Matrix</span>
-                <table id="stabilityTable" class="sticky-table">
-                    <thead><tr><th>STRATEGY</th><th>D0 PNL</th><th>D1 PNL</th><th>D2 PNL</th><th>AVG</th><th>RANGE</th><th>CONSISTENCY</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-                <span class="section-label panel-sticky-title section-gap">Per-Asset Day Stability Heatmap</span>
-                <table id="assetStabilityTable" class="heatmap-table sticky-table">
-                    <thead><tr><th>ASSET</th><th>D0</th><th>D1</th><th>D2</th><th>SPREAD</th></tr></thead>
-                    <tbody></tbody>
-                </table>
+            <div class="panel" style="height: 100%;">
+                <div class="panel-header"><span class="section-label" style="margin:0;">Cross-Day Matrix</span></div>
+                <div class="table-scroll">
+                    <table id="stabilityTable" class="sticky-table">
+                        <thead><tr><th class="sortable-th" onclick="setStabilitySortMetric('trader')">STRATEGY <span class="sort-icon stability-sort-icon" data-sort-key="trader">-</span></th><th class="sortable-th" onclick="setStabilitySortMetric('d0')">D0 PNL <span class="sort-icon stability-sort-icon" data-sort-key="d0">-</span></th><th class="sortable-th" onclick="setStabilitySortMetric('d1')">D1 PNL <span class="sort-icon stability-sort-icon" data-sort-key="d1">-</span></th><th class="sortable-th" onclick="setStabilitySortMetric('d2')">D2 PNL <span class="sort-icon stability-sort-icon" data-sort-key="d2">-</span></th><th class="sortable-th" onclick="setStabilitySortMetric('avg')">AVG <span class="sort-icon stability-sort-icon" data-sort-key="avg">-</span></th><th class="sortable-th" onclick="setStabilitySortMetric('range')">RANGE <span class="sort-icon stability-sort-icon" data-sort-key="range">-</span></th><th class="sortable-th" onclick="setStabilitySortMetric('consistency')">CONSISTENCY <span class="sort-icon stability-sort-icon" data-sort-key="consistency">-</span></th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="panel" style="height: 100%;">
+                <div class="panel-header"><span class="section-label" style="margin:0;">Per-Asset Day Stability Heatmap</span></div>
+                <div class="table-scroll">
+                    <table id="assetStabilityTable" class="heatmap-table sticky-table">
+                        <thead><tr><th class="sortable-th" onclick="setHeatmapSortMetric('asset')">ASSET <span class="sort-icon heatmap-sort-icon" data-sort-key="asset">-</span></th><th class="sortable-th" onclick="setHeatmapSortMetric('d0')">D0 <span class="sort-icon heatmap-sort-icon" data-sort-key="d0">-</span></th><th class="sortable-th" onclick="setHeatmapSortMetric('d1')">D1 <span class="sort-icon heatmap-sort-icon" data-sort-key="d1">-</span></th><th class="sortable-th" onclick="setHeatmapSortMetric('d2')">D2 <span class="sort-icon heatmap-sort-icon" data-sort-key="d2">-</span></th><th class="sortable-th" onclick="setHeatmapSortMetric('spread')">SPREAD <span class="sort-icon heatmap-sort-icon" data-sort-key="spread">-</span></th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </main>
 </div>
 
 <script src="backtest_comparison.js"></script>
+<script src="visualizer_market_trades.js"></script>
 <script>
     const COLORS = ['#00ff9d', '#00d1ff', '#ff4757', '#ffa502', '#cc44ff', '#eccc68', '#7bed9f', '#ff6b81', '#1e90ff', '#ffffff'];
     let currentFilters = { round: 3, day: 0 };
@@ -265,10 +261,22 @@
     let activeTab = 'performance';
     let sortMetric = 'pnl';
     let sortDirection = 'desc';
-    let baselineStrategyId = null;
+    let assetSortMetric = 'spread';
+    let assetSortDirection = 'desc';
+    let stabilitySortMetric = 'consistency';
+    let stabilitySortDirection = 'desc';
+    let heatmapSortMetric = 'spread';
+    let heatmapSortDirection = 'desc';
     let charts = {};
 
-    function init() { updateSortIndicators(); renderSidebar(); renderActiveTab(); }
+    function init() {
+        updateSortIndicators();
+        updateAssetSortIndicators();
+        updateStabilitySortIndicators();
+        updateHeatmapSortIndicators();
+        renderSidebar();
+        renderActiveTab();
+    }
     function switchTab(t) { 
         activeTab = t; 
         document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
@@ -286,13 +294,11 @@
     }
     function resetSelection() { 
         selectedIds = []; 
-        baselineStrategyId = null;
         renderSidebar(); 
         renderActiveTab(); 
         if (selectedIds.length === 0) {
             if (charts.perf) charts.perf.destroy();
             if (charts.attr) charts.attr.destroy();
-            if (charts.diff) charts.diff.destroy();
             const lb = document.querySelector('#leaderboardTable tbody'); if (lb) lb.innerHTML = '';
             const alb = document.querySelector('#assetLeaderboard tbody'); if (alb) alb.innerHTML = '';
         }
@@ -314,6 +320,51 @@
         icon.textContent = sortDirection === 'desc' ? 'v' : '^';
         icon.parentElement.classList.add('active');
     }
+    function setAssetSortMetric(metric) {
+        if (assetSortMetric === metric) assetSortDirection = assetSortDirection === 'desc' ? 'asc' : 'desc';
+        else {
+            assetSortMetric = metric;
+            assetSortDirection = 'desc';
+        }
+        updateAssetSortIndicators();
+        renderAttribution();
+    }
+    function updateAssetSortIndicators() {
+        document.querySelectorAll('.asset-sort-icon').forEach(el => { el.textContent = '-'; });
+        const icon = document.querySelector(`.asset-sort-icon[data-sort-key="${assetSortMetric}"]`);
+        if (!icon) return;
+        icon.textContent = assetSortDirection === 'desc' ? 'v' : '^';
+    }
+    function setStabilitySortMetric(metric) {
+        if (stabilitySortMetric === metric) stabilitySortDirection = stabilitySortDirection === 'desc' ? 'asc' : 'desc';
+        else {
+            stabilitySortMetric = metric;
+            stabilitySortDirection = 'desc';
+        }
+        updateStabilitySortIndicators();
+        renderStability();
+    }
+    function updateStabilitySortIndicators() {
+        document.querySelectorAll('.stability-sort-icon').forEach(el => { el.textContent = '-'; });
+        const icon = document.querySelector(`.stability-sort-icon[data-sort-key="${stabilitySortMetric}"]`);
+        if (!icon) return;
+        icon.textContent = stabilitySortDirection === 'desc' ? 'v' : '^';
+    }
+    function setHeatmapSortMetric(metric) {
+        if (heatmapSortMetric === metric) heatmapSortDirection = heatmapSortDirection === 'desc' ? 'asc' : 'desc';
+        else {
+            heatmapSortMetric = metric;
+            heatmapSortDirection = 'desc';
+        }
+        updateHeatmapSortIndicators();
+        renderStability();
+    }
+    function updateHeatmapSortIndicators() {
+        document.querySelectorAll('.heatmap-sort-icon').forEach(el => { el.textContent = '-'; });
+        const icon = document.querySelector(`.heatmap-sort-icon[data-sort-key="${heatmapSortMetric}"]`);
+        if (!icon) return;
+        icon.textContent = heatmapSortDirection === 'desc' ? 'v' : '^';
+    }
     function renderSidebar() {
         const container = document.getElementById('strategyList'); container.innerHTML = '';
         const filtered = Object.keys(BACKTEST_DATA).filter(id => {
@@ -329,13 +380,7 @@
     }
     function toggleSelect(id) {
         const idx = selectedIds.indexOf(id); if (idx > -1) selectedIds.splice(idx, 1); else selectedIds.push(id);
-        if (baselineStrategyId && !selectedIds.includes(baselineStrategyId)) baselineStrategyId = null;
-        if (!baselineStrategyId && selectedIds.length) baselineStrategyId = selectedIds[0];
         renderSidebar(); renderActiveTab();
-    }
-    function setPairwiseBaseline(id) {
-        baselineStrategyId = id;
-        renderPairwiseDiff();
     }
     function buildEquityCurve(history) {
         const byTs = new Map();
@@ -374,6 +419,47 @@
         if (!std) return 0;
         return (mean / std) * Math.sqrt(returns.length);
     }
+    function detectInferredTradeMarkers(curve) {
+        if (curve.length < 5) return { buys: [], sells: [] };
+        const returns = calcReturns(curve);
+        const meanAbsMove = returns.length ? returns.reduce((acc, v) => acc + Math.abs(v), 0) / returns.length : 0;
+        const moveThreshold = Math.max(10, meanAbsMove * 1.2);
+        const buys = [];
+        const sells = [];
+        let lastSignalIndex = -9999;
+        for (let i = 1; i < curve.length - 1; i += 1) {
+            const prev = curve[i - 1].pnl;
+            const curr = curve[i].pnl;
+            const next = curve[i + 1].pnl;
+            if (i - lastSignalIndex < 12) continue; // keep markers sparse/readable
+            if (curr <= prev && curr <= next && ((Math.max(prev, next) - curr) >= moveThreshold)) {
+                buys.push({ x: curve[i].ts, y: curr });
+                lastSignalIndex = i;
+            } else if (curr >= prev && curr >= next && (curr - Math.min(prev, next) >= moveThreshold)) {
+                sells.push({ x: curve[i].ts, y: curr });
+                lastSignalIndex = i;
+            }
+        }
+        return { buys, sells };
+    }
+    function buildMarketFlowMarkers(day, curve) {
+        if (!window.MARKET_TRADE_FLOW || !MARKET_TRADE_FLOW[String(day)] || !curve.length) return { buys: [], sells: [] };
+        const pnlByTs = new Map(curve.map(p => [p.ts, p.pnl]));
+        const fallbackPnl = curve[curve.length - 1].pnl;
+        const picks = MARKET_TRADE_FLOW[String(day)]
+            .filter(row => row.buy_qty > 0 || row.sell_qty > 0)
+            .sort((a, b) => (b.buy_qty + b.sell_qty) - (a.buy_qty + a.sell_qty))
+            .slice(0, 60)
+            .sort((a, b) => a.ts - b.ts);
+        const buys = [];
+        const sells = [];
+        picks.forEach(row => {
+            const y = pnlByTs.get(row.ts) ?? fallbackPnl;
+            if (row.buy_qty > row.sell_qty) buys.push({ x: row.ts, y, tradeCount: row.trade_count, qty: row.buy_qty });
+            else if (row.sell_qty > row.buy_qty) sells.push({ x: row.ts, y, tradeCount: row.trade_count, qty: row.sell_qty });
+        });
+        return { buys, sells };
+    }
 
     function renderActiveTab() {
         if (activeTab === 'performance') renderPerformance();
@@ -383,6 +469,8 @@
 
     function renderPerformance() {
         const datasets = []; const tbody = document.querySelector('#leaderboardTable tbody'); tbody.innerHTML = '';
+        const tradeMarkerNote = document.getElementById('tradeMarkerNote');
+        tradeMarkerNote.textContent = '';
         const metricRows = [];
         selectedIds.forEach((id, i) => {
             const r = BACKTEST_DATA[id];
@@ -404,9 +492,69 @@
         metricRows.forEach(row => {
             tbody.innerHTML += `<tr><td style="color:${row.color}; font-weight:700;">● ${row.trader}</td><td style="color:${row.pnl > 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.pnl).toLocaleString()}</td><td style="color:var(--danger)">${Math.round(row.mdd).toLocaleString()}</td><td>${row.ratio.toFixed(2)}x</td><td>${row.sharpe.toFixed(2)}</td><td>${row.greenTicks}%</td><td><div style="height:4px; width:100px; background:#111;"><div style="height:100%; width:${row.readiness}%; background:var(--accent);"></div></div></td></tr>`;
         });
+        if (selectedIds.length === 1) {
+            const single = BACKTEST_DATA[selectedIds[0]];
+            const curve = buildEquityCurve(single.history);
+            const inferred = detectInferredTradeMarkers(curve);
+            const marketFlow = buildMarketFlowMarkers(single.day, curve);
+            datasets.push({
+                type: 'scatter',
+                label: 'Inferred Buy Zone',
+                data: inferred.buys,
+                pointStyle: 'triangle',
+                rotation: 0,
+                pointRadius: 4,
+                pointHoverRadius: 5,
+                borderWidth: 0,
+                backgroundColor: '#00ff9d'
+            });
+            datasets.push({
+                type: 'scatter',
+                label: 'Inferred Sell Zone',
+                data: inferred.sells,
+                pointStyle: 'rectRot',
+                pointRadius: 4,
+                pointHoverRadius: 5,
+                borderWidth: 0,
+                backgroundColor: '#ff4757'
+            });
+            datasets.push({
+                type: 'scatter',
+                label: 'Market Buy Pressure',
+                data: marketFlow.buys,
+                pointStyle: 'circle',
+                pointRadius: 3,
+                pointHoverRadius: 4,
+                borderWidth: 0,
+                backgroundColor: '#00d1ff'
+            });
+            datasets.push({
+                type: 'scatter',
+                label: 'Market Sell Pressure',
+                data: marketFlow.sells,
+                pointStyle: 'crossRot',
+                pointRadius: 4,
+                pointHoverRadius: 5,
+                borderWidth: 1,
+                borderColor: '#ff8f1f',
+                backgroundColor: '#ff8f1f'
+            });
+            tradeMarkerNote.textContent = `Markers for ${single.trader}: inferred buy/sell zones + market buy/sell pressure events (from day ${single.day} trades).`;
+        } else {
+            tradeMarkerNote.textContent = 'Select one strategy to show inferred zones and market pressure buy/sell markers on the PnL curve.';
+        }
         if (charts.perf) charts.perf.destroy();
         const labels = selectedIds.length > 0 ? buildEquityCurve(BACKTEST_DATA[selectedIds[0]].history).map(h => h.ts) : [];
-        charts.perf = new Chart(document.getElementById('performanceChart'), { type: 'line', data: { labels, datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.03)' } } }, plugins: { legend: { display: false } } } });
+        charts.perf = new Chart(document.getElementById('performanceChart'), {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.03)' } } },
+                plugins: { legend: { display: false } }
+            }
+        });
         const quickStats = document.getElementById('quickStats');
         if (!metricRows.length) {
             quickStats.innerHTML = '';
@@ -422,47 +570,6 @@
             <div class="metric-tile"><div class="metric-label">Lowest Drawdown</div><div class="metric-value">${safest.trader}</div></div>
             <div class="metric-tile"><div class="metric-label">Avg Green Ticks</div><div class="metric-value">${avgGreen}%</div></div>
         `;
-        renderPairwiseDiff();
-    }
-    function renderPairwiseDiff() {
-        const pairwisePanel = document.getElementById('pairwisePanel');
-        const baselineSelect = document.getElementById('baselineSelect');
-        const pairwiseNote = document.getElementById('pairwiseNote');
-        if (selectedIds.length < 2) {
-            pairwisePanel.classList.add('hidden');
-            if (charts.diff) charts.diff.destroy();
-            return;
-        }
-        if (!baselineStrategyId || !selectedIds.includes(baselineStrategyId)) baselineStrategyId = selectedIds[0];
-        baselineSelect.innerHTML = selectedIds.map(id => `<option value="${id}" ${id === baselineStrategyId ? 'selected' : ''}>${BACKTEST_DATA[id].trader}</option>`).join('');
-        pairwisePanel.classList.remove('hidden');
-        const baseline = BACKTEST_DATA[baselineStrategyId];
-        const baselineCurve = buildEquityCurve(baseline.history);
-        const labels = baselineCurve.map(p => p.ts);
-        const datasets = [];
-        selectedIds.filter(id => id !== baselineStrategyId).forEach((id, idx) => {
-            const challenger = BACKTEST_DATA[id];
-            const challengerCurve = buildEquityCurve(challenger.history);
-            const len = Math.min(baselineCurve.length, challengerCurve.length);
-            const diffData = [];
-            for (let i = 0; i < len; i += 1) diffData.push(challengerCurve[i].pnl - baselineCurve[i].pnl);
-            datasets.push({
-                label: `${challenger.trader} - ${baseline.trader}`,
-                data: diffData,
-                borderColor: COLORS[(idx + 3) % COLORS.length],
-                borderWidth: 2,
-                pointRadius: 0
-            });
-        });
-        pairwiseNote.textContent = datasets.length === 1
-            ? 'PAIRWISE DIFFERENCE CURVE (CHALLENGER - BASELINE)'
-            : 'BASELINE DIFFERENCE CURVES (ALL SELECTED STRATEGIES VS BASELINE)';
-        if (charts.diff) charts.diff.destroy();
-        charts.diff = new Chart(document.getElementById('pairwiseChart'), {
-            type: 'line',
-            data: { labels, datasets },
-            options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.03)' } } }, plugins: { legend: { display: datasets.length > 1 } } }
-        });
     }
 
     function renderAttribution() {
@@ -474,11 +581,20 @@
         if (charts.attr) charts.attr.destroy();
         charts.attr = new Chart(document.getElementById('attributionChart'), { type: 'bar', data: { labels: assets, datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { grid: { color: 'rgba(255,255,255,0.03)' } } } } });
         const tbody = document.querySelector('#assetLeaderboard tbody'); tbody.innerHTML = '';
-        assets.forEach(a => {
+        const rows = assets.map(a => {
             const scores = selectedIds.map(id => ({ name: BACKTEST_DATA[id].trader, val: BACKTEST_DATA[id].final_pnl_by_product[a] || 0 }));
             scores.sort((x,y) => y.val - x.val);
             const spread = scores[0].val - scores[scores.length - 1].val;
-            tbody.innerHTML += `<tr><td><b>${a}</b></td><td>${scores[0].name}</td><td style="color:var(--accent)">${Math.round(scores[0].val).toLocaleString()}</td><td style="color:var(--danger)">${Math.round(scores[scores.length-1].val).toLocaleString()}</td><td>${Math.round(spread).toLocaleString()}</td></tr>`;
+            return { asset: a, best: scores[0].name, max: scores[0].val, min: scores[scores.length-1].val, spread };
+        });
+        rows.sort((a, b) => {
+            const av = assetSortMetric === 'asset' ? a.asset : a[assetSortMetric];
+            const bv = assetSortMetric === 'asset' ? b.asset : b[assetSortMetric];
+            const delta = typeof av === 'string' ? av.localeCompare(bv) : av - bv;
+            return assetSortDirection === 'desc' ? -delta : delta;
+        });
+        rows.forEach(row => {
+            tbody.innerHTML += `<tr><td><b>${row.asset}</b></td><td>${row.best}</td><td style="color:var(--accent)">${Math.round(row.max).toLocaleString()}</td><td style="color:var(--danger)">${Math.round(row.min).toLocaleString()}</td><td>${Math.round(row.spread).toLocaleString()}</td></tr>`;
         });
     }
 
@@ -486,6 +602,7 @@
         const tbody = document.querySelector('#stabilityTable tbody'); tbody.innerHTML = '';
         const assetTbody = document.querySelector('#assetStabilityTable tbody'); assetTbody.innerHTML = '';
         const traders = [...new Set(Object.values(BACKTEST_DATA).map(r => r.trader))];
+        const stabilityRows = [];
         traders.forEach(t => {
             const runs = Object.values(BACKTEST_DATA).filter(r => r.trader === t && r.round === currentFilters.round);
             if (runs.length < 2) return;
@@ -495,23 +612,41 @@
             const avg = (d0 + d1 + d2) / 3;
             const range = Math.max(d0, d1, d2) - Math.min(d0, d1, d2);
             const consistency = Math.max(0, 100 - Math.round((Math.abs(range) / (Math.abs(avg) + 1)) * 100));
-            tbody.innerHTML += `<tr><td><b>${t}</b></td><td>${Math.round(d0).toLocaleString()}</td><td>${Math.round(d1).toLocaleString()}</td><td>${Math.round(d2).toLocaleString()}</td><td>${Math.round(avg).toLocaleString()}</td><td style="color:${range > 50000 ? 'var(--danger)' : 'var(--warning)'}">${Math.round(range).toLocaleString()}</td><td style="color:${consistency < 40 ? 'var(--danger)' : 'var(--accent)'}">${consistency}%</td></tr>`;
+            stabilityRows.push({ trader: t, d0, d1, d2, avg, range, consistency });
+        });
+        stabilityRows.sort((a, b) => {
+            const av = stabilitySortMetric === 'trader' ? a.trader : a[stabilitySortMetric];
+            const bv = stabilitySortMetric === 'trader' ? b.trader : b[stabilitySortMetric];
+            const delta = typeof av === 'string' ? av.localeCompare(bv) : av - bv;
+            return stabilitySortDirection === 'desc' ? -delta : delta;
+        });
+        stabilityRows.forEach(row => {
+            tbody.innerHTML += `<tr><td><b>${row.trader}</b></td><td>${Math.round(row.d0).toLocaleString()}</td><td>${Math.round(row.d1).toLocaleString()}</td><td>${Math.round(row.d2).toLocaleString()}</td><td>${Math.round(row.avg).toLocaleString()}</td><td style="color:${row.range > 50000 ? 'var(--danger)' : 'var(--warning)'}">${Math.round(row.range).toLocaleString()}</td><td style="color:${row.consistency < 40 ? 'var(--danger)' : 'var(--accent)'}">${row.consistency}%</td></tr>`;
         });
         const roundRuns = Object.values(BACKTEST_DATA).filter(r => r.round === currentFilters.round);
         const assets = [...new Set(roundRuns.flatMap(r => Object.keys(r.final_pnl_by_product || {})))].sort();
-        assets.forEach(asset => {
+        const heatRows = assets.map(asset => {
             const dayVals = [0, 1, 2].map(day => {
                 const vals = roundRuns.filter(r => r.day === day).map(r => r.final_pnl_by_product?.[asset] || 0);
                 if (!vals.length) return 0;
                 return vals.reduce((a, b) => a + b, 0) / vals.length;
             });
             const spread = Math.max(...dayVals) - Math.min(...dayVals);
+            return { asset, d0: dayVals[0], d1: dayVals[1], d2: dayVals[2], spread };
+        });
+        heatRows.sort((a, b) => {
+            const av = heatmapSortMetric === 'asset' ? a.asset : a[heatmapSortMetric];
+            const bv = heatmapSortMetric === 'asset' ? b.asset : b[heatmapSortMetric];
+            const delta = typeof av === 'string' ? av.localeCompare(bv) : av - bv;
+            return heatmapSortDirection === 'desc' ? -delta : delta;
+        });
+        heatRows.forEach(row => {
             const cell = v => {
                 const alpha = Math.min(0.7, Math.abs(v) / 12000);
                 const base = v >= 0 ? `rgba(0,255,157,${alpha})` : `rgba(255,71,87,${alpha})`;
                 return `<td class="heat-cell" style="background:${base};">${Math.round(v).toLocaleString()}</td>`;
             };
-            assetTbody.innerHTML += `<tr><td><b>${asset}</b></td>${cell(dayVals[0])}${cell(dayVals[1])}${cell(dayVals[2])}<td>${Math.round(spread).toLocaleString()}</td></tr>`;
+            assetTbody.innerHTML += `<tr><td><b>${row.asset}</b></td>${cell(row.d0)}${cell(row.d1)}${cell(row.d2)}<td>${Math.round(row.spread).toLocaleString()}</td></tr>`;
         });
     }
     init();
