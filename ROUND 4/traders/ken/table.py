@@ -134,6 +134,41 @@ class Trader:
 
         return orders
 
+    def _take_edge_orders(
+        self,
+        symbol: str,
+        state: TradingState,
+        fair: float,
+        take_threshold: float,
+        max_take: int,
+    ) -> List[Order]:
+        orders: List[Order] = []
+        depth = state.order_depths.get(symbol)
+        if not depth:
+            return orders
+
+        pos = state.position.get(symbol, 0)
+        limit = self.POSITION_LIMITS.get(symbol, 20)
+        buy_cap = max(0, limit - pos)
+        sell_cap = max(0, limit + pos)
+
+        best_ask = min(depth.sell_orders.keys()) if depth.sell_orders else None
+        best_bid = max(depth.buy_orders.keys()) if depth.buy_orders else None
+
+        if best_ask is not None and best_ask <= fair - take_threshold and buy_cap > 0:
+            ask_size = abs(depth.sell_orders[best_ask])
+            qty = min(max_take, buy_cap, ask_size)
+            if qty > 0:
+                orders.append(Order(symbol, best_ask, qty))
+
+        if best_bid is not None and best_bid >= fair + take_threshold and sell_cap > 0:
+            bid_size = abs(depth.buy_orders[best_bid])
+            qty = min(max_take, sell_cap, bid_size)
+            if qty > 0:
+                orders.append(Order(symbol, best_bid, -qty))
+
+        return orders
+
     def _vev_orders(self, symbol: str, state: TradingState, vfe_mid: float) -> List[Order]:
         orders: List[Order] = []
         if symbol not in state.order_depths or vfe_mid is None:
@@ -175,16 +210,28 @@ class Trader:
         hydro_mid = self._mid_price(state, "HYDROGEL_PACK", mids)
 
         if hydro_mid is not None:
-            skew = 0.06 * mem["mark_signal"].get("HYDROGEL_PACK", 0.0)
+            last_hydro = mem["last_mid"].get("HYDROGEL_PACK", hydro_mid)
+            hydro_momo = hydro_mid - last_hydro
+            skew = 0.06 * mem["mark_signal"].get("HYDROGEL_PACK", 0.0) + 0.4 * hydro_momo
             result["HYDROGEL_PACK"].extend(
                 self._mm_orders("HYDROGEL_PACK", state, hydro_mid, edge=5, clip=10, signal_skew=skew)
             )
+            result["HYDROGEL_PACK"].extend(
+                self._take_edge_orders("HYDROGEL_PACK", state, hydro_mid + skew, take_threshold=2.0, max_take=6)
+            )
+            mem["last_mid"]["HYDROGEL_PACK"] = hydro_mid
 
         if vfe_mid is not None:
-            skew = 0.05 * mem["mark_signal"].get("VELVETFRUIT_EXTRACT", 0.0)
+            last_vfe = mem["last_mid"].get("VELVETFRUIT_EXTRACT", vfe_mid)
+            vfe_momo = vfe_mid - last_vfe
+            skew = 0.05 * mem["mark_signal"].get("VELVETFRUIT_EXTRACT", 0.0) + 0.25 * vfe_momo
             result["VELVETFRUIT_EXTRACT"].extend(
-                self._mm_orders("VELVETFRUIT_EXTRACT", state, vfe_mid, edge=3, clip=12, signal_skew=skew)
+                self._mm_orders("VELVETFRUIT_EXTRACT", state, vfe_mid, edge=2, clip=10, signal_skew=skew)
             )
+            result["VELVETFRUIT_EXTRACT"].extend(
+                self._take_edge_orders("VELVETFRUIT_EXTRACT", state, vfe_mid + skew, take_threshold=1.5, max_take=6)
+            )
+            mem["last_mid"]["VELVETFRUIT_EXTRACT"] = vfe_mid
 
         if vfe_mid is not None:
             for symbol in state.order_depths.keys():
