@@ -31,16 +31,19 @@ Top tabs:
 - `OVERLAY` -> performance and ranking
 - `ATTRIBUTION` -> product contribution comparison
 - `STABILITY` -> cross-day consistency and heatmap
+- `MANAGER` -> duplicate backtest run review and cleanup manifest export
 
 Left sidebar:
 
 - Context filters: `Round` and `Day`
 - Strategy list: click one or more strategies to include in analytics
 - `RESET ALL`: clear current strategy selection
+- On round switch, selected strategy names are preserved when matching traders exist in the new round/day context
 
 Header actions:
 
 - `EXPORT SNAPSHOT`: downloads an AI-friendly JSON snapshot with computed analytics
+- `REFRESH DATA`: refreshes loaded backtest results from `backtest_comparison.js`
 
 ## Global Table Behavior
 
@@ -179,6 +182,35 @@ Use `EXPORT SNAPSHOT` to download:
 - stability panel rows and day labels
 
 This export is designed to be directly consumed by AI tools for deeper analysis.
+
+## Manager Tab (Duplicate Runs)
+
+The `MANAGER` tab helps triage duplicate backtest runs from the loaded dataset.
+
+Capabilities:
+
+- Scans duplicate groups based on trader + dataset/day + result fingerprint
+- Marks newest run as `KEEP`, others as delete candidates
+- Checkbox selection in the last column for deletions
+- Filters by trader substring, run id substring, and round
+- Buttons for:
+  - `SELECT ALL DELETE CANDIDATES`
+  - `DESELECT ALL`
+  - `CLEAR SELECTION + FILTERS`
+  - `EXPORT DELETE MANIFEST`
+
+### What Export Delete Manifest does
+
+`EXPORT DELETE MANIFEST` downloads a JSON file containing selected run ids:
+
+- `run_ids`: the run folder ids chosen for deletion
+- `exportedAt`: timestamp
+- `source`: `visualizer_manager`
+
+Use this manifest with:
+
+- `python backtest_results_manager.py --manifest "<manifest_path>"` (dry-run)
+- `python backtest_results_manager.py --manifest "<manifest_path>" --apply` (delete selected runs)
 
 ## Current Limitations
 
