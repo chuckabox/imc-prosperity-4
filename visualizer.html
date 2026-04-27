@@ -300,7 +300,7 @@
     .metric-tile { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; }
     .metric-label { color: var(--text-dim); font-size: 0.55rem; text-transform: uppercase; letter-spacing: 1px; }
     .metric-value { font-size: 0.9rem; font-weight: 700; margin-top: 6px; }
-    .chart-note { color: var(--text-dim); font-size: 0.55rem; letter-spacing: 0.8px; margin: 6px 0 8px; }
+    .chart-note { color: var(--text); font-size: 0.55rem; letter-spacing: 0.8px; margin: 6px 0 8px; }
     .heatmap-table td.heat-cell { font-weight: 700; text-align: center; border-radius: 4px; }
     .panel-header {
         margin: -20px -20px 10px;
@@ -1243,6 +1243,24 @@
         const datasets = [];
         const summaryRows = [];
         let pairIndex = 0;
+        const interpolateLinear = series => {
+            const out = [...series];
+            let left = -1;
+            for (let i = 0; i < out.length; i += 1) {
+                if (out[i] === null) continue;
+                if (left >= 0 && i - left > 1) {
+                    const leftVal = out[left];
+                    const rightVal = out[i];
+                    const span = i - left;
+                    for (let j = left + 1; j < i; j += 1) {
+                        const t = (j - left) / span;
+                        out[j] = leftVal + ((rightVal - leftVal) * t);
+                    }
+                }
+                left = i;
+            }
+            return out;
+        };
         selectedRuns.forEach(({ id: selectedId, run: selectedRun }) => {
             const trader = selectedRun.trader;
             const btData = new Array(labels.length).fill(null);
@@ -1296,6 +1314,8 @@
                 });
             });
             if (btData.every(v => v === null) || liveData.every(v => v === null)) return;
+            const denseBtData = interpolateLinear(btData);
+            const denseLiveData = interpolateLinear(liveData);
 
             const color = COLORS[pairIndex % COLORS.length];
             pairIndex += 1;
@@ -1303,23 +1323,23 @@
             const liveRef = [...usedLiveIds].slice(0, 2).join(',') || '-';
             datasets.push({
                 label: `${trader} BT (${btRef})`,
-                data: btData,
+                data: denseBtData,
                 borderColor: color,
                 backgroundColor: 'transparent',
                 borderWidth: 2,
-                pointRadius: 1.6,
+                pointRadius: 1.9,
                 pointHoverRadius: 4,
                 fill: false,
                 tension: 0.15
             });
             datasets.push({
                 label: `${trader} LIVE (${liveRef})`,
-                data: liveData,
+                data: denseLiveData,
                 borderColor: '#ffffff',
                 backgroundColor: 'rgba(255, 165, 0, 0.26)',
                 borderDash: [6, 4],
                 borderWidth: 2,
-                pointRadius: 1.6,
+                pointRadius: 1.9,
                 pointHoverRadius: 4,
                 fill: '-1',
                 tension: 0.15
@@ -1359,12 +1379,54 @@
                 ctx.restore();
             }
         };
+        const gapDetailPlugin = {
+            id: 'compareGapDetail',
+            afterDatasetsDraw(chart) {
+                const { ctx, scales } = chart;
+                const yScale = scales.y;
+                const xScale = scales.x;
+                if (!yScale || !xScale) return;
+                const ds = chart.data.datasets || [];
+                for (let i = 0; i < ds.length - 1; i += 2) {
+                    const bt = ds[i]?.data || [];
+                    const live = ds[i + 1]?.data || [];
+                    const maxLen = Math.min(bt.length, live.length);
+                    for (let idx = 0; idx < maxLen - 1; idx += 1) {
+                        const bt0 = bt[idx]; const bt1 = bt[idx + 1];
+                        const lv0 = live[idx]; const lv1 = live[idx + 1];
+                        if (bt0 === null || bt1 === null || lv0 === null || lv1 === null) continue;
+                        const x0 = xScale.getPixelForValue(idx);
+                        const x1 = xScale.getPixelForValue(idx + 1);
+                        const yBt0 = yScale.getPixelForValue(bt0);
+                        const yBt1 = yScale.getPixelForValue(bt1);
+                        const yLv0 = yScale.getPixelForValue(lv0);
+                        const yLv1 = yScale.getPixelForValue(lv1);
+                        const avgGap = ((lv0 - bt0) + (lv1 - bt1)) / 2;
+                        const intensity = Math.min(0.42, 0.08 + (Math.abs(avgGap) / 7000));
+                        // Orange family, brighter when live outperforms, deeper when underperforming.
+                        const fill = avgGap >= 0
+                            ? `rgba(255, 176, 32, ${intensity})`
+                            : `rgba(255, 116, 16, ${Math.min(0.48, intensity + 0.04)})`;
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.moveTo(x0, yBt0);
+                        ctx.lineTo(x1, yBt1);
+                        ctx.lineTo(x1, yLv1);
+                        ctx.lineTo(x0, yLv0);
+                        ctx.closePath();
+                        ctx.fillStyle = fill;
+                        ctx.fill();
+                        ctx.restore();
+                    }
+                }
+            }
+        };
 
         if (charts.compare) charts.compare.destroy();
         charts.compare = new Chart(document.getElementById('compareChart'), {
             type: 'line',
             data: { labels, datasets },
-            plugins: [zonePlugin],
+            plugins: [zonePlugin, gapDetailPlugin],
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
