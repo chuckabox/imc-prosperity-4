@@ -1,210 +1,199 @@
 # Visualizer Guide
 
-This document explains how to use `visualizer.html` and how to interpret each metric.
+This document explains the current behavior of `visualizer.html`, including backtest + live-log workflows.
 
 ## Purpose
 
-The visualizer is designed to help you compare strategies for competition readiness by showing:
+The visualizer helps compare strategy behavior and readiness via:
 
-- PnL and risk behavior over time
+- Portfolio PnL curves
+- Risk and selection heuristics
 - Product-level attribution
 - Cross-day stability
-- A practical selection score with risk gates
+- Backtest vs live comparison
+- Data cleanup and duplicate management
 
-## Data Source
+## Data Inputs
 
-The app reads from `backtest_comparison.js` (`BACKTEST_DATA` object).
+Primary files:
 
-Each run typically includes:
+- `backtest_comparison.js` (`BACKTEST_DATA`)
+- `live_comparison.js` (`LIVE_LOG_DATA`)
 
-- `trader`
-- `round`
-- `day`
-- `final_pnl`
-- `final_pnl_by_product`
-- `history` (symbol-level PnL snapshots over time)
+Live data is generated from `ROUND */live_logs/**` by:
+
+- `tools/build_live_comparison.py`
+- API trigger via `tools/visualizer_loader_server.py` (`/api/load-data`)
+
+Typical run fields:
+
+- `trader`, `round`, `day`
+- `final_pnl`, `final_pnl_by_product`
+- `history` (symbol-level PnL snapshots)
+
+## Running with File-Backed Actions
+
+Use the loader server if you want `REFETCH` / manager actions to rewrite files:
+
+`python tools/visualizer_loader_server.py --repo-root . --port 8765`
+
+Open:
+
+- [http://127.0.0.1:8765/visualizer.html](http://127.0.0.1:8765/visualizer.html)
 
 ## Navigation
 
 Top tabs:
 
-- `OVERLAY` -> performance and ranking
-- `ATTRIBUTION` -> product contribution comparison
-- `STABILITY` -> cross-day consistency and heatmap
-- `MANAGER` -> duplicate backtest run review
+- `OVERLAY`: core curve + leaderboard
+- `COMPARE`: backtest vs live overlay
+- `ATTRIBUTION`: product breakdown and asset leaderboard
+- `STABILITY`: day consistency matrix + heatmap
+- `MANAGER`: duplicate scan/cleanup
 
-Left sidebar:
+Sidebar filters:
 
-- Context filters: `Round` and `Day`
-- Strategy list: click one or more strategies to include in analytics
-- `RESET`: clear current strategy selection
-- On round switch, selected strategy names are preserved when matching traders exist in the new round/day context
+- Source: `BACKTEST` / `LIVE LOGS`
+- Round: `R3` / `R4` / `R5`
+- Day: `TOTAL`, `D0`, `D1`, `D2`, `D3`
 
 Header actions:
 
-- `EXPORT SNAPSHOT`: downloads an AI-friendly JSON snapshot with computed analytics
-- `REFRESH DATA`: refreshes loaded backtest results from `backtest_comparison.js`
+- `REFETCH`: rebuild/clean datasets through loader API
+- `EXPORT SNAPSHOT`: export computed analytics payload
 
-## Global Table Behavior
+## Day Filter Behavior
 
-All leaderboard tables use:
+- `D#`: show runs only for that day.
+- `TOTAL`: show all runs in selected round.
 
-- Sticky headers
-- Sort controls in header cells (click to toggle descending/ascending)
-- Isolated scroll areas (title/header does not scroll with rows)
+Special handling in `BACKTEST + TOTAL`:
 
-Sort icon meanings:
-
-- `v` = descending
-- `^` = ascending
-- `-` = inactive
+- Sidebar groups by strategy name and exposes variants:
+  - `TraderName V1`
+  - `TraderName V2`
+  - ...
+- Each variant can represent a different run track across days.
 
 ## OVERLAY Tab
 
-### PnL Overlay Chart
+### Chart
 
-Shows selected strategies as equity curves over time.
+- Uses portfolio-level equity curves from `history` (`buildEquityCurve`).
+- In day mode: standard single-day timeline.
+- In `TOTAL`: builds a concatenated multi-day timeline with day-zone shading.
 
-Important detail:
+### Leaderboard Metrics
 
-- The curve is built from aggregated symbol-level PnL snapshots (`buildEquityCurve`), not raw per-symbol lines.
-- This gives a portfolio-level view per strategy.
+- `PNL`
+- `MAX DD`
+- `CALMAR`
+- `SHARPE*` (simplified)
+- `GREEN TICKS`
+- `SELECTION SCORE`
+- `STATUS` (`GREEN/AMBER/RED`)
+- `WHY`
+- `READINESS`
 
-### Batch Metrics Table
+## COMPARE Tab
 
-Columns:
+Compares selected strategies between backtest and live on the same chart.
 
-- `STRATEGY`: selected strategy name
-- `PNL`: final PnL for selected round/day run
-- `MAX DD`: maximum drawdown from portfolio curve (negative value)
-- `CALMAR`: `final_pnl / abs(max_drawdown)`
-- `SHARPE*`: simplified Sharpe-like score from curve deltas
-- `GREEN TICKS`: percentage of positive curve deltas
-- `SELECTION SCORE`: custom 0-100 readiness score (see below)
-- `STATUS`: `GREEN / AMBER / RED` risk-gated classification
-- `WHY`: short reason text for status classification
-- `READINESS`: legacy bar score retained for quick visual scan
+Key behavior:
 
-### Quick Stats Tiles
+- Requires explicit strategy selection (empty selection shows no chart).
+- Uses round-level matching and multi-day zoning.
+- Backtest timeline is shown across day zones.
+- Live curves are overlaid where matching day data exists.
+- Orange gap rendering shows divergence detail by segment.
+- Zoom/pan enabled:
+  - wheel zoom (x-axis)
+  - pinch zoom
+  - drag pan (x-axis)
 
-Top tiles summarize currently selected strategies:
+Summary table includes:
 
-- Top PnL strategy
-- Best Sharpe strategy
-- Lowest drawdown strategy
-- Average green ticks
+- Trader
+- Backtest PnL
+- Live PnL
+- Delta (live - backtest)
+- Common ticks
+- Coverage
 
 ## ATTRIBUTION Tab
 
-### Grouped Product Attribution Chart
+Uses selected strategies only.
 
-Bar chart of `final_pnl_by_product` per selected strategy.
+- If nothing selected: chart and table are cleared.
+- Duplicate trader labels are deduped (keeps strongest selected run per trader).
 
-### Asset Performance Leaderboard
+Outputs:
 
-For each asset:
-
-- Best strategy
-- Max profit
-- Least profit
-- Spread (`max - min`)
-
-Use this table to detect assets with large strategy dispersion (high spread = edge may be strategy-specific).
+- Grouped product attribution chart
+- Asset leaderboard (`best`, `max`, `min`, `spread`)
 
 ## STABILITY Tab
 
-This tab has two separate panels.
+Two panels:
 
-### Cross-Day Matrix
+- Cross-day matrix per strategy
+- Per-asset day heatmap
 
-Per trader (within selected round):
+Day columns are dynamic based on available data in selected round.
 
-- `D* PNL` columns are dynamic and follow available days in selected round (for example `D1 / D2 / D3` in Round 4)
-- `AVG`: mean across available days
-- `RANGE`: `max(day pnl) - min(day pnl)`
-- `CONSISTENCY`: inverse normalized range heuristic
+## MANAGER Tab
 
-Interpretation:
-
-- Lower range + higher consistency is generally better.
-
-### Per-Asset Day Stability Heatmap
-
-For each asset:
-
-- Average PnL on the same dynamic day set used in Cross-Day Matrix
-- Spread across days
-
-Color coding:
-
-- Green shades: positive
-- Red shades: negative
-- Stronger color: larger magnitude
-
-## Selection Score and Status
-
-`SELECTION SCORE` is a composite indicator used to rank strategies for deployment decisions.
-
-It combines:
-
-- Return quality (`CALMAR`, `SHARPE*`, `GREEN TICKS`)
-- Cross-day robustness (avg PnL, worst day, day range)
-- Concentration penalty (single-asset dependency via `final_pnl_by_product`)
-
-Then hard risk gates produce `STATUS`:
-
-- `RED`: severe risk profile
-- `AMBER`: medium risk / caution
-- `GREEN`: comparatively robust candidate
-
-Note:
-
-- Status and score are internal heuristics for triage.
-- Final decisions should still review raw PnL, drawdown profile, and day-by-day behavior.
-
-## Recommended Workflow
-
-1. Filter round/day context.
-2. Select candidate strategies.
-3. In `OVERLAY`, sort by `SELECTION SCORE` and check `STATUS`.
-4. Reject obvious `RED` strategies unless needed for exploration.
-5. In `ATTRIBUTION`, inspect spread and asset dependence.
-6. In `STABILITY`, validate cross-day robustness and per-asset consistency.
-7. Keep a shortlist of `GREEN` and strongest `AMBER` with acceptable drawdown.
-
-## Export Snapshot
-
-Use `EXPORT SNAPSHOT` to download:
-
-- active filters and selected strategy ids
-- computed performance rows (including score/status/reasons)
-- attribution table rows
-- stability panel rows and day labels
-
-This export is designed to be directly consumed by AI tools for deeper analysis.
-
-## Manager Tab (Duplicate Runs)
-
-The `MANAGER` tab helps triage duplicate backtest runs from the loaded dataset.
+Purpose: detect duplicate runs and apply file-backed cleanup.
 
 Capabilities:
 
-- Scans duplicate groups based on trader + dataset/day + result fingerprint
-- Marks newest run as `KEEP`, others as delete candidates
-- Checkbox selection in the last column for deletions
-- Filters by trader substring, run id substring, and round
-- Buttons for:
-  - `SELECT ALL DELETE CANDIDATES`
-  - `DESELECT ALL`
-  - `CLEAR SELECTION + FILTERS`
+- Duplicate grouping by fingerprint
+- Keep newest candidate, mark others for removal
+- Round/trader/run-id filters
+- Batch selection + remove
+
+Backtest-mode remove:
+
+- Removes selected run ids from `backtest_comparison.js`
+- Runs backtest dedupe/cleanup rewrite
+- Best-effort removal of matching artifact files
+
+Live-mode remove:
+
+- Removes selected underlying live log files
+- Removes sibling `.json`/`.log` artifacts for same stem
+- Cleans duplicate JSON content (`activitiesLog`, `tradeHistory`)
+- Rebuilds `live_comparison.js`
+
+## REFETCH Behavior
+
+When called via loader server API:
+
+- Runs backtest cleanup + rewrite
+- Runs live log cleanup + rebuild
+- Updates `backtest_comparison.js` and `live_comparison.js`
+
+## Export Snapshot
+
+`EXPORT SNAPSHOT` writes a JSON with:
+
+- current filters
+- selected ids
+- computed performance, attribution, and stability views
+
+Useful for offline analysis or AI-assisted review.
 
 ## Current Limitations
 
-- No exact per-strategy buy/sell fill markers (input data currently lacks strategy-resolved trade fills in this visualizer dataset).
-- `SHARPE*` is simplified (no risk-free rate/calendar normalization).
-- `CONSISTENCY` is heuristic, not a formal statistical stability test.
+- No per-fill trade markers on curves.
+- `SHARPE*` is simplified.
+- Consistency metric is heuristic.
+- Variant grouping in `BACKTEST + TOTAL` is rank-based (by run id ordering per day), not semantic model-version metadata.
 
 ## File Map
 
-- UI + logic: `visualizer.html`
-- Data payload: `backtest_comparison.js`
+- UI + interaction logic: `visualizer.html`
+- Loader/API server: `tools/visualizer_loader_server.py`
+- Live data builder: `tools/build_live_comparison.py`
+- Backtest payload: `backtest_comparison.js`
+- Live payload: `live_comparison.js`

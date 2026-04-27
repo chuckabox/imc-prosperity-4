@@ -378,6 +378,7 @@
                     <div id="r5-btn" class="select-pill scope-pill" onclick="setFilter('round', 5)">R5</div>
                 </div>
                 <div id="dayFilterRow" class="filter-row">
+                    <div id="dtotal-btn" class="select-pill scope-pill" onclick="setFilter('day', 'total')">TOTAL</div>
                     <div id="d0-btn" class="select-pill scope-pill active" onclick="setFilter('day', 0)">D0</div>
                     <div id="d1-btn" class="select-pill scope-pill" onclick="setFilter('day', 1)">D1</div>
                     <div id="d2-btn" class="select-pill scope-pill" onclick="setFilter('day', 2)">D2</div>
@@ -568,7 +569,8 @@
         const el = document.getElementById('contextBadge');
         if (!el) return;
         const sourceLabel = currentFilters.source === 'live' ? 'LIVE LOGS' : 'BACKTEST';
-        el.textContent = `Viewing: ${sourceLabel} | R${currentFilters.round} D${currentFilters.day}`;
+        const dayLabel = currentFilters.day === 'total' ? 'TOTAL' : `D${currentFilters.day}`;
+        el.textContent = `Viewing: ${sourceLabel} | R${currentFilters.round} ${dayLabel}`;
     }
     function updateRefreshButton() {
         const btn = document.getElementById('refreshBtn');
@@ -579,6 +581,7 @@
         const dataStore = getDataStore();
         return Object.keys(dataStore).filter(id => {
             const r = dataStore[id];
+            if (currentFilters.day === 'total') return r.round === currentFilters.round;
             return r.round === currentFilters.round && r.day === currentFilters.day;
         });
     }
@@ -593,7 +596,7 @@
         if (source !== 'backtest' && source !== 'live') return;
         currentFilters.source = source;
         const availableDays = getAvailableDays(currentFilters.round);
-        if (!availableDays.includes(currentFilters.day)) currentFilters.day = availableDays.length ? availableDays[0] : 0;
+        if (currentFilters.day !== 'total' && !availableDays.includes(currentFilters.day)) currentFilters.day = availableDays.length ? availableDays[0] : 0;
         selectedIds = [];
         updateSourcePills();
         updateRefreshButton();
@@ -665,10 +668,12 @@
         const availableDays = getAvailableDays(currentFilters.round);
         if (type === 'round') {
             const prevDays = getAvailableDays(prevRound);
-            const oldIdx = Math.max(0, prevDays.indexOf(prevDay));
-            const newIdx = Math.min(oldIdx, Math.max(0, availableDays.length - 1));
-            currentFilters.day = availableDays.length ? availableDays[newIdx] : 0;
-        } else if (!availableDays.includes(currentFilters.day)) {
+            if (prevDay !== 'total') {
+                const oldIdx = Math.max(0, prevDays.indexOf(prevDay));
+                const newIdx = Math.min(oldIdx, Math.max(0, availableDays.length - 1));
+                currentFilters.day = availableDays.length ? availableDays[newIdx] : 0;
+            }
+        } else if (currentFilters.day !== 'total' && !availableDays.includes(currentFilters.day)) {
             currentFilters.day = availableDays.length ? availableDays[0] : 0;
         }
         document.querySelectorAll('.scope-pill').forEach(p => p.classList.remove('active'));
@@ -679,7 +684,9 @@
             if (!dayBtn) return;
             dayBtn.style.display = availableDays.includes(day) ? 'block' : 'none';
         });
-        const dayBtn = document.getElementById(`d${currentFilters.day}-btn`);
+        const dayBtn = currentFilters.day === 'total'
+            ? document.getElementById('dtotal-btn')
+            : document.getElementById(`d${currentFilters.day}-btn`);
         if (dayBtn) dayBtn.classList.add('active');
         const filteredIds = getCurrentFilteredIds();
         selectedIds = filteredIds.filter(id => prevSelectedTraderNames.has(dataStore[id].trader));
@@ -763,9 +770,64 @@
     function renderSidebar() {
         const dataStore = getDataStore();
         const container = document.getElementById('strategyList'); container.innerHTML = '';
+        const isGroupedBacktestTotal = currentFilters.source === 'backtest' && currentFilters.day === 'total' && activeTab !== 'compare';
+        if (isGroupedBacktestTotal) {
+            const byTrader = new Map();
+            Object.keys(dataStore).forEach(id => {
+                const r = dataStore[id];
+                if (r.round !== currentFilters.round) return;
+                if (!byTrader.has(r.trader)) byTrader.set(r.trader, []);
+                byTrader.get(r.trader).push({ id, run: r });
+            });
+            const groups = [];
+            [...byTrader.entries()].forEach(([trader, items]) => {
+                // Build explicit variant tracks for same trader when multiple backtests exist per day.
+                const byDay = new Map();
+                items.forEach(it => {
+                    if (!byDay.has(it.run.day)) byDay.set(it.run.day, []);
+                    byDay.get(it.run.day).push(it);
+                });
+                [...byDay.keys()].forEach(day => {
+                    byDay.get(day).sort((a, b) => runIdScore(b.id) - runIdScore(a.id));
+                });
+                const variantCount = Math.max(1, ...[...byDay.values()].map(arr => arr.length));
+                for (let variantIdx = 0; variantIdx < variantCount; variantIdx += 1) {
+                    const member = [];
+                    [...byDay.keys()].sort((a, b) => a - b).forEach(day => {
+                        const pick = byDay.get(day)[variantIdx];
+                        if (pick) member.push(pick);
+                    });
+                    if (!member.length) continue;
+                    const memberIds = member.map(x => x.id);
+                    const totalPnl = member.reduce((acc, x) => acc + (Number(x.run.final_pnl) || 0), 0);
+                    const days = [...new Set(member.map(x => x.run.day))].sort((a, b) => a - b);
+                    groups.push({
+                        trader,
+                        variantIdx,
+                        totalPnl,
+                        days,
+                        memberIds
+                    });
+                }
+            });
+            groups.sort((a, b) => b.totalPnl - a.totalPnl);
+
+            groups.forEach(group => {
+                const isActive = group.memberIds.every(id => selectedIds.includes(id));
+                const card = document.createElement('div'); card.className = `strategy-card ${isActive ? 'active' : ''}`;
+                const color = isActive ? COLORS[Math.max(0, selectedIds.indexOf(group.memberIds.find(id => selectedIds.includes(id)))) % COLORS.length] : 'transparent';
+                const dayLabel = group.days.map(d => `D${d}`).join(', ');
+                const variantLabel = `V${group.variantIdx + 1}`;
+                card.innerHTML = `<div class="card-color" style="background:${color}"></div><span class="card-name">${group.trader} ${variantLabel}</span><span class="card-stats">TOTAL: ${Math.round(group.totalPnl).toLocaleString()} | ${dayLabel}</span>`;
+                card.onclick = () => toggleSelect(`grp:${group.trader}::${group.variantIdx}`);
+                container.appendChild(card);
+            });
+            return;
+        }
         let filtered = Object.keys(dataStore).filter(id => {
             const r = dataStore[id];
             if (activeTab === 'compare') return r.round === currentFilters.round && hasCompareCounterpart(r, currentFilters.source);
+            if (currentFilters.day === 'total') return r.round === currentFilters.round;
             return r.round === currentFilters.round && r.day === currentFilters.day;
         });
         filtered = filtered.sort((a, b) => dataStore[b].final_pnl - dataStore[a].final_pnl);
@@ -783,6 +845,39 @@
         return Object.values(otherStore).some(r => r.round === run.round && r.trader === run.trader);
     }
     function toggleSelect(id) {
+        if (typeof id === 'string' && id.startsWith('grp:')) {
+            const token = id.slice(4);
+            const [trader, variantRaw] = token.split('::');
+            const variantIdx = Number(variantRaw || 0);
+            const dataStore = getDataStore();
+            const items = Object.keys(dataStore)
+                .map(runId => ({ runId, run: dataStore[runId] }))
+                .filter(x => x.run.round === currentFilters.round && x.run.trader === trader);
+            const byDay = new Map();
+            items.forEach(x => {
+                if (!byDay.has(x.run.day)) byDay.set(x.run.day, []);
+                byDay.get(x.run.day).push(x);
+            });
+            [...byDay.keys()].forEach(day => {
+                byDay.get(day).sort((a, b) => runIdScore(b.runId) - runIdScore(a.runId));
+            });
+            const memberIds = [];
+            [...byDay.keys()].sort((a, b) => a - b).forEach(day => {
+                const pick = byDay.get(day)[variantIdx];
+                if (pick) memberIds.push(pick.runId);
+            });
+            if (!memberIds.length) return;
+            const fullySelected = memberIds.every(runId => selectedIds.includes(runId));
+            if (fullySelected) {
+                selectedIds = selectedIds.filter(runId => !memberIds.includes(runId));
+            } else {
+                memberIds.forEach(runId => {
+                    if (!selectedIds.includes(runId)) selectedIds.push(runId);
+                });
+            }
+            renderSidebar(); renderActiveTab();
+            return;
+        }
         const idx = selectedIds.indexOf(id); if (idx > -1) selectedIds.splice(idx, 1); else selectedIds.push(id);
         renderSidebar(); renderActiveTab();
     }
@@ -1476,6 +1571,32 @@
         const dataStore = getDataStore();
         const datasets = []; const tbody = document.querySelector('#leaderboardTable tbody'); tbody.innerHTML = '';
         const metricRows = [];
+        const isTotalView = currentFilters.day === 'total';
+        const roundDays = isTotalView
+            ? [...new Set(Object.values(dataStore).filter(r => r.round === currentFilters.round).map(r => r.day))].sort((a, b) => a - b)
+            : [];
+        const dayTsMap = new Map();
+        const perfLabels = [];
+        const perfIndexByDayTs = new Map();
+        const perfDayZones = [];
+        if (isTotalView) {
+            roundDays.forEach(day => {
+                const tsSet = new Set();
+                Object.values(dataStore)
+                    .filter(r => r.round === currentFilters.round && r.day === day)
+                    .forEach(r => (r.history || []).forEach(h => tsSet.add(h.ts)));
+                dayTsMap.set(day, [...tsSet].sort((a, b) => a - b));
+            });
+            roundDays.forEach((day, zoneIdx) => {
+                const start = perfLabels.length;
+                (dayTsMap.get(day) || []).forEach(ts => {
+                    perfIndexByDayTs.set(`${day}:${ts}`, perfLabels.length);
+                    perfLabels.push(`D${day}:${ts}`);
+                });
+                const end = perfLabels.length - 1;
+                perfDayZones.push({ day, start, end, zoneIdx });
+            });
+        }
         selectedIds.forEach((id, i) => {
             const r = dataStore[id];
             const color = COLORS[i % COLORS.length];
@@ -1487,7 +1608,16 @@
             const greenTicks = returns.length ? Math.round((returns.filter(v => v > 0).length / returns.length) * 100) : 0;
             const readiness = Math.min(100, Math.max(0, Math.round(((Number(ratio) * 0.6) + (Math.max(-2, Math.min(2, sharpe)) + 2) * 10 + (greenTicks / 5)))));
             const selection = evaluateSelectionScore(r, mdd, sharpe, greenTicks, Number(ratio));
-            datasets.push({ label: r.trader, data: equityCurve.map(h => h.pnl), borderColor: color, borderWidth: 2, pointRadius: 1.4, pointHoverRadius: 4 });
+            if (isTotalView) {
+                const series = new Array(perfLabels.length).fill(null);
+                equityCurve.forEach(h => {
+                    const idx = perfIndexByDayTs.get(`${r.day}:${h.ts}`);
+                    if (idx !== undefined) series[idx] = h.pnl;
+                });
+                datasets.push({ label: `${r.trader} (D${r.day})`, data: series, borderColor: color, borderWidth: 2, pointRadius: 1.4, pointHoverRadius: 4, spanGaps: true });
+            } else {
+                datasets.push({ label: r.trader, data: equityCurve.map(h => h.pnl), borderColor: color, borderWidth: 2, pointRadius: 1.4, pointHoverRadius: 4 });
+            }
             metricRows.push({ trader: r.trader, pnl: r.final_pnl, mdd, sharpe, greenTicks, readiness, ratio: Number(ratio), color, id, selectionScore: selection.score, statusLabel: selection.statusLabel, statusRank: selection.statusRank, statusReason: selection.reason });
         });
         metricRows.sort((a, b) => {
@@ -1500,14 +1630,55 @@
             tbody.innerHTML += `<tr><td style="color:${row.color}; font-weight:700;">● ${row.trader}</td><td style="color:${row.pnl > 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.pnl).toLocaleString()}</td><td style="color:var(--danger)">${Math.round(row.mdd).toLocaleString()}</td><td>${row.ratio.toFixed(2)}x</td><td>${row.sharpe.toFixed(2)}</td><td>${row.greenTicks}%</td><td><b>${row.selectionScore}</b></td><td title="${row.statusReason}" style="color:${statusColor}; font-weight:700;">${row.statusLabel}</td><td title="${row.statusReason}" style="color:var(--text-dim);">${whyText}</td><td><div style="height:4px; width:100px; background:#111;"><div style="height:100%; width:${row.readiness}%; background:var(--accent);"></div></div></td></tr>`;
         });
         if (charts.perf) charts.perf.destroy();
-        const labels = selectedIds.length > 0 ? buildEquityCurve(dataStore[selectedIds[0]].history).map(h => h.ts) : [];
+        const labels = isTotalView
+            ? perfLabels
+            : (selectedIds.length > 0 ? buildEquityCurve(dataStore[selectedIds[0]].history).map(h => h.ts) : []);
+        const perfZonePlugin = {
+            id: 'perfTotalZones',
+            beforeDraw(chart) {
+                if (!isTotalView) return;
+                const { ctx, chartArea, scales } = chart;
+                if (!chartArea || !scales.x) return;
+                ctx.save();
+                perfDayZones.forEach(zone => {
+                    if (zone.start < 0 || zone.end < zone.start) return;
+                    const xStart = scales.x.getPixelForValue(zone.start);
+                    const xEnd = scales.x.getPixelForValue(zone.end);
+                    const left = Math.min(xStart, xEnd);
+                    const width = Math.abs(xEnd - xStart);
+                    const shade = zone.zoneIdx % 2 === 0 ? 'rgba(255,165,0,0.08)' : 'rgba(255,140,0,0.06)';
+                    ctx.fillStyle = shade;
+                    ctx.fillRect(left, chartArea.top, Math.max(width, 1), chartArea.bottom - chartArea.top);
+                });
+                ctx.restore();
+            }
+        };
         charts.perf = new Chart(document.getElementById('performanceChart'), {
             type: 'line',
             data: { labels, datasets },
+            plugins: isTotalView ? [perfZonePlugin] : [],
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.03)' } } },
+                scales: {
+                    x: isTotalView
+                        ? {
+                            grid: { color: 'rgba(255,255,255,0.03)' },
+                            ticks: {
+                                autoSkip: false,
+                                maxRotation: 0,
+                                color: 'rgba(226,232,240,0.7)',
+                                callback(value) {
+                                    const label = String(labels[value] || '');
+                                    if (!label.includes(':')) return '';
+                                    const [dayPart, tsPart] = label.split(':');
+                                    return tsPart === String((dayTsMap.get(Number(dayPart.slice(1))) || [])[0]) ? dayPart : '';
+                                }
+                            }
+                        }
+                        : { display: false },
+                    y: { grid: { color: 'rgba(255,255,255,0.03)' } }
+                },
                 interaction: { mode: 'nearest', intersect: false },
                 plugins: { legend: { display: false } }
             }
@@ -1531,16 +1702,33 @@
 
     function renderAttribution() {
         const dataStore = getDataStore();
-        if (selectedIds.length === 0) return;
-        const assets = [...new Set(selectedIds.flatMap(id => Object.keys(dataStore[id].final_pnl_by_product)))].sort();
-        const datasets = selectedIds.map((id, i) => {
-            const r = dataStore[id]; return { label: r.trader, data: assets.map(a => r.final_pnl_by_product[a] || 0), backgroundColor: COLORS[i % COLORS.length], borderRadius: 4 };
+        if (selectedIds.length === 0) {
+            if (charts.attr) {
+                charts.attr.destroy();
+                charts.attr = null;
+            }
+            const tbody = document.querySelector('#assetLeaderboard tbody');
+            if (tbody) tbody.innerHTML = '';
+            return;
+        }
+        // Deduplicate same trader labels by keeping the strongest selected run.
+        const uniqueByTrader = new Map();
+        selectedIds.forEach(id => {
+            const run = dataStore[id];
+            if (!run) return;
+            const prev = uniqueByTrader.get(run.trader);
+            if (!prev || (run.final_pnl || 0) > (prev.final_pnl || 0)) uniqueByTrader.set(run.trader, run);
+        });
+        const attributionRuns = [...uniqueByTrader.values()];
+        const assets = [...new Set(attributionRuns.flatMap(r => Object.keys(r.final_pnl_by_product || {})))].sort();
+        const datasets = attributionRuns.map((r, i) => {
+            return { label: r.trader, data: assets.map(a => r.final_pnl_by_product?.[a] || 0), backgroundColor: COLORS[i % COLORS.length], borderRadius: 4 };
         });
         if (charts.attr) charts.attr.destroy();
         charts.attr = new Chart(document.getElementById('attributionChart'), { type: 'bar', data: { labels: assets, datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { grid: { color: 'rgba(255,255,255,0.03)' } } } } });
         const tbody = document.querySelector('#assetLeaderboard tbody'); tbody.innerHTML = '';
         const rows = assets.map(a => {
-            const scores = selectedIds.map(id => ({ name: dataStore[id].trader, val: dataStore[id].final_pnl_by_product[a] || 0 }));
+            const scores = attributionRuns.map(r => ({ name: r.trader, val: r.final_pnl_by_product?.[a] || 0 }));
             scores.sort((x,y) => y.val - x.val);
             const spread = scores[0].val - scores[scores.length - 1].val;
             return { asset: a, best: scores[0].name, max: scores[0].val, min: scores[scores.length-1].val, spread };
