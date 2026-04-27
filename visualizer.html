@@ -6,6 +6,7 @@
 <title>PROSPERITY VISUALIZER</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600&family=Outfit:wght@300;700;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
 <style>
     :root {
         --bg: #040508;
@@ -247,7 +248,7 @@
     .context-badge {
         margin-top: 8px;
         font-size: 0.55rem;
-        color: var(--text-dim);
+        color: var(--text);
         letter-spacing: 0.6px;
     }
 
@@ -351,6 +352,7 @@
         <div class="brand">PROSPERITY <span>VISUALIZER</span></div>
         <div class="nav-tabs">
             <button class="tab active" onclick="switchTab('performance')">OVERLAY</button>
+            <button class="tab" onclick="switchTab('compare')">COMPARE</button>
             <button class="tab" onclick="switchTab('attribution')">ATTRIBUTION</button>
             <button class="tab" onclick="switchTab('stability')">STABILITY</button>
             <button class="tab" onclick="switchTab('manager')">MANAGER</button>
@@ -375,7 +377,7 @@
                     <div id="r4-btn" class="select-pill scope-pill" onclick="setFilter('round', 4)">R4</div>
                     <div id="r5-btn" class="select-pill scope-pill" onclick="setFilter('round', 5)">R5</div>
                 </div>
-                <div class="filter-row">
+                <div id="dayFilterRow" class="filter-row">
                     <div id="d0-btn" class="select-pill scope-pill active" onclick="setFilter('day', 0)">D0</div>
                     <div id="d1-btn" class="select-pill scope-pill" onclick="setFilter('day', 1)">D1</div>
                     <div id="d2-btn" class="select-pill scope-pill" onclick="setFilter('day', 2)">D2</div>
@@ -406,6 +408,23 @@
                 <div class="table-scroll">
                     <table id="leaderboardTable" class="sticky-table">
                         <thead><tr><th>STRATEGY</th><th class="sortable-th" onclick="setSortMetric('pnl')">PNL <span class="sort-icon" data-sort-key="pnl">-</span></th><th>MAX DD</th><th class="sortable-th" onclick="setSortMetric('ratio')">CALMAR <span class="sort-icon" data-sort-key="ratio">-</span></th><th class="sortable-th" onclick="setSortMetric('sharpe')">SHARPE* <span class="sort-icon" data-sort-key="sharpe">-</span></th><th class="sortable-th" onclick="setSortMetric('greenTicks')">GREEN TICKS <span class="sort-icon" data-sort-key="greenTicks">-</span></th><th class="sortable-th" onclick="setSortMetric('selectionScore')">SELECTION SCORE <span class="sort-icon" data-sort-key="selectionScore">-</span></th><th class="sortable-th" onclick="setSortMetric('statusRank')">STATUS <span class="sort-icon" data-sort-key="statusRank">-</span></th><th>WHY</th><th class="sortable-th" onclick="setSortMetric('readiness')">READINESS <span class="sort-icon" data-sort-key="readiness">-</span></th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-compare" class="tab-content hidden">
+            <div class="panel" style="flex: 1.5;">
+                <span class="section-label">Backtest vs Live Comparison</span>
+                <div id="compareNote" class="chart-note">Select one or more strategies to compare matching trader curves.</div>
+                <div class="chart-container"><canvas id="compareChart"></canvas></div>
+            </div>
+            <div class="panel" style="flex: 1;">
+                <div class="panel-header"><span class="section-label" style="margin:0;">Compare Summary</span></div>
+                <div class="table-scroll">
+                    <table id="compareTable" class="sticky-table">
+                        <thead><tr><th>TRADER</th><th>BACKTEST PNL</th><th>LIVE PNL</th><th>DELTA (LIVE-BT)</th><th>COMMON TICKS</th><th>COVERAGE</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -520,6 +539,23 @@
     function getDataStore() {
         return currentFilters.source === 'live' ? LIVE_DATA_STORE : BACKTEST_DATA;
     }
+    function getSourceStore(source) {
+        return source === 'live' ? LIVE_DATA_STORE : BACKTEST_DATA;
+    }
+    function getSourceFilteredIds(source, round, day) {
+        const store = getSourceStore(source);
+        return Object.keys(store).filter(id => {
+            const r = store[id];
+            return r.round === round && r.day === day;
+        });
+    }
+    function chooseSourceDay(source, round, preferredDay) {
+        const store = getSourceStore(source);
+        const days = [...new Set(Object.values(store).filter(r => r.round === round).map(r => r.day))].sort((a, b) => a - b);
+        if (!days.length) return null;
+        if (days.includes(preferredDay)) return preferredDay;
+        return days[0];
+    }
     function getAvailableRounds() {
         if (currentFilters.source === 'live') return [3, 4, 5];
         return [...new Set(Object.values(getDataStore()).map(r => r.round))].sort((a, b) => a - b);
@@ -607,6 +643,9 @@
         document.querySelector(`.tab[onclick*="${t}"]`).classList.add('active');
         document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
         document.getElementById(`tab-${t}`).classList.remove('hidden');
+        const dayRow = document.getElementById('dayFilterRow');
+        if (dayRow) dayRow.style.display = t === 'compare' ? 'none' : 'flex';
+        renderSidebar();
         renderActiveTab();
     }
     function getAvailableDays(round) {
@@ -724,9 +763,12 @@
     function renderSidebar() {
         const dataStore = getDataStore();
         const container = document.getElementById('strategyList'); container.innerHTML = '';
-        const filtered = Object.keys(dataStore).filter(id => {
-            const r = dataStore[id]; return r.round === currentFilters.round && r.day === currentFilters.day;
-        }).sort((a,b) => dataStore[b].final_pnl - dataStore[a].final_pnl);
+        let filtered = Object.keys(dataStore).filter(id => {
+            const r = dataStore[id];
+            if (activeTab === 'compare') return r.round === currentFilters.round && hasCompareCounterpart(r, currentFilters.source);
+            return r.round === currentFilters.round && r.day === currentFilters.day;
+        });
+        filtered = filtered.sort((a, b) => dataStore[b].final_pnl - dataStore[a].final_pnl);
         filtered.forEach(id => {
             const r = dataStore[id]; const isActive = selectedIds.includes(id);
             const card = document.createElement('div'); card.className = `strategy-card ${isActive ? 'active' : ''}`;
@@ -734,6 +776,11 @@
             card.innerHTML = `<div class="card-color" style="background:${color}"></div><span class="card-name">${r.trader}</span><span class="card-stats">PnL: ${Math.round(r.final_pnl).toLocaleString()}</span>`;
             card.onclick = () => toggleSelect(id); container.appendChild(card);
         });
+    }
+    function hasCompareCounterpart(run, source) {
+        const otherSource = source === 'backtest' ? 'live' : 'backtest';
+        const otherStore = getSourceStore(otherSource);
+        return Object.values(otherStore).some(r => r.round === run.round && r.trader === run.trader);
     }
     function toggleSelect(id) {
         const idx = selectedIds.indexOf(id); if (idx > -1) selectedIds.splice(idx, 1); else selectedIds.push(id);
@@ -1132,9 +1179,235 @@
     }
     function renderActiveTab() {
         if (activeTab === 'performance') renderPerformance();
+        if (activeTab === 'compare') renderCompare();
         if (activeTab === 'attribution') renderAttribution();
         if (activeTab === 'stability') renderStability();
         if (activeTab === 'manager') renderManagerTable();
+    }
+
+    function renderCompare() {
+        const compareTableBody = document.querySelector('#compareTable tbody');
+        const compareNote = document.getElementById('compareNote');
+        if (compareTableBody) compareTableBody.innerHTML = '';
+        if (selectedIds.length === 0) {
+            if (compareNote) compareNote.textContent = 'Select one or more strategies in the sidebar to compare backtest vs live.';
+            if (charts.compare) charts.compare.destroy();
+            return;
+        }
+        const btStore = getSourceStore('backtest');
+        const liveStore = getSourceStore('live');
+        const round = currentFilters.round;
+        const btRoundRuns = Object.values(btStore).filter(r => r.round === round);
+        const liveRoundRuns = Object.values(liveStore).filter(r => r.round === round);
+        const btDays = [...new Set(btRoundRuns.map(r => r.day))].sort((a, b) => a - b).slice(0, 3);
+        const liveDays = [...new Set(liveRoundRuns.map(r => r.day))].sort((a, b) => a - b);
+        if (!btDays.length || !liveDays.length) {
+            if (compareNote) compareNote.textContent = `Missing ${!btDays.length ? 'backtest' : 'live'} data for round ${round}.`;
+            if (charts.compare) charts.compare.destroy();
+            return;
+        }
+
+        // Build a canonical multi-day x-axis from backtest timestamps: Day1 segment | Day2 segment | Day3 segment.
+        const dayTsMap = new Map();
+        btDays.forEach(day => {
+            const ts = new Set();
+            Object.values(btStore)
+                .filter(r => r.round === round && r.day === day)
+                .forEach(r => (r.history || []).forEach(h => ts.add(h.ts)));
+            dayTsMap.set(day, [...ts].sort((a, b) => a - b));
+        });
+        const labels = [];
+        const indexByDayTs = new Map();
+        const dayZones = [];
+        btDays.forEach((day, zoneIdx) => {
+            const start = labels.length;
+            const tsList = dayTsMap.get(day) || [];
+            tsList.forEach(ts => {
+                const key = `${day}:${ts}`;
+                indexByDayTs.set(key, labels.length);
+                labels.push(`D${day}:${ts}`);
+            });
+            const end = labels.length - 1;
+            dayZones.push({ day, start, end, zoneIdx });
+        });
+        if (!labels.length) {
+            if (compareNote) compareNote.textContent = `No backtest timeline data for round ${round}.`;
+            if (charts.compare) charts.compare.destroy();
+            return;
+        }
+
+        const selectedRuns = selectedIds
+            .map(id => ({ id, run: getDataStore()[id] }))
+            .filter(x => x.run && x.run.round === round);
+
+        const datasets = [];
+        const summaryRows = [];
+        let pairIndex = 0;
+        selectedRuns.forEach(({ id: selectedId, run: selectedRun }) => {
+            const trader = selectedRun.trader;
+            const btData = new Array(labels.length).fill(null);
+            const liveData = new Array(labels.length).fill(null);
+            let btTotalPnl = 0;
+            let liveLatestPnl = 0;
+            let livePlottedPoints = 0;
+            let commonTicks = 0;
+            const usedBtIds = new Set();
+            const usedLiveIds = new Set();
+
+            btDays.forEach(day => {
+                let btId = null;
+                if (currentFilters.source === 'backtest' && selectedRun.day === day) btId = selectedId;
+                if (!btId) {
+                    const dayCandidates = Object.entries(btStore)
+                        .filter(([_, r]) => r.round === round && r.day === day && r.trader === trader)
+                        .sort((a, b) => (b[1].final_pnl || 0) - (a[1].final_pnl || 0));
+                    btId = dayCandidates[0]?.[0] || null;
+                }
+                if (!btId) return;
+                usedBtIds.add(btId);
+                const btCurve = buildEquityCurve(btStore[btId].history || []);
+                btTotalPnl += Number(btStore[btId].final_pnl || 0);
+                const btMap = new Map(btCurve.map(p => [p.ts, p.pnl]));
+                btMap.forEach((pnl, ts) => {
+                    const idx = indexByDayTs.get(`${day}:${ts}`);
+                    if (idx !== undefined) btData[idx] = pnl;
+                });
+
+                let liveId = null;
+                if (currentFilters.source === 'live' && selectedRun.day === day) liveId = selectedId;
+                if (!liveId) {
+                    const dayCandidates = Object.entries(liveStore)
+                        .filter(([_, r]) => r.round === round && r.day === day && r.trader === trader)
+                        .sort((a, b) => (b[1].final_pnl || 0) - (a[1].final_pnl || 0));
+                    liveId = dayCandidates[0]?.[0] || null;
+                }
+                if (!liveId) return;
+                usedLiveIds.add(liveId);
+                const liveCurve = buildEquityCurve(liveStore[liveId].history || []);
+                const liveMap = new Map(liveCurve.map(p => [p.ts, p.pnl]));
+                liveLatestPnl = Number(liveStore[liveId].final_pnl || liveLatestPnl);
+                liveMap.forEach((pnl, ts) => {
+                    const idx = indexByDayTs.get(`${day}:${ts}`);
+                    if (idx !== undefined) {
+                        liveData[idx] = pnl;
+                        livePlottedPoints += 1;
+                        if (btMap.has(ts)) commonTicks += 1;
+                    }
+                });
+            });
+            if (btData.every(v => v === null) || liveData.every(v => v === null)) return;
+
+            const color = COLORS[pairIndex % COLORS.length];
+            pairIndex += 1;
+            const btRef = [...usedBtIds].slice(0, 2).join(',') || '-';
+            const liveRef = [...usedLiveIds].slice(0, 2).join(',') || '-';
+            datasets.push({
+                label: `${trader} BT (${btRef})`,
+                data: btData,
+                borderColor: color,
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                pointRadius: 1.6,
+                pointHoverRadius: 4,
+                fill: false,
+                tension: 0.15
+            });
+            datasets.push({
+                label: `${trader} LIVE (${liveRef})`,
+                data: liveData,
+                borderColor: '#ffffff',
+                backgroundColor: 'rgba(255, 165, 0, 0.26)',
+                borderDash: [6, 4],
+                borderWidth: 2,
+                pointRadius: 1.6,
+                pointHoverRadius: 4,
+                fill: '-1',
+                tension: 0.15
+            });
+            const coverage = Math.round((commonTicks / Math.max(livePlottedPoints, 1)) * 100);
+            summaryRows.push({
+                trader: `${trader} (BT:${btRef} | LIVE:${liveRef})`,
+                btFinal: btTotalPnl,
+                liveFinal: liveLatestPnl,
+                delta: liveLatestPnl - btTotalPnl,
+                commonTicks,
+                coverage
+            });
+        });
+
+        if (!datasets.length) {
+            if (compareNote) compareNote.textContent = `No overlap to compare for selected strategies in round ${round}.`;
+            if (charts.compare) charts.compare.destroy();
+            return;
+        }
+        const zonePlugin = {
+            id: 'compareZones',
+            beforeDraw(chart) {
+                const { ctx, chartArea, scales } = chart;
+                if (!chartArea || !scales.x) return;
+                ctx.save();
+                dayZones.forEach(zone => {
+                    if (zone.start < 0 || zone.end < zone.start) return;
+                    const xStart = scales.x.getPixelForValue(zone.start);
+                    const xEnd = scales.x.getPixelForValue(zone.end);
+                    const left = Math.min(xStart, xEnd);
+                    const width = Math.abs(xEnd - xStart);
+                    const shade = zone.zoneIdx % 2 === 0 ? 'rgba(255,165,0,0.08)' : 'rgba(255,140,0,0.06)';
+                    ctx.fillStyle = shade;
+                    ctx.fillRect(left, chartArea.top, Math.max(width, 1), chartArea.bottom - chartArea.top);
+                });
+                ctx.restore();
+            }
+        };
+
+        if (charts.compare) charts.compare.destroy();
+        charts.compare = new Chart(document.getElementById('compareChart'), {
+            type: 'line',
+            data: { labels, datasets },
+            plugins: [zonePlugin],
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255,255,255,0.03)' },
+                        ticks: {
+                            autoSkip: false,
+                            maxRotation: 0,
+                            color: 'rgba(226,232,240,0.7)',
+                            callback(value) {
+                                const label = String(labels[value] || '');
+                                if (!label.includes(':')) return '';
+                                const [dayPart, tsPart] = label.split(':');
+                                return tsPart === String((dayTsMap.get(Number(dayPart.slice(1))) || [])[0]) ? `${dayPart}` : '';
+                            }
+                        }
+                    },
+                    y: { grid: { color: 'rgba(255,255,255,0.03)' } }
+                },
+                interaction: { mode: 'nearest', intersect: false },
+                plugins: {
+                    legend: { labels: { color: '#e2e8f0', boxWidth: 12 } },
+                    zoom: {
+                        pan: {
+                            enabled: true,
+                            mode: 'x'
+                        },
+                        zoom: {
+                            wheel: { enabled: true },
+                            pinch: { enabled: true },
+                            mode: 'x'
+                        }
+                    }
+                }
+            }
+        });
+
+        summaryRows.sort((a, b) => b.delta - a.delta);
+        summaryRows.forEach(row => {
+            compareTableBody.innerHTML += `<tr><td><b>${row.trader}</b></td><td>${Math.round(row.btFinal).toLocaleString()}</td><td>${Math.round(row.liveFinal).toLocaleString()}</td><td style="color:${row.delta >= 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.delta).toLocaleString()}</td><td>${row.commonTicks}</td><td>${row.coverage}%</td></tr>`;
+        });
+        if (compareNote) compareNote.textContent = `Round ${round}: Backtest plotted across ${btDays.length} day zones; live is overlaid on matching day zones.`;
     }
 
     function renderPerformance() {
@@ -1152,7 +1425,7 @@
             const greenTicks = returns.length ? Math.round((returns.filter(v => v > 0).length / returns.length) * 100) : 0;
             const readiness = Math.min(100, Math.max(0, Math.round(((Number(ratio) * 0.6) + (Math.max(-2, Math.min(2, sharpe)) + 2) * 10 + (greenTicks / 5)))));
             const selection = evaluateSelectionScore(r, mdd, sharpe, greenTicks, Number(ratio));
-            datasets.push({ label: r.trader, data: equityCurve.map(h => h.pnl), borderColor: color, borderWidth: 2, pointRadius: 0 });
+            datasets.push({ label: r.trader, data: equityCurve.map(h => h.pnl), borderColor: color, borderWidth: 2, pointRadius: 1.4, pointHoverRadius: 4 });
             metricRows.push({ trader: r.trader, pnl: r.final_pnl, mdd, sharpe, greenTicks, readiness, ratio: Number(ratio), color, id, selectionScore: selection.score, statusLabel: selection.statusLabel, statusRank: selection.statusRank, statusReason: selection.reason });
         });
         metricRows.sort((a, b) => {
@@ -1173,6 +1446,7 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.03)' } } },
+                interaction: { mode: 'nearest', intersect: false },
                 plugins: { legend: { display: false } }
             }
         });
