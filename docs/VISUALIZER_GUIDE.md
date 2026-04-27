@@ -55,7 +55,9 @@ Sidebar filters:
 
 - Source: `BACKTEST` / `LIVE LOGS`
 - Round: `R3` / `R4` / `R5`
-- Day: `TOTAL`, `D0`, `D1`, `D2`, `D3`
+- Day:
+  - Backtest: `TOTAL`, `D0`, `D1`, `D2`, `D3`
+  - Live logs: day-only (`D#`), no `TOTAL`
 
 Header actions:
 
@@ -180,6 +182,8 @@ When called via loader server API:
 - current filters
 - selected ids
 - computed performance, attribution, and stability views
+- compare summary rows and compare note text
+- source/day mode metadata (`sourceMode`, `dayMode`)
 
 Useful for offline analysis or AI-assisted review.
 

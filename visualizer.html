@@ -1046,24 +1046,51 @@
     }
     function exportAnalytics() {
         const dataStore = getDataStore();
-        const availableIds = Object.keys(dataStore).filter(id => {
-            const r = dataStore[id];
-            return r.round === currentFilters.round && r.day === currentFilters.day;
-        });
-        const chosenIds = selectedIds.length ? selectedIds : availableIds;
+        const availableIds = getCurrentFilteredIds();
+        const availableSet = new Set(availableIds);
+        const selectedInScope = selectedIds.filter(id => availableSet.has(id));
+        const chosenIds = selectedInScope.length ? selectedInScope : availableIds;
         const performance = computePerformanceRows(chosenIds);
-        const attribution = computeAttributionRows(chosenIds);
+        // Match attribution tab behavior: one selected run per trader.
+        const uniqueByTrader = new Map();
+        chosenIds.forEach(id => {
+            const run = dataStore[id];
+            if (!run) return;
+            const prev = uniqueByTrader.get(run.trader);
+            if (!prev || (run.final_pnl || 0) > (prev.final_pnl || 0)) uniqueByTrader.set(run.trader, id);
+        });
+        const attributionIds = [...uniqueByTrader.values()];
+        const attribution = computeAttributionRows(attributionIds);
         const stability = computeStabilityRows(currentFilters.round);
+        const compareRows = [...document.querySelectorAll('#compareTable tbody tr')].map(tr => {
+            const tds = [...tr.querySelectorAll('td')].map(td => td.textContent?.trim() || '');
+            return {
+                trader: tds[0] || '',
+                backtestPnl: tds[1] || '',
+                livePnl: tds[2] || '',
+                delta: tds[3] || '',
+                commonTicks: tds[4] || '',
+                coverage: tds[5] || ''
+            };
+        });
+        const compareNote = document.getElementById('compareNote')?.textContent || '';
         const payload = {
             exportedAt: new Date().toISOString(),
             filters: { ...currentFilters },
+            sourceMode: currentFilters.source,
+            dayMode: currentFilters.day === 'total' ? 'total' : 'single_day',
             activeTab,
             selectedIds: [...selectedIds],
             includedIds: chosenIds,
             strategyCount: chosenIds.length,
             performance,
             attribution,
-            stability
+            stability,
+            compare: {
+                note: compareNote,
+                rows: compareRows,
+                rowCount: compareRows.length
+            }
         };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
