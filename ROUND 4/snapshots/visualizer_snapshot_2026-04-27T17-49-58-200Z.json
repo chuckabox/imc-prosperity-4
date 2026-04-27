@@ -1,0 +1,413 @@
+{
+  "exportedAt": "2026-04-27T17:49:58.198Z",
+  "filters": {
+    "source": "live",
+    "round": 4,
+    "day": 3
+  },
+  "sourceMode": "live",
+  "dayMode": "single_day",
+  "activeTab": "compare",
+  "selectedIds": [
+    "live-r4-phising-527921"
+  ],
+  "includedIds": [
+    "live-r4-phising-527921"
+  ],
+  "strategyCount": 1,
+  "performance": [
+    {
+      "id": "live-r4-phising-527921",
+      "trader": "phising",
+      "round": 4,
+      "day": 3,
+      "dataset": "live_log_527921",
+      "pnl": 1060.9334411621094,
+      "maxDrawdown": -196.48760986328125,
+      "calmar": 5.4,
+      "sharpe": 1.9008477987888754,
+      "greenTicks": 49,
+      "readiness": 52,
+      "selectionScore": 80,
+      "status": "RED",
+      "statusReason": "Concentrated PnL (75%)",
+      "concentration": 0.7470537183575391,
+      "finalPnlByProduct": {
+        "VEV_5000": 0,
+        "VEV_6000": 0,
+        "VEV_4000": 0,
+        "VEV_5100": 0,
+        "VELVETFRUIT_EXTRACT": 254.7421875,
+        "VEV_5200": 0,
+        "HYDROGEL_PACK": 833.75,
+        "VEV_6500": 0,
+        "VEV_5300": 0,
+        "VEV_5400": -27.558746337890625,
+        "VEV_5500": 0,
+        "VEV_4500": 0
+      }
+    }
+  ],
+  "attribution": [
+    {
+      "asset": "HYDROGEL_PACK",
+      "bestTrader": "phising",
+      "maxProfit": 833.75,
+      "leastProfit": 833.75,
+      "spread": 0,
+      "byTrader": [
+        {
+          "id": "live-r4-phising-527921",
+          "trader": "phising",
+          "val": 833.75
+        }
+      ]
+    },
+    {
+      "asset": "VELVETFRUIT_EXTRACT",
+      "bestTrader": "phising",
+      "maxProfit": 254.7421875,
+      "leastProfit": 254.7421875,
+      "spread": 0,
+      "byTrader": [
+        {
+          "id": "live-r4-phising-527921",
+          "trader": "phising",
+          "val": 254.7421875
+        }
+      ]
+    },
+    {
+      "asset": "VEV_4000",
+      "bestTrader": "phising",
+      "maxProfit": 0,
+      "leastProfit": 0,
+      "spread": 0,
+      "byTrader": [
+        {
+          "id": "live-r4-phising-527921",
+          "trader": "phising",
+          "val": 0
+        }
+      ]
+    },
+    {
+      "asset": "VEV_4500",
+      "bestTrader": "phising",
+      "maxProfit": 0,
+      "leastProfit": 0,
+      "spread": 0,
+      "byTrader": [
+        {
+          "id": "live-r4-phising-527921",
+          "trader": "phising",
+          "val": 0
+        }
+      ]
+    },
+    {
+      "asset": "VEV_5000",
+      "bestTrader": "phising",
+      "maxProfit": 0,
+      "leastProfit": 0,
+      "spread": 0,
+      "byTrader": [
+        {
+          "id": "live-r4-phising-527921",
+          "trader": "phising",
+          "val": 0
+        }
+      ]
+    },
+    {
+      "asset": "VEV_5100",
+      "bestTrader": "phising",
+      "maxProfit": 0,
+      "leastProfit": 0,
+      "spread": 0,
+      "byTrader": [
+        {
+          "id": "live-r4-phising-527921",
+          "trader": "phising",
+          "val": 0
+        }
+      ]
+    },
+    {
+      "asset": "VEV_5200",
+      "bestTrader": "phising",
+      "maxProfit": 0,
+      "leastProfit": 0,
+      "spread": 0,
+      "byTrader": [
+        {
+          "id": "live-r4-phising-527921",
+          "trader": "phising",
+          "val": 0
+        }
+      ]
+    },
+    {
+      "asset": "VEV_5300",
+      "bestTrader": "phising",
+      "maxProfit": 0,
+      "leastProfit": 0,
+      "spread": 0,
+      "byTrader": [
+        {
+          "id": "live-r4-phising-527921",
+          "trader": "phising",
+          "val": 0
+        }
+      ]
+    },
+    {
+      "asset": "VEV_5400",
+      "bestTrader": "phising",
+      "maxProfit": -27.558746337890625,
+      "leastProfit": -27.558746337890625,
+      "spread": 0,
+      "byTrader": [
+        {
+          "id": "live-r4-phising-527921",
+          "trader": "phising",
+          "val": -27.558746337890625
+        }
+      ]
+    },
+    {
+      "asset": "VEV_5500",
+      "bestTrader": "phising",
+      "maxProfit": 0,
+      "leastProfit": 0,
+      "spread": 0,
+      "byTrader": [
+        {
+          "id": "live-r4-phising-527921",
+          "trader": "phising",
+          "val": 0
+        }
+      ]
+    },
+    {
+      "asset": "VEV_6000",
+      "bestTrader": "phising",
+      "maxProfit": 0,
+      "leastProfit": 0,
+      "spread": 0,
+      "byTrader": [
+        {
+          "id": "live-r4-phising-527921",
+          "trader": "phising",
+          "val": 0
+        }
+      ]
+    },
+    {
+      "asset": "VEV_6500",
+      "bestTrader": "phising",
+      "maxProfit": 0,
+      "leastProfit": 0,
+      "spread": 0,
+      "byTrader": [
+        {
+          "id": "live-r4-phising-527921",
+          "trader": "phising",
+          "val": 0
+        }
+      ]
+    }
+  ],
+  "stability": {
+    "dayLabels": [
+      3,
+      1,
+      2
+    ],
+    "crossDayRows": [],
+    "heatmapRows": [
+      {
+        "asset": "HYDROGEL_PACK",
+        "dayLabels": [
+          3,
+          1,
+          2
+        ],
+        "values": [
+          611.125,
+          0,
+          0
+        ],
+        "spread": 611.125
+      },
+      {
+        "asset": "VELVETFRUIT_EXTRACT",
+        "dayLabels": [
+          3,
+          1,
+          2
+        ],
+        "values": [
+          205.3505859375,
+          0,
+          0
+        ],
+        "spread": 205.3505859375
+      },
+      {
+        "asset": "VEV_4000",
+        "dayLabels": [
+          3,
+          1,
+          2
+        ],
+        "values": [
+          0,
+          0,
+          0
+        ],
+        "spread": 0
+      },
+      {
+        "asset": "VEV_4500",
+        "dayLabels": [
+          3,
+          1,
+          2
+        ],
+        "values": [
+          0,
+          0,
+          0
+        ],
+        "spread": 0
+      },
+      {
+        "asset": "VEV_5000",
+        "dayLabels": [
+          3,
+          1,
+          2
+        ],
+        "values": [
+          0,
+          0,
+          0
+        ],
+        "spread": 0
+      },
+      {
+        "asset": "VEV_5100",
+        "dayLabels": [
+          3,
+          1,
+          2
+        ],
+        "values": [
+          0,
+          0,
+          0
+        ],
+        "spread": 0
+      },
+      {
+        "asset": "VEV_5200",
+        "dayLabels": [
+          3,
+          1,
+          2
+        ],
+        "values": [
+          0,
+          0,
+          0
+        ],
+        "spread": 0
+      },
+      {
+        "asset": "VEV_5300",
+        "dayLabels": [
+          3,
+          1,
+          2
+        ],
+        "values": [
+          0,
+          0,
+          0
+        ],
+        "spread": 0
+      },
+      {
+        "asset": "VEV_5400",
+        "dayLabels": [
+          3,
+          1,
+          2
+        ],
+        "values": [
+          -27.558746337890625,
+          0,
+          0
+        ],
+        "spread": 27.558746337890625
+      },
+      {
+        "asset": "VEV_5500",
+        "dayLabels": [
+          3,
+          1,
+          2
+        ],
+        "values": [
+          0,
+          0,
+          0
+        ],
+        "spread": 0
+      },
+      {
+        "asset": "VEV_6000",
+        "dayLabels": [
+          3,
+          1,
+          2
+        ],
+        "values": [
+          0,
+          0,
+          0
+        ],
+        "spread": 0
+      },
+      {
+        "asset": "VEV_6500",
+        "dayLabels": [
+          3,
+          1,
+          2
+        ],
+        "values": [
+          0,
+          0,
+          0
+        ],
+        "spread": 0
+      }
+    ]
+  },
+  "compare": {
+    "note": "Round 4: Backtest plotted across 3 day zones; live is overlaid on matching day zones.",
+    "rows": [
+      {
+        "trader": "phising (BT:backtest-1777310612848-round4-day+1,backtest-1777310612848-round4-day+2 | LIVE:live-r4-phising-527921)",
+        "backtestPnl": "22,010",
+        "livePnl": "1,061",
+        "delta": "-20,949",
+        "commonTicks": "5",
+        "coverage": "100%"
+      }
+    ],
+    "rowCount": 1
+  }
+}

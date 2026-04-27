@@ -1398,6 +1398,8 @@
             let commonTicks = 0;
             const usedBtIds = new Set();
             const usedLiveIds = new Set();
+            let btCarry = 0;
+            let liveCarry = 0;
 
             btDays.forEach(day => {
                 let btId = null;
@@ -1415,8 +1417,10 @@
                 const btMap = new Map(btCurve.map(p => [p.ts, p.pnl]));
                 btMap.forEach((pnl, ts) => {
                     const idx = indexByDayTs.get(`${day}:${ts}`);
-                    if (idx !== undefined) btData[idx] = pnl;
+                    if (idx !== undefined) btData[idx] = pnl + btCarry;
                 });
+                const btDayFinal = btCurve.length ? Number(btCurve[btCurve.length - 1].pnl || 0) : 0;
+                btCarry += btDayFinal;
 
                 let liveId = null;
                 if (currentFilters.source === 'live' && selectedRun.day === day) liveId = selectedId;
@@ -1434,11 +1438,13 @@
                 liveMap.forEach((pnl, ts) => {
                     const idx = indexByDayTs.get(`${day}:${ts}`);
                     if (idx !== undefined) {
-                        liveData[idx] = pnl;
+                        liveData[idx] = pnl + liveCarry;
                         livePlottedPoints += 1;
                         if (btMap.has(ts)) commonTicks += 1;
                     }
                 });
+                const liveDayFinal = liveCurve.length ? Number(liveCurve[liveCurve.length - 1].pnl || 0) : 0;
+                liveCarry += liveDayFinal;
             });
             if (btData.every(v => v === null) || liveData.every(v => v === null)) return;
             const denseBtData = interpolateLinear(btData);
