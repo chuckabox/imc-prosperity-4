@@ -596,6 +596,11 @@
         if (source !== 'backtest' && source !== 'live') return;
         currentFilters.source = source;
         const availableDays = getAvailableDays(currentFilters.round);
+        const totalBtn = document.getElementById('dtotal-btn');
+        if (totalBtn) totalBtn.style.display = source === 'backtest' ? 'block' : 'none';
+        if (source === 'live' && currentFilters.day === 'total') {
+            currentFilters.day = availableDays.length ? availableDays[0] : 0;
+        }
         if (currentFilters.day !== 'total' && !availableDays.includes(currentFilters.day)) currentFilters.day = availableDays.length ? availableDays[0] : 0;
         selectedIds = [];
         updateSourcePills();
