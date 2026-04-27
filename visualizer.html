@@ -537,6 +537,16 @@
     let managerState = { groups: [], selectedDeleteIds: new Set() };
     let charts = {};
     const LIVE_DATA_STORE = typeof LIVE_LOG_DATA !== 'undefined' ? LIVE_LOG_DATA : {};
+    function colorForTraderName(name) {
+        const s = String(name || '');
+        let h = 0;
+        for (let i = 0; i < s.length; i += 1) h = ((h * 31) + s.charCodeAt(i)) >>> 0;
+        // Wider deterministic palette than fixed preset; stable per trader name.
+        const hue = h % 360;
+        const sat = 68 + (h % 18);   // 68-85
+        const lit = 52 + (h % 8);    // 52-59
+        return `hsl(${hue} ${sat}% ${lit}%)`;
+    }
     function getDataStore() {
         return currentFilters.source === 'live' ? LIVE_DATA_STORE : BACKTEST_DATA;
     }
@@ -820,7 +830,7 @@
             groups.forEach(group => {
                 const isActive = group.memberIds.every(id => selectedIds.includes(id));
                 const card = document.createElement('div'); card.className = `strategy-card ${isActive ? 'active' : ''}`;
-                const color = isActive ? COLORS[Math.max(0, selectedIds.indexOf(group.memberIds.find(id => selectedIds.includes(id)))) % COLORS.length] : 'transparent';
+                const color = isActive ? colorForTraderName(group.trader) : 'transparent';
                 const dayLabel = group.days.map(d => `D${d}`).join(', ');
                 const variantLabel = `V${group.variantIdx + 1}`;
                 card.innerHTML = `<div class="card-color" style="background:${color}"></div><span class="card-name">${group.trader} ${variantLabel}</span><span class="card-stats">TOTAL: ${Math.round(group.totalPnl).toLocaleString()} | ${dayLabel}</span>`;
@@ -839,7 +849,7 @@
         filtered.forEach(id => {
             const r = dataStore[id]; const isActive = selectedIds.includes(id);
             const card = document.createElement('div'); card.className = `strategy-card ${isActive ? 'active' : ''}`;
-            const color = isActive ? COLORS[selectedIds.indexOf(id) % COLORS.length] : 'transparent';
+            const color = isActive ? colorForTraderName(r.trader) : 'transparent';
             card.innerHTML = `<div class="card-color" style="background:${color}"></div><span class="card-name">${r.trader}</span><span class="card-stats">PnL: ${Math.round(r.final_pnl).toLocaleString()}</span>`;
             card.onclick = () => toggleSelect(id); container.appendChild(card);
         });
@@ -1369,7 +1379,6 @@
 
         const datasets = [];
         const summaryRows = [];
-        let pairIndex = 0;
         const interpolateLinear = series => {
             const out = [...series];
             let left = -1;
@@ -1450,8 +1459,7 @@
             const denseBtData = interpolateLinear(btData);
             const denseLiveData = interpolateLinear(liveData);
 
-            const color = COLORS[pairIndex % COLORS.length];
-            pairIndex += 1;
+            const color = colorForTraderName(trader);
             const btRef = [...usedBtIds].slice(0, 2).join(',') || '-';
             const liveRef = [...usedLiveIds].slice(0, 2).join(',') || '-';
             datasets.push({
@@ -1610,6 +1618,15 @@
         const datasets = []; const tbody = document.querySelector('#leaderboardTable tbody'); tbody.innerHTML = '';
         const metricRows = [];
         const isTotalView = currentFilters.day === 'total';
+        const traderDayMap = new Map();
+        if (isTotalView) {
+            Object.values(dataStore)
+                .filter(r => r.round === currentFilters.round)
+                .forEach(r => {
+                    if (!traderDayMap.has(r.trader)) traderDayMap.set(r.trader, new Set());
+                    traderDayMap.get(r.trader).add(r.day);
+                });
+        }
         const roundDays = isTotalView
             ? [...new Set(Object.values(dataStore).filter(r => r.round === currentFilters.round).map(r => r.day))].sort((a, b) => a - b)
             : [];
@@ -1635,9 +1652,9 @@
                 perfDayZones.push({ day, start, end, zoneIdx });
             });
         }
-        selectedIds.forEach((id, i) => {
+        selectedIds.forEach((id) => {
             const r = dataStore[id];
-            const color = COLORS[i % COLORS.length];
+            const color = colorForTraderName(r.trader);
             const equityCurve = buildEquityCurve(r.history);
             const mdd = calcMDD(equityCurve);
             const ratio = (r.final_pnl / (Math.abs(mdd) || 1)).toFixed(2);
@@ -1658,15 +1675,77 @@
             }
             metricRows.push({ trader: r.trader, pnl: r.final_pnl, mdd, sharpe, greenTicks, readiness, ratio: Number(ratio), color, id, selectionScore: selection.score, statusLabel: selection.statusLabel, statusRank: selection.statusRank, statusReason: selection.reason });
         });
-        metricRows.sort((a, b) => {
-            const delta = (a[sortMetric] || 0) - (b[sortMetric] || 0);
-            return sortDirection === 'desc' ? -delta : delta;
-        });
-        metricRows.forEach(row => {
-            const statusColor = row.statusLabel === 'GREEN' ? 'var(--accent)' : row.statusLabel === 'AMBER' ? 'var(--warning)' : 'var(--danger)';
-            const whyText = row.statusReason.length > 42 ? `${row.statusReason.slice(0, 42)}...` : row.statusReason;
-            tbody.innerHTML += `<tr><td style="color:${row.color}; font-weight:700;">● ${row.trader}</td><td style="color:${row.pnl > 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.pnl).toLocaleString()}</td><td style="color:var(--danger)">${Math.round(row.mdd).toLocaleString()}</td><td>${row.ratio.toFixed(2)}x</td><td>${row.sharpe.toFixed(2)}</td><td>${row.greenTicks}%</td><td><b>${row.selectionScore}</b></td><td title="${row.statusReason}" style="color:${statusColor}; font-weight:700;">${row.statusLabel}</td><td title="${row.statusReason}" style="color:var(--text-dim);">${whyText}</td><td><div style="height:4px; width:100px; background:#111;"><div style="height:100%; width:${row.readiness}%; background:var(--accent);"></div></div></td></tr>`;
-        });
+        const headers = document.querySelectorAll('#leaderboardTable thead th');
+        if (isTotalView) {
+            headers.forEach(th => { th.style.display = ''; });
+            const byTrader = new Map();
+            metricRows.forEach(row => {
+                const curr = byTrader.get(row.trader) || {
+                    trader: row.trader,
+                    color: row.color,
+                    pnl: 0,
+                    mdd: 0,
+                    sharpeVals: [],
+                    greenTicksVals: [],
+                    selectionVals: [],
+                    readinessVals: [],
+                    statusWorstRank: 2,
+                    reasons: [],
+                };
+                curr.pnl += Number(row.pnl || 0);
+                curr.mdd += Number(row.mdd || 0); // aggregate drawdown across day-runs
+                curr.sharpeVals.push(Number(row.sharpe || 0));
+                curr.greenTicksVals.push(Number(row.greenTicks || 0));
+                curr.selectionVals.push(Number(row.selectionScore || 0));
+                curr.readinessVals.push(Number(row.readiness || 0));
+                curr.statusWorstRank = Math.min(curr.statusWorstRank, Number(row.statusRank || 0));
+                if (row.statusReason) curr.reasons.push(row.statusReason);
+                byTrader.set(row.trader, curr);
+            });
+            const aggRows = [...byTrader.values()].map(r => {
+                const avg = arr => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+                const sharpe = avg(r.sharpeVals);
+                const greenTicks = Math.round(avg(r.greenTicksVals));
+                const selectionScore = Math.round(avg(r.selectionVals));
+                const readiness = Math.round(avg(r.readinessVals));
+                const ratio = Number((r.pnl / (Math.abs(r.mdd) || 1)).toFixed(2));
+                const statusLabel = r.statusWorstRank >= 2 ? 'GREEN' : (r.statusWorstRank === 1 ? 'AMBER' : 'RED');
+                const statusReason = r.reasons[0] || 'Aggregated from day runs';
+                return {
+                    trader: r.trader,
+                    color: r.color,
+                    pnl: r.pnl,
+                    mdd: r.mdd,
+                    sharpe,
+                    greenTicks,
+                    selectionScore,
+                    readiness,
+                    ratio,
+                    statusLabel,
+                    statusReason,
+                };
+            });
+            aggRows.sort((a, b) => {
+                const delta = (a[sortMetric] || 0) - (b[sortMetric] || 0);
+                return sortDirection === 'desc' ? -delta : delta;
+            });
+            aggRows.forEach(row => {
+                const statusColor = row.statusLabel === 'GREEN' ? 'var(--accent)' : row.statusLabel === 'AMBER' ? 'var(--warning)' : 'var(--danger)';
+                const whyText = row.statusReason.length > 42 ? `${row.statusReason.slice(0, 42)}...` : row.statusReason;
+                tbody.innerHTML += `<tr><td style="color:${row.color}; font-weight:700;">● ${row.trader}</td><td style="color:${row.pnl > 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.pnl).toLocaleString()}</td><td style="color:var(--danger)">${Math.round(row.mdd).toLocaleString()}</td><td>${row.ratio.toFixed(2)}x</td><td>${row.sharpe.toFixed(2)}</td><td>${row.greenTicks}%</td><td><b>${row.selectionScore}</b></td><td title="${row.statusReason}" style="color:${statusColor}; font-weight:700;">${row.statusLabel}</td><td title="${row.statusReason}" style="color:var(--text-dim);">${whyText}</td><td><div style="height:4px; width:100px; background:#111;"><div style="height:100%; width:${row.readiness}%; background:var(--accent);"></div></div></td></tr>`;
+            });
+        } else {
+            headers.forEach(th => { th.style.display = ''; });
+            metricRows.sort((a, b) => {
+                const delta = (a[sortMetric] || 0) - (b[sortMetric] || 0);
+                return sortDirection === 'desc' ? -delta : delta;
+            });
+            metricRows.forEach(row => {
+                const statusColor = row.statusLabel === 'GREEN' ? 'var(--accent)' : row.statusLabel === 'AMBER' ? 'var(--warning)' : 'var(--danger)';
+                const whyText = row.statusReason.length > 42 ? `${row.statusReason.slice(0, 42)}...` : row.statusReason;
+                tbody.innerHTML += `<tr><td style="color:${row.color}; font-weight:700;">● ${row.trader}</td><td style="color:${row.pnl > 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.pnl).toLocaleString()}</td><td style="color:var(--danger)">${Math.round(row.mdd).toLocaleString()}</td><td>${row.ratio.toFixed(2)}x</td><td>${row.sharpe.toFixed(2)}</td><td>${row.greenTicks}%</td><td><b>${row.selectionScore}</b></td><td title="${row.statusReason}" style="color:${statusColor}; font-weight:700;">${row.statusLabel}</td><td title="${row.statusReason}" style="color:var(--text-dim);">${whyText}</td><td><div style="height:4px; width:100px; background:#111;"><div style="height:100%; width:${row.readiness}%; background:var(--accent);"></div></div></td></tr>`;
+            });
+        }
         if (charts.perf) charts.perf.destroy();
         const labels = isTotalView
             ? perfLabels
@@ -1759,8 +1838,8 @@
         });
         const attributionRuns = [...uniqueByTrader.values()];
         const assets = [...new Set(attributionRuns.flatMap(r => Object.keys(r.final_pnl_by_product || {})))].sort();
-        const datasets = attributionRuns.map((r, i) => {
-            return { label: r.trader, data: assets.map(a => r.final_pnl_by_product?.[a] || 0), backgroundColor: COLORS[i % COLORS.length], borderRadius: 4 };
+        const datasets = attributionRuns.map((r) => {
+            return { label: r.trader, data: assets.map(a => r.final_pnl_by_product?.[a] || 0), backgroundColor: colorForTraderName(r.trader), borderRadius: 4 };
         });
         if (charts.attr) charts.attr.destroy();
         charts.attr = new Chart(document.getElementById('attributionChart'), { type: 'bar', data: { labels: assets, datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { grid: { color: 'rgba(255,255,255,0.03)' } } } } });
