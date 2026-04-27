@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import sys
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,8 +23,21 @@ class VisualizerHandler(SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.end_headers()
         self.wfile.write(body)
+
+    def end_headers(self) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path
+        # Prevent stale UI/data after refetch; always validate with fresh fetch.
+        if path.endswith("visualizer.html") or path.endswith("backtest_comparison.js") or path.endswith("live_comparison.js"):
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+        super().end_headers()
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -43,16 +58,41 @@ class VisualizerHandler(SimpleHTTPRequestHandler):
 
     def _handle_load_data(self) -> None:
         try:
+            backtest_rebuild = self._rebuild_backtest_dataset()
             backtest_cleanup = self._clean_backtest_dataset()
             live_cleanup = self._clean_live_logs()
             live_stats = write_live_data_js(self.repo_root, "live_comparison.js")
-            result = {"ok": True, "live": live_stats, "live_cleanup": live_cleanup, "backtest_cleanup": backtest_cleanup}
+            result = {
+                "ok": True,
+                "backtest_rebuild": backtest_rebuild,
+                "backtest_cleanup": backtest_cleanup,
+                "live_cleanup": live_cleanup,
+                "live": live_stats,
+            }
             backtest_path = self.repo_root / "backtest_comparison.js"
             if backtest_path.exists():
                 result["backtest"] = {"saved": str(backtest_path)}
             self._json(result, 200)
         except Exception as exc:
             self._json({"ok": False, "error": str(exc)}, 500)
+
+    def _rebuild_backtest_dataset(self) -> dict:
+        parser_script = self.repo_root / "tools" / "parse_runs.py"
+        if not parser_script.exists():
+            return {"ok": False, "skipped": True, "reason": "tools/parse_runs.py not found"}
+        proc = subprocess.run(
+            [sys.executable, str(parser_script)],
+            cwd=str(self.repo_root),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return {
+            "ok": proc.returncode == 0,
+            "return_code": proc.returncode,
+            "stdout": (proc.stdout or "").strip(),
+            "stderr": (proc.stderr or "").strip(),
+        }
 
     @staticmethod
     def _run_id_score(run_id: str) -> int:
