@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PROSPERITY — STRATEGY INTELLIGENCE v5.5</title>
+<title>PROSPERITY VISUALIZER</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600&family=Outfit:wght@300;700;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
@@ -235,6 +235,21 @@
         font-size: 0.6rem; color: var(--text-dim); text-align: center; cursor: pointer;
     }
     .select-pill.active { border-color: var(--accent); color: var(--accent); }
+    .source-pill.active {
+        border-color: var(--info);
+        color: var(--info);
+        box-shadow: 0 0 0 1px rgba(0, 209, 255, 0.2) inset;
+    }
+    .scope-pill.active {
+        border-color: var(--accent);
+        color: var(--accent);
+    }
+    .context-badge {
+        margin-top: 8px;
+        font-size: 0.55rem;
+        color: var(--text-dim);
+        letter-spacing: 0.6px;
+    }
 
     .sticky-header {
         position: sticky; top: 0; background: var(--surface); padding: 5px 0 15px; z-index: 50;
@@ -341,7 +356,7 @@
             <button class="tab" onclick="switchTab('manager')">MANAGER</button>
         </div>
         <div class="header-actions">
-            <button id="refreshBtn" class="refresh-btn" onclick="refreshBacktestData()">REFRESH DATA</button>
+            <button id="refreshBtn" class="refresh-btn" onclick="loadData()">REFETCH</button>
             <button class="export-btn" onclick="exportAnalytics()">EXPORT SNAPSHOT</button>
         </div>
     </header>
@@ -349,24 +364,30 @@
     <aside>
         <div class="sidebar-inner">
             <div>
+                <span class="section-label">Data Source</span>
+                <div class="filter-row">
+                    <div id="source-backtest-btn" class="select-pill source-pill active" onclick="setSourceFilter('backtest')">BACKTEST</div>
+                    <div id="source-live-btn" class="select-pill source-pill" onclick="setSourceFilter('live')">LIVE LOGS</div>
+                </div>
                 <span class="section-label">Context Filter</span>
                 <div class="filter-row">
-                    <div id="r3-btn" class="select-pill active" onclick="setFilter('round', 3)">R3</div>
-                    <div id="r4-btn" class="select-pill" onclick="setFilter('round', 4)">R4</div>
-                    <div id="r5-btn" class="select-pill" onclick="setFilter('round', 5)">R5</div>
+                    <div id="r3-btn" class="select-pill scope-pill active" onclick="setFilter('round', 3)">R3</div>
+                    <div id="r4-btn" class="select-pill scope-pill" onclick="setFilter('round', 4)">R4</div>
+                    <div id="r5-btn" class="select-pill scope-pill" onclick="setFilter('round', 5)">R5</div>
                 </div>
                 <div class="filter-row">
-                    <div id="d0-btn" class="select-pill active" onclick="setFilter('day', 0)">D0</div>
-                    <div id="d1-btn" class="select-pill" onclick="setFilter('day', 1)">D1</div>
-                    <div id="d2-btn" class="select-pill" onclick="setFilter('day', 2)">D2</div>
-                    <div id="d3-btn" class="select-pill" onclick="setFilter('day', 3)">D3</div>
+                    <div id="d0-btn" class="select-pill scope-pill active" onclick="setFilter('day', 0)">D0</div>
+                    <div id="d1-btn" class="select-pill scope-pill" onclick="setFilter('day', 1)">D1</div>
+                    <div id="d2-btn" class="select-pill scope-pill" onclick="setFilter('day', 2)">D2</div>
+                    <div id="d3-btn" class="select-pill scope-pill" onclick="setFilter('day', 3)">D3</div>
                 </div>
+                <div id="contextBadge" class="context-badge"></div>
             </div>
 
             <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
                 <div class="sticky-header">
                     <span class="section-label" style="margin:0;">Strategies</span>
-                    <button class="reset-btn" onclick="resetSelection()">RESET ALL</button>
+                    <button class="reset-btn" onclick="resetSelection()">RESET</button>
                 </div>
                 <div id="strategyList" style="overflow-y: auto; flex: 1;"></div>
             </div>
@@ -452,7 +473,7 @@
                 </div>
                 <div class="manager-actions">
                     <button class="manager-btn manager-btn-accent" onclick="refreshDuplicateManager()">SCAN DUPLICATES</button>
-                    <button class="manager-btn" onclick="selectAllManagerDeletes()">SELECT ALL DELETE CANDIDATES</button>
+                    <button id="managerSelectAllBtn" class="manager-btn" onclick="selectAllManagerDeletes()">SELECT ALL DELETE CANDIDATES</button>
                     <button id="managerDeselectBtn" class="manager-btn" onclick="deselectAllManagerDeletes()">DESELECT ALL</button>
                     <button id="managerRemoveBtn" class="manager-btn manager-btn-danger" onclick="removeSelectedManagerRuns()">REMOVE SELECTED</button>
                 </div>
@@ -479,9 +500,10 @@
 </div>
 
 <script src="backtest_comparison.js"></script>
+<script src="live_comparison.js"></script>
 <script>
     const COLORS = ['#00ff9d', '#00d1ff', '#ff4757', '#ffa502', '#cc44ff', '#eccc68', '#7bed9f', '#ff6b81', '#1e90ff', '#ffffff'];
-    let currentFilters = { round: 3, day: 0 };
+    let currentFilters = { source: 'backtest', round: 3, day: 0 };
     let selectedIds = [];
     let activeTab = 'performance';
     let sortMetric = 'pnl';
@@ -494,6 +516,58 @@
     let heatmapSortDirection = 'desc';
     let managerState = { groups: [], selectedDeleteIds: new Set() };
     let charts = {};
+    const LIVE_DATA_STORE = typeof LIVE_LOG_DATA !== 'undefined' ? LIVE_LOG_DATA : {};
+    function getDataStore() {
+        return currentFilters.source === 'live' ? LIVE_DATA_STORE : BACKTEST_DATA;
+    }
+    function getAvailableRounds() {
+        if (currentFilters.source === 'live') return [3, 4, 5];
+        return [...new Set(Object.values(getDataStore()).map(r => r.round))].sort((a, b) => a - b);
+    }
+    function updateSourcePills() {
+        document.getElementById('source-backtest-btn')?.classList.toggle('active', currentFilters.source === 'backtest');
+        document.getElementById('source-live-btn')?.classList.toggle('active', currentFilters.source === 'live');
+    }
+    function updateContextBadge() {
+        const el = document.getElementById('contextBadge');
+        if (!el) return;
+        const sourceLabel = currentFilters.source === 'live' ? 'LIVE LOGS' : 'BACKTEST';
+        el.textContent = `Viewing: ${sourceLabel} | R${currentFilters.round} D${currentFilters.day}`;
+    }
+    function updateRefreshButton() {
+        const btn = document.getElementById('refreshBtn');
+        if (!btn) return;
+        btn.textContent = 'REFETCH';
+    }
+    function getCurrentFilteredIds() {
+        const dataStore = getDataStore();
+        return Object.keys(dataStore).filter(id => {
+            const r = dataStore[id];
+            return r.round === currentFilters.round && r.day === currentFilters.day;
+        });
+    }
+    function updateManagerModeUI() {
+        const isLive = currentFilters.source === 'live';
+        const removeBtn = document.getElementById('managerRemoveBtn');
+        const selectAllBtn = document.getElementById('managerSelectAllBtn');
+        if (removeBtn) removeBtn.textContent = isLive ? 'CLEAN SELECTED FILES' : 'REMOVE SELECTED';
+        if (selectAllBtn) selectAllBtn.textContent = isLive ? 'SELECT ALL CLEAN CANDIDATES' : 'SELECT ALL DELETE CANDIDATES';
+    }
+    function setSourceFilter(source) {
+        if (source !== 'backtest' && source !== 'live') return;
+        currentFilters.source = source;
+        const availableDays = getAvailableDays(currentFilters.round);
+        if (!availableDays.includes(currentFilters.day)) currentFilters.day = availableDays.length ? availableDays[0] : 0;
+        selectedIds = [];
+        updateSourcePills();
+        updateRefreshButton();
+        updateManagerModeUI();
+        setFilter('round', currentFilters.round);
+        updateContextBadge();
+        renderSidebar();
+        renderActiveTab();
+        refreshDuplicateManager();
+    }
 
     function init() {
         try {
@@ -509,7 +583,10 @@
         updateAssetSortIndicators();
         updateStabilitySortIndicators();
         updateHeatmapSortIndicators();
-        setFilter('round', currentFilters.round);
+        updateSourcePills();
+        updateRefreshButton();
+        updateManagerModeUI();
+        setSourceFilter(currentFilters.source || 'backtest');
         if (activeTab !== 'performance') switchTab(activeTab);
         renderSidebar();
         renderActiveTab();
@@ -533,16 +610,18 @@
         renderActiveTab();
     }
     function getAvailableDays(round) {
+        const dataStore = getDataStore();
         return [...new Set(
-            Object.values(BACKTEST_DATA)
+            Object.values(dataStore)
                 .filter(r => r.round === round)
                 .map(r => r.day)
         )].sort((a, b) => a - b);
     }
     function setFilter(type, val) {
+        const dataStore = getDataStore();
         const prevRound = currentFilters.round;
         const prevDay = currentFilters.day;
-        const prevSelectedTraderNames = new Set(selectedIds.map(id => BACKTEST_DATA[id]?.trader).filter(Boolean));
+        const prevSelectedTraderNames = new Set(selectedIds.map(id => dataStore[id]?.trader).filter(Boolean));
         currentFilters[type] = val;
         const availableDays = getAvailableDays(currentFilters.round);
         if (type === 'round') {
@@ -553,7 +632,7 @@
         } else if (!availableDays.includes(currentFilters.day)) {
             currentFilters.day = availableDays.length ? availableDays[0] : 0;
         }
-        document.querySelectorAll('.select-pill').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.scope-pill').forEach(p => p.classList.remove('active'));
         const roundBtn = document.getElementById(`r${currentFilters.round}-btn`);
         if (roundBtn) roundBtn.classList.add('active');
         [0, 1, 2, 3].forEach(day => {
@@ -563,11 +642,9 @@
         });
         const dayBtn = document.getElementById(`d${currentFilters.day}-btn`);
         if (dayBtn) dayBtn.classList.add('active');
-        const filteredIds = Object.keys(BACKTEST_DATA).filter(id => {
-            const r = BACKTEST_DATA[id];
-            return r.round === currentFilters.round && r.day === currentFilters.day;
-        });
-        selectedIds = filteredIds.filter(id => prevSelectedTraderNames.has(BACKTEST_DATA[id].trader));
+        const filteredIds = getCurrentFilteredIds();
+        selectedIds = filteredIds.filter(id => prevSelectedTraderNames.has(dataStore[id].trader));
+        updateContextBadge();
         renderSidebar();
         renderActiveTab();
     }
@@ -645,12 +722,13 @@
         icon.textContent = heatmapSortDirection === 'desc' ? 'v' : '^';
     }
     function renderSidebar() {
+        const dataStore = getDataStore();
         const container = document.getElementById('strategyList'); container.innerHTML = '';
-        const filtered = Object.keys(BACKTEST_DATA).filter(id => {
-            const r = BACKTEST_DATA[id]; return r.round === currentFilters.round && r.day === currentFilters.day;
-        }).sort((a,b) => BACKTEST_DATA[b].final_pnl - BACKTEST_DATA[a].final_pnl);
+        const filtered = Object.keys(dataStore).filter(id => {
+            const r = dataStore[id]; return r.round === currentFilters.round && r.day === currentFilters.day;
+        }).sort((a,b) => dataStore[b].final_pnl - dataStore[a].final_pnl);
         filtered.forEach(id => {
-            const r = BACKTEST_DATA[id]; const isActive = selectedIds.includes(id);
+            const r = dataStore[id]; const isActive = selectedIds.includes(id);
             const card = document.createElement('div'); card.className = `strategy-card ${isActive ? 'active' : ''}`;
             const color = isActive ? COLORS[selectedIds.indexOf(id) % COLORS.length] : 'transparent';
             card.innerHTML = `<div class="card-color" style="background:${color}"></div><span class="card-name">${r.trader}</span><span class="card-stats">PnL: ${Math.round(r.final_pnl).toLocaleString()}</span>`;
@@ -705,7 +783,7 @@
         return Math.max(...absValues) / total;
     }
     function evaluateSelectionScore(run, mdd, sharpe, greenTicks, ratio) {
-        const peerRuns = Object.values(BACKTEST_DATA).filter(r => r.round === run.round && r.trader === run.trader);
+        const peerRuns = Object.values(getDataStore()).filter(r => r.round === run.round && r.trader === run.trader);
         const pnls = peerRuns.map(r => r.final_pnl);
         const avgPnl = pnls.length ? pnls.reduce((a, b) => a + b, 0) / pnls.length : run.final_pnl;
         const worstDay = pnls.length ? Math.min(...pnls) : run.final_pnl;
@@ -737,9 +815,10 @@
         return { score, statusLabel: 'GREEN', statusRank: 2, reason: reasons.join(' | ') };
     }
     function computePerformanceRows(ids) {
+        const dataStore = getDataStore();
         const rows = [];
         ids.forEach(id => {
-            const r = BACKTEST_DATA[id];
+            const r = dataStore[id];
             const equityCurve = buildEquityCurve(r.history);
             const mdd = calcMDD(equityCurve);
             const ratio = Number((r.final_pnl / (Math.abs(mdd) || 1)).toFixed(2));
@@ -770,9 +849,10 @@
         return rows;
     }
     function computeAttributionRows(ids) {
-        const assets = [...new Set(ids.flatMap(id => Object.keys(BACKTEST_DATA[id].final_pnl_by_product || {})))].sort();
+        const dataStore = getDataStore();
+        const assets = [...new Set(ids.flatMap(id => Object.keys(dataStore[id].final_pnl_by_product || {})))].sort();
         return assets.map(asset => {
-            const scores = ids.map(id => ({ id, trader: BACKTEST_DATA[id].trader, val: BACKTEST_DATA[id].final_pnl_by_product?.[asset] || 0 }));
+            const scores = ids.map(id => ({ id, trader: dataStore[id].trader, val: dataStore[id].final_pnl_by_product?.[asset] || 0 }));
             scores.sort((x, y) => y.val - x.val);
             return {
                 asset,
@@ -785,7 +865,7 @@
         });
     }
     function computeStabilityRows(round) {
-        const roundRuns = Object.values(BACKTEST_DATA).filter(r => r.round === round);
+        const roundRuns = Object.values(getDataStore()).filter(r => r.round === round);
         const roundDays = [...new Set(roundRuns.map(r => r.day))].sort((a, b) => a - b);
         const displayDays = roundDays.slice(0, 3);
         const fallbackDays = [0, 1, 2];
@@ -818,8 +898,9 @@
         return { dayLabels: displayDays, crossDayRows: stabilityRows, heatmapRows };
     }
     function exportAnalytics() {
-        const availableIds = Object.keys(BACKTEST_DATA).filter(id => {
-            const r = BACKTEST_DATA[id];
+        const dataStore = getDataStore();
+        const availableIds = Object.keys(dataStore).filter(id => {
+            const r = dataStore[id];
             return r.round === currentFilters.round && r.day === currentFilters.day;
         });
         const chosenIds = selectedIds.length ? selectedIds : availableIds;
@@ -848,53 +929,45 @@
         a.remove();
         URL.revokeObjectURL(url);
     }
-    async function refreshBacktestData() {
+    async function loadData() {
         const btn = document.getElementById('refreshBtn');
         if (btn) {
             btn.disabled = true;
-            btn.textContent = 'REFRESHING...';
+            btn.textContent = 'LOADING...';
         }
-        // file:// pages cannot fetch local files due to browser CORS restrictions.
+
+        // file:// pages cannot call local Python endpoints directly.
         if (window.location.protocol === 'file:') {
-            window.location.reload();
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'REFETCH';
+            }
+            alert('Start the loader server first:\npython tools/visualizer_loader_server.py --repo-root . --port 8765\nThen open http://127.0.0.1:8765/visualizer.html');
             return;
         }
         try {
-            const res = await fetch(`backtest_comparison.js?t=${Date.now()}`, { cache: 'no-store' });
+            let res = await fetch('/api/load-data', { method: 'POST' });
+            if (res.status === 405) {
+                // Fallback for static servers that only allow GET.
+                res = await fetch('/api/load-data', { method: 'GET' });
+            }
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const text = await res.text();
-            const eqIdx = text.indexOf('=');
-            if (eqIdx === -1) throw new Error('Missing assignment in backtest file');
-            const jsonStart = text.indexOf('{', eqIdx);
-            if (jsonStart === -1) throw new Error('Missing JSON start in backtest file');
-            let jsonEnd = text.lastIndexOf('};');
-            if (jsonEnd === -1) jsonEnd = text.lastIndexOf('}');
-            if (jsonEnd === -1 || jsonEnd <= jsonStart) throw new Error('Missing JSON end in backtest file');
-            const jsonText = text.slice(jsonStart, jsonEnd + 1);
-            const freshData = JSON.parse(jsonText);
-
-            // Mutate in place so existing references keep working.
-            Object.keys(BACKTEST_DATA).forEach(k => delete BACKTEST_DATA[k]);
-            Object.assign(BACKTEST_DATA, freshData);
-
-            // Keep valid selections only after refresh.
-            selectedIds = selectedIds.filter(id => BACKTEST_DATA[id]);
-            setFilter('round', currentFilters.round);
-            renderSidebar();
-            renderActiveTab();
-
+            await res.json();
+            // The parser updates local JS files. Reload to pick up fresh data.
+            window.location.reload();
             if (btn) {
                 btn.disabled = false;
-                btn.textContent = 'REFRESH DATA';
+                btn.textContent = 'REFETCH';
             }
         } catch (e) {
             if (btn) {
                 btn.disabled = false;
-                btn.textContent = 'REFRESH FAILED';
+                btn.textContent = 'LOAD FAILED';
             }
-            console.error('Refresh failed:', e);
+            console.error('Load failed:', e);
+            alert('Load Data failed. Ensure you started the custom server: "python tools/visualizer_loader_server.py --repo-root . --port 8765" Then use http://127.0.0.1:8765/visualizer.html');
             setTimeout(() => {
-                if (btn) btn.textContent = 'REFRESH DATA';
+                if (btn) btn.textContent = 'REFETCH';
             }, 1800);
         }
     }
@@ -913,8 +986,9 @@
         });
     }
     function buildDuplicateGroups() {
+        const dataStore = getDataStore();
         const buckets = {};
-        Object.entries(BACKTEST_DATA).forEach(([id, run]) => {
+        Object.entries(dataStore).forEach(([id, run]) => {
             const fp = fingerprintRun(run);
             if (!buckets[fp]) buckets[fp] = [];
             buckets[fp].push({ id, run });
@@ -1020,12 +1094,37 @@
         managerState.selectedDeleteIds = new Set();
         renderManagerTable();
     }
-    function removeSelectedManagerRuns() {
+    async function removeSelectedManagerRuns() {
+        const dataStore = getDataStore();
         const targets = [...managerState.selectedDeleteIds];
         if (!targets.length) return;
-        if (!confirm(`Remove ${targets.length} selected run(s) from current visualizer view?`)) return;
-        targets.forEach(runId => { delete BACKTEST_DATA[runId]; });
-        selectedIds = selectedIds.filter(id => BACKTEST_DATA[id]);
+        const source = currentFilters.source;
+        if (!confirm(`Remove ${targets.length} selected run(s) from ${source === 'backtest' ? 'backtest artifacts + dataset' : 'live logs + dataset'}?`)) return;
+        if (window.location.protocol === 'file:') {
+            alert('Persistent remove requires the loader server. Start:\\npython tools/visualizer_loader_server.py --repo-root . --port 8765');
+            return;
+        }
+        try {
+            const res = await fetch('/api/remove-runs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source, run_ids: targets })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const payload = await res.json();
+            if (!payload.ok) throw new Error(payload.error || 'Remove failed');
+            if (source === 'live') {
+                console.log('Live cleaner stats:', payload.live_cleanup || {}, payload.live_rebuild || {});
+            } else {
+                console.log('Backtest cleanup stats:', payload.backtest_cleanup || {}, payload.backtest_artifacts || {});
+            }
+        } catch (e) {
+            console.error('Remove failed:', e);
+            alert('Remove failed. Ensure you are using visualizer_loader_server.py');
+            return;
+        }
+        targets.forEach(runId => { delete dataStore[runId]; });
+        selectedIds = selectedIds.filter(id => dataStore[id]);
         managerState.selectedDeleteIds = new Set();
         refreshDuplicateManager();
         renderSidebar();
@@ -1039,10 +1138,11 @@
     }
 
     function renderPerformance() {
+        const dataStore = getDataStore();
         const datasets = []; const tbody = document.querySelector('#leaderboardTable tbody'); tbody.innerHTML = '';
         const metricRows = [];
         selectedIds.forEach((id, i) => {
-            const r = BACKTEST_DATA[id];
+            const r = dataStore[id];
             const color = COLORS[i % COLORS.length];
             const equityCurve = buildEquityCurve(r.history);
             const mdd = calcMDD(equityCurve);
@@ -1065,7 +1165,7 @@
             tbody.innerHTML += `<tr><td style="color:${row.color}; font-weight:700;">● ${row.trader}</td><td style="color:${row.pnl > 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.pnl).toLocaleString()}</td><td style="color:var(--danger)">${Math.round(row.mdd).toLocaleString()}</td><td>${row.ratio.toFixed(2)}x</td><td>${row.sharpe.toFixed(2)}</td><td>${row.greenTicks}%</td><td><b>${row.selectionScore}</b></td><td title="${row.statusReason}" style="color:${statusColor}; font-weight:700;">${row.statusLabel}</td><td title="${row.statusReason}" style="color:var(--text-dim);">${whyText}</td><td><div style="height:4px; width:100px; background:#111;"><div style="height:100%; width:${row.readiness}%; background:var(--accent);"></div></div></td></tr>`;
         });
         if (charts.perf) charts.perf.destroy();
-        const labels = selectedIds.length > 0 ? buildEquityCurve(BACKTEST_DATA[selectedIds[0]].history).map(h => h.ts) : [];
+        const labels = selectedIds.length > 0 ? buildEquityCurve(dataStore[selectedIds[0]].history).map(h => h.ts) : [];
         charts.perf = new Chart(document.getElementById('performanceChart'), {
             type: 'line',
             data: { labels, datasets },
@@ -1094,16 +1194,17 @@
     }
 
     function renderAttribution() {
+        const dataStore = getDataStore();
         if (selectedIds.length === 0) return;
-        const assets = [...new Set(selectedIds.flatMap(id => Object.keys(BACKTEST_DATA[id].final_pnl_by_product)))].sort();
+        const assets = [...new Set(selectedIds.flatMap(id => Object.keys(dataStore[id].final_pnl_by_product)))].sort();
         const datasets = selectedIds.map((id, i) => {
-            const r = BACKTEST_DATA[id]; return { label: r.trader, data: assets.map(a => r.final_pnl_by_product[a] || 0), backgroundColor: COLORS[i % COLORS.length], borderRadius: 4 };
+            const r = dataStore[id]; return { label: r.trader, data: assets.map(a => r.final_pnl_by_product[a] || 0), backgroundColor: COLORS[i % COLORS.length], borderRadius: 4 };
         });
         if (charts.attr) charts.attr.destroy();
         charts.attr = new Chart(document.getElementById('attributionChart'), { type: 'bar', data: { labels: assets, datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { grid: { color: 'rgba(255,255,255,0.03)' } } } } });
         const tbody = document.querySelector('#assetLeaderboard tbody'); tbody.innerHTML = '';
         const rows = assets.map(a => {
-            const scores = selectedIds.map(id => ({ name: BACKTEST_DATA[id].trader, val: BACKTEST_DATA[id].final_pnl_by_product[a] || 0 }));
+            const scores = selectedIds.map(id => ({ name: dataStore[id].trader, val: dataStore[id].final_pnl_by_product[a] || 0 }));
             scores.sort((x,y) => y.val - x.val);
             const spread = scores[0].val - scores[scores.length - 1].val;
             return { asset: a, best: scores[0].name, max: scores[0].val, min: scores[scores.length-1].val, spread };
@@ -1120,9 +1221,10 @@
     }
 
     function renderStability() {
+        const dataStore = getDataStore();
         const tbody = document.querySelector('#stabilityTable tbody'); tbody.innerHTML = '';
         const assetTbody = document.querySelector('#assetStabilityTable tbody'); assetTbody.innerHTML = '';
-        const roundRuns = Object.values(BACKTEST_DATA).filter(r => r.round === currentFilters.round);
+        const roundRuns = Object.values(dataStore).filter(r => r.round === currentFilters.round);
         const roundDays = [...new Set(roundRuns.map(r => r.day))].sort((a, b) => a - b);
         const displayDays = roundDays.slice(0, 3);
         const fallbackDays = [0, 1, 2];
@@ -1133,10 +1235,10 @@
             if (stHeader) stHeader.childNodes[0].textContent = `D${displayDays[i]} PNL `;
             if (hmHeader) hmHeader.childNodes[0].textContent = `D${displayDays[i]} `;
         }
-        const traders = [...new Set(Object.values(BACKTEST_DATA).map(r => r.trader))];
+        const traders = [...new Set(Object.values(dataStore).map(r => r.trader))];
         const stabilityRows = [];
         traders.forEach(t => {
-            const runs = Object.values(BACKTEST_DATA).filter(r => r.trader === t && r.round === currentFilters.round);
+            const runs = Object.values(dataStore).filter(r => r.trader === t && r.round === currentFilters.round);
             if (runs.length < 2) return;
             const d0 = runs.find(r => r.day === displayDays[0])?.final_pnl || 0;
             const d1 = runs.find(r => r.day === displayDays[1])?.final_pnl || 0;

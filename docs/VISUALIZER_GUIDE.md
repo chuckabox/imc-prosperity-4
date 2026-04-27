@@ -37,7 +37,7 @@ Left sidebar:
 
 - Context filters: `Round` and `Day`
 - Strategy list: click one or more strategies to include in analytics
-- `RESET ALL`: clear current strategy selection
+- `RESET`: clear current strategy selection
 - On round switch, selected strategy names are preserved when matching traders exist in the new round/day context
 
 Header actions:
