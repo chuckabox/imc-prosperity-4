@@ -134,7 +134,42 @@ def build_live_data(repo_root: Path) -> Dict[str, Dict]:
             continue
         run_id, record = parsed
         out[run_id] = record
-    return out
+    return dedupe_live_runs(out)
+
+
+def _run_id_score(run_id: str) -> int:
+    digits = "".join(ch for ch in str(run_id) if ch.isdigit())
+    if len(digits) < 6:
+        return 0
+    try:
+        return int(digits)
+    except Exception:
+        return 0
+
+
+def dedupe_live_runs(records: Dict[str, Dict]) -> Dict[str, Dict]:
+    """Keep one canonical run when live logs contain duplicate snapshots."""
+    buckets: Dict[str, List[Tuple[str, Dict]]] = {}
+    for run_id, rec in records.items():
+        fp = json.dumps(
+            {
+                "trader": rec.get("trader"),
+                "round": rec.get("round"),
+                "day": rec.get("day"),
+                "pnl": round(float(rec.get("final_pnl", 0.0)), 4),
+                "by_prod": rec.get("final_pnl_by_product", {}),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        buckets.setdefault(fp, []).append((run_id, rec))
+
+    deduped: Dict[str, Dict] = {}
+    for items in buckets.values():
+        # Keep latest-looking id by numeric score.
+        keep_id, keep_rec = sorted(items, key=lambda x: _run_id_score(x[0]), reverse=True)[0]
+        deduped[keep_id] = keep_rec
+    return deduped
 
 
 def write_live_data_js(repo_root: Path, output: str = "live_comparison.js") -> Dict[str, object]:

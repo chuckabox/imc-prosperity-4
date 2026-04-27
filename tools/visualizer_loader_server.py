@@ -286,6 +286,18 @@ class VisualizerHandler(SimpleHTTPRequestHandler):
                     if p.exists() and p.is_file():
                         p.unlink()
                         removed_files += 1
+                    # Also remove sibling portal artifacts with same stem
+                    # (e.g. remove .json and .log together) so refetch does not
+                    # resurrect the run from the remaining sibling file.
+                    stem = p.stem
+                    parent = p.parent
+                    for ext in (".json", ".log"):
+                        sib = parent / f"{stem}{ext}"
+                        if sib == p:
+                            continue
+                        if sib.exists() and sib.is_file():
+                            sib.unlink()
+                            removed_files += 1
 
             for run_id in run_ids:
                 if isinstance(run_id, str):
