@@ -20,9 +20,18 @@ Open the **Rust Backtester** tab to see leaderboards and best/safest trader anal
 
 ```bash
 python tools/runbacktest.py "ROUND 4/traders/ken/table.py" --products summary
+python tools/run_python_bt.py "ROUND 5/traders/ken/MATH1052.py" 5-2
 python tools/parse_runs.py
+python tools/build_i4bt_comparison.py
 python tools/backtest_results_manager.py
+python tools/visualizer_loader_server.py --repo-root . --port 8765
 ```
+
+Visualizer now supports 3 sources on one compare chart:
+
+- Rust backtest (`backtest_comparison.js`)
+- i4bt backtest (`i4bt_comparison.js`)
+- Live logs (`live_comparison.js`)
 
 ---
 

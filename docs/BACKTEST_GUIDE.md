@@ -1,42 +1,80 @@
 # Backtest Guide
 
-This repo uses the Rust backtester at `external/prosperity_rust_backtester`.
+This repo supports two backtest engines and one live source in the same visualizer:
 
-## Quick Start (recommended)
+- Rust backtester -> `backtest_comparison.js`
+- Python i4bt backtester -> `i4bt_comparison.js`
+- Live logs -> `live_comparison.js`
 
-Use the new wrapper:
+## 1) Rust Backtester
 
-`python tools/runbacktest.py <trader_path> <other rust options>`
+Wrapper command:
+
+`python tools/runbacktest.py <trader_path> [rust flags]`
 
 Examples:
 
-- Round 4 trader, default dataset auto-inferred from trader path:
-  - `python tools/runbacktest.py "ROUND 4/traders/ken/table.py" --products summary`
-- Specific day:
-  - `python tools/runbacktest.py "ROUND 4/traders/ken/desk.py" --day 2 --products summary`
-- Override dataset:
-  - `python tools/runbacktest.py "ROUND 4/traders/ken/chair.py" --dataset "ROUND 4/data_capsule" --products summary`
-- Skip build step:
-  - `python tools/runbacktest.py "ROUND 4/traders/ken/lamp.py" --no-build --products summary`
+- Auto-infer dataset from trader path:
+  - `python tools/runbacktest.py "ROUND 5/traders/ken/pot.py" --products summary`
+- Single day:
+  - `python tools/runbacktest.py "ROUND 5/traders/ken/pot.py" --day 2 --products summary`
+- Skip rebuild:
+  - `python tools/runbacktest.py "ROUND 5/traders/ken/pot.py" --no-build --products summary`
 
 Notes:
 
-- `tools/runbacktest.py` forwards unknown flags directly to the Rust backtester.
-- If `--dataset` is not set, it is inferred from `ROUND N` in the trader path.
+- Unknown flags are forwarded to Rust CLI.
+- Rust runs are parsed from `external/prosperity_rust_backtester/runs`.
 
-## Direct Rust Command
+## 2) Python i4bt Backtester
 
-If you prefer raw Rust CLI:
+Wrapper command:
 
-`cargo run --release -- --trader "<absolute_or_relative_trader_path>" --dataset "<dataset_dir>" --products summary`
+`python tools/run_python_bt.py <trader_path> <round-or-day...>`
 
-Run this inside:
+Examples:
 
-- `external/prosperity_rust_backtester`
+- Whole round:
+  - `python tools/run_python_bt.py "ROUND 5/traders/ken/MATH1052.py" 5`
+- Specific day:
+  - `python tools/run_python_bt.py "ROUND 5/traders/ken/MATH1052.py" 5-2`
+- Multiple days:
+  - `python tools/run_python_bt.py "ROUND 5/traders/ken/MATH1052.py" 5-2 5-3 5-4`
 
-## Typical Workflow
+What this wrapper now does:
 
-1. Run backtest with `tools/runbacktest.py`.
-2. Parse runs into `backtest_comparison.js`:
-   - `python tools/parse_runs.py`
-3. Open `visualizer.html` and click `REFRESH DATA`.
+- Writes log to `external/imc-prosperity-4-backtester/backtests`
+- Uses structured filename: `<trader>__<day-args>__<timestamp>.log`
+- Writes sidecar metadata: `<same>.meta.json`
+
+This metadata is used by visualizer parsing so strategy names are readable (`pot`, `MATH1051`, etc.) instead of `unknown`.
+
+## 3) Refresh Data for Visualizer
+
+Start loader server:
+
+`python tools/visualizer_loader_server.py --repo-root . --port 8765`
+
+Then open:
+
+`http://127.0.0.1:8765/visualizer.html`
+
+Click `REFETCH` (or call `/api/load-data`). The server rebuilds:
+
+- Rust: `backtest_comparison.js`
+- i4bt: `i4bt_comparison.js`
+- Live: `live_comparison.js`
+
+## 4) Compare Sources in Visualizer
+
+In Compare tab:
+
+- Choose Source A and Source B (Backtest / I4BT / Live)
+- Optional: toggle `ALL 3: ON` to overlay the third source on the same graph
+
+This lets you compare:
+
+- Rust vs i4bt
+- Rust vs Live
+- i4bt vs Live
+- or all three at once on one chart

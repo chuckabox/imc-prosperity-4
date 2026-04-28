@@ -108,10 +108,11 @@ def compute_et_for_symbol(
     s["theo"] = alpha + beta * s["intrinsic"]
     s["raw_e"] = s["mid_price"] - s["theo"]
 
-    # Normalize by rolling std (with warmup min periods)
+    # Normalize with rolling z-score (mean + std) so e_t is centered.
+    roll_mean = s["raw_e"].rolling(window=rolling_window, min_periods=max(20, rolling_window // 5)).mean()
     roll_std = s["raw_e"].rolling(window=rolling_window, min_periods=max(20, rolling_window // 5)).std()
     roll_std = roll_std.replace(0, np.nan)
-    s["e_t"] = s["raw_e"] / roll_std
+    s["e_t"] = (s["raw_e"] - roll_mean) / roll_std
     s["symbol"] = symbol
     return s
 
@@ -127,9 +128,10 @@ def compute_cross_section_et(
     s = g[g["product"] == symbol].copy().sort_values("global_t").reset_index(drop=True)
     s["theo"] = s["group_mean"]
     s["raw_e"] = s["mid_price"] - s["theo"]
+    roll_mean = s["raw_e"].rolling(window=rolling_window, min_periods=max(20, rolling_window // 5)).mean()
     roll_std = s["raw_e"].rolling(window=rolling_window, min_periods=max(20, rolling_window // 5)).std()
     roll_std = roll_std.replace(0, np.nan)
-    s["e_t"] = s["raw_e"] / roll_std
+    s["e_t"] = (s["raw_e"] - roll_mean) / roll_std
     s["symbol"] = symbol
     s["underlying_mid"] = np.nan
     s["intrinsic"] = np.nan

@@ -13,6 +13,7 @@
     let heatmapSortDirection = 'desc';
     let managerState = { groups: [], selectedDeleteIds: new Set() };
     let compareSources = { a: 'backtest', b: 'live' };
+    let compareIncludeAllSources = false;
     let charts = {};
     const LIVE_DATA_STORE = typeof LIVE_LOG_DATA !== 'undefined' ? LIVE_LOG_DATA : {};
     const I4BT_DATA_STORE = typeof I4BT_DATA !== 'undefined' ? I4BT_DATA : {};
@@ -67,10 +68,25 @@
         });
         const colA = document.getElementById('compare-col-a');
         const colB = document.getElementById('compare-col-b');
+        const colC = document.getElementById('compare-col-c');
         const colD = document.getElementById('compare-col-delta');
+        const allToggle = document.getElementById('compare-all-toggle');
         if (colA) colA.textContent = `${SOURCE_LABELS[compareSources.a] || 'A'} PNL`;
         if (colB) colB.textContent = `${SOURCE_LABELS[compareSources.b] || 'B'} PNL`;
+        if (colC) {
+            const cSource = getThirdCompareSource();
+            colC.textContent = `${SOURCE_LABELS[cSource] || 'C'} PNL`;
+            colC.style.display = compareIncludeAllSources ? '' : 'none';
+        }
         if (colD) colD.textContent = `DELTA (${SOURCE_LABELS[compareSources.b] || 'B'}-${SOURCE_LABELS[compareSources.a] || 'A'})`;
+        if (allToggle) {
+            allToggle.classList.toggle('active', compareIncludeAllSources);
+            allToggle.textContent = `ALL 3: ${compareIncludeAllSources ? 'ON' : 'OFF'}`;
+        }
+    }
+    function getThirdCompareSource() {
+        const all = ['backtest', 'i4bt', 'live'];
+        return all.find(src => src !== compareSources.a && src !== compareSources.b) || 'backtest';
     }
     function updateContextBadge() {
         const el = document.getElementById('contextBadge');
@@ -122,6 +138,11 @@
     function setCompareSources(a, b) {
         if (!['backtest', 'i4bt', 'live'].includes(a) || !['backtest', 'i4bt', 'live'].includes(b) || a === b) return;
         compareSources = { a, b };
+        updateCompareSourcePills();
+        if (activeTab === 'compare') renderCompare();
+    }
+    function toggleCompareAllSources() {
+        compareIncludeAllSources = !compareIncludeAllSources;
         updateCompareSourcePills();
         if (activeTab === 'compare') renderCompare();
     }
@@ -837,6 +858,8 @@
         }
         const sourceAStore = getSourceStore(compareSources.a);
         const sourceBStore = getSourceStore(compareSources.b);
+        const sourceC = getThirdCompareSource();
+        const sourceCStore = getSourceStore(sourceC);
         const round = currentFilters.round;
         const sourceARoundRuns = Object.values(sourceAStore).filter(r => r.round === round);
         const sourceBRoundRuns = Object.values(sourceBStore).filter(r => r.round === round);
@@ -906,14 +929,18 @@
             const trader = selectedRun.trader;
             const btData = new Array(labels.length).fill(null);
             const liveData = new Array(labels.length).fill(null);
+            const thirdData = new Array(labels.length).fill(null);
             let btTotalPnl = 0;
             let liveLatestPnl = 0;
+            let thirdLatestPnl = 0;
             let livePlottedPoints = 0;
             let commonTicks = 0;
             const usedBtIds = new Set();
             const usedLiveIds = new Set();
+            const usedThirdIds = new Set();
             let btCarry = 0;
             let liveCarry = 0;
+            let thirdCarry = 0;
 
             sourceADays.forEach(day => {
                 let sourceAId = null;
@@ -959,6 +986,29 @@
                 });
                 const liveDayFinal = liveCurve.length ? Number(liveCurve[liveCurve.length - 1].pnl || 0) : 0;
                 liveCarry += liveDayFinal;
+
+                if (compareIncludeAllSources) {
+                    let sourceCId = null;
+                    if (currentFilters.source === sourceC && selectedRun.day === day) sourceCId = selectedId;
+                    if (!sourceCId) {
+                        const dayCandidates = Object.entries(sourceCStore)
+                            .filter(([_, r]) => r.round === round && r.day === day && r.trader === trader)
+                            .sort((a, b) => (b[1].final_pnl || 0) - (a[1].final_pnl || 0));
+                        sourceCId = dayCandidates[0]?.[0] || null;
+                    }
+                    if (sourceCId) {
+                        usedThirdIds.add(sourceCId);
+                        const thirdCurve = buildEquityCurve(sourceCStore[sourceCId].history || []);
+                        const thirdMap = new Map(thirdCurve.map(p => [p.ts, p.pnl]));
+                        thirdLatestPnl = Number(sourceCStore[sourceCId].final_pnl || thirdLatestPnl);
+                        thirdMap.forEach((pnl, ts) => {
+                            const idx = indexByDayTs.get(`${day}:${ts}`);
+                            if (idx !== undefined) thirdData[idx] = pnl + thirdCarry;
+                        });
+                        const thirdDayFinal = thirdCurve.length ? Number(thirdCurve[thirdCurve.length - 1].pnl || 0) : 0;
+                        thirdCarry += thirdDayFinal;
+                    }
+                }
             });
             if (btData.every(v => v === null) || liveData.every(v => v === null)) return;
             const denseBtData = interpolateLinear(btData);
@@ -990,11 +1040,28 @@
                 fill: '-1',
                 tension: 0.15
             });
+            if (compareIncludeAllSources) {
+                const thirdRef = [...usedThirdIds].slice(0, 2).join(',') || '-';
+                const denseThirdData = interpolateLinear(thirdData);
+                datasets.push({
+                    label: `${trader} ${SOURCE_LABELS[sourceC] || 'C'} (${thirdRef})`,
+                    data: denseThirdData,
+                    borderColor: '#00d1ff',
+                    backgroundColor: 'transparent',
+                    borderDash: [3, 3],
+                    borderWidth: 2,
+                    pointRadius: 1.9,
+                    pointHoverRadius: 4,
+                    fill: false,
+                    tension: 0.15
+                });
+            }
             const coverage = Math.round((commonTicks / Math.max(livePlottedPoints, 1)) * 100);
             summaryRows.push({
                 trader: `${trader} (${(SOURCE_LABELS[compareSources.a] || 'A')}:${btRef} | ${(SOURCE_LABELS[compareSources.b] || 'B')}:${liveRef})`,
                 btFinal: btTotalPnl,
                 liveFinal: liveLatestPnl,
+                thirdFinal: thirdLatestPnl,
                 delta: liveLatestPnl - btTotalPnl,
                 commonTicks,
                 coverage
@@ -1112,10 +1179,16 @@
         });
 
         summaryRows.sort((a, b) => b.delta - a.delta);
+        const colC = document.getElementById('compare-col-c');
+        if (colC) colC.style.display = compareIncludeAllSources ? '' : 'none';
         summaryRows.forEach(row => {
-            compareTableBody.innerHTML += `<tr><td><b>${row.trader}</b></td><td>${Math.round(row.btFinal).toLocaleString()}</td><td>${Math.round(row.liveFinal).toLocaleString()}</td><td style="color:${row.delta >= 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.delta).toLocaleString()}</td><td>${row.commonTicks}</td><td>${row.coverage}%</td></tr>`;
+            const thirdCell = compareIncludeAllSources ? `<td>${Math.round(row.thirdFinal).toLocaleString()}</td>` : '';
+            compareTableBody.innerHTML += `<tr><td><b>${row.trader}</b></td><td>${Math.round(row.btFinal).toLocaleString()}</td><td>${Math.round(row.liveFinal).toLocaleString()}</td>${thirdCell}<td style="color:${row.delta >= 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.delta).toLocaleString()}</td><td>${row.commonTicks}</td><td>${row.coverage}%</td></tr>`;
         });
-        if (compareNote) compareNote.textContent = `Round ${round}: ${SOURCE_LABELS[compareSources.a] || 'A'} plotted across ${sourceADays.length} day zones; ${SOURCE_LABELS[compareSources.b] || 'B'} is overlaid on matching day zones.`;
+        if (compareNote) {
+            const cSuffix = compareIncludeAllSources ? `, plus ${SOURCE_LABELS[sourceC] || 'C'}.` : '.';
+            compareNote.textContent = `Round ${round}: ${SOURCE_LABELS[compareSources.a] || 'A'} plotted across ${sourceADays.length} day zones; ${SOURCE_LABELS[compareSources.b] || 'B'} is overlaid on matching day zones${cSuffix}`;
+        }
     }
 
     function renderPerformance() {
