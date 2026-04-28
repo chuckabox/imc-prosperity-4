@@ -379,10 +379,9 @@
                 </div>
                 <div id="dayFilterRow" class="filter-row">
                     <div id="dtotal-btn" class="select-pill scope-pill" onclick="setFilter('day', 'total')">TOTAL</div>
-                    <div id="d0-btn" class="select-pill scope-pill active" onclick="setFilter('day', 0)">D0</div>
-                    <div id="d1-btn" class="select-pill scope-pill" onclick="setFilter('day', 1)">D1</div>
-                    <div id="d2-btn" class="select-pill scope-pill" onclick="setFilter('day', 2)">D2</div>
+                    <div id="d2-btn" class="select-pill scope-pill active" onclick="setFilter('day', 2)">D2</div>
                     <div id="d3-btn" class="select-pill scope-pill" onclick="setFilter('day', 3)">D3</div>
+                    <div id="d4-btn" class="select-pill scope-pill" onclick="setFilter('day', 4)">D4</div>
                 </div>
                 <div id="contextBadge" class="context-badge"></div>
             </div>
@@ -523,7 +522,7 @@
 <script src="live_comparison.js"></script>
 <script>
     const COLORS = ['#00ff9d', '#00d1ff', '#ff4757', '#ffa502', '#cc44ff', '#eccc68', '#7bed9f', '#ff6b81', '#1e90ff', '#ffffff'];
-    let currentFilters = { source: 'backtest', round: 3, day: 0 };
+    let currentFilters = { source: 'backtest', round: 5, day: 2 };
     let selectedIds = [];
     let activeTab = 'performance';
     let sortMetric = 'pnl';
@@ -694,7 +693,7 @@
         document.querySelectorAll('.scope-pill').forEach(p => p.classList.remove('active'));
         const roundBtn = document.getElementById(`r${currentFilters.round}-btn`);
         if (roundBtn) roundBtn.classList.add('active');
-        [0, 1, 2, 3].forEach(day => {
+        [2, 3, 4].forEach(day => {
             const dayBtn = document.getElementById(`d${day}-btn`);
             if (!dayBtn) return;
             dayBtn.style.display = availableDays.includes(day) ? 'block' : 'none';
@@ -1025,7 +1024,7 @@
         const roundRuns = Object.values(getDataStore()).filter(r => r.round === round);
         const roundDays = [...new Set(roundRuns.map(r => r.day))].sort((a, b) => a - b);
         const displayDays = roundDays.slice(0, 3);
-        const fallbackDays = [0, 1, 2];
+        const fallbackDays = [2, 3, 4];
         while (displayDays.length < 3) displayDays.push(fallbackDays[displayDays.length]);
 
         const traders = [...new Set(roundRuns.map(r => r.trader))];
@@ -1868,7 +1867,7 @@
         const roundRuns = Object.values(dataStore).filter(r => r.round === currentFilters.round);
         const roundDays = [...new Set(roundRuns.map(r => r.day))].sort((a, b) => a - b);
         const displayDays = roundDays.slice(0, 3);
-        const fallbackDays = [0, 1, 2];
+        const fallbackDays = [2, 3, 4];
         while (displayDays.length < 3) displayDays.push(fallbackDays[displayDays.length]);
         for (let i = 0; i < 3; i += 1) {
             const stHeader = document.getElementById(`stability-day-col-${i}`);

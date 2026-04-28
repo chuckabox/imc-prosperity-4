@@ -1,0 +1,65 @@
+{
+  "signal_quality": {
+    "day_2": {
+      "trades": 44902,
+      "mean_edge_bps": -0.08152408233839163,
+      "win_rate": 0.4852790521580331
+    },
+    "day_3": {
+      "trades": 58791,
+      "mean_edge_bps": -0.013284473149824344,
+      "win_rate": 0.48820397679916994
+    },
+    "day_4": {
+      "trades": 51085,
+      "mean_edge_bps": 0.05986928654355628,
+      "win_rate": 0.48967407262405793
+    }
+  },
+  "manual_trade_candidates": {
+    "day_2_first10pct": [],
+    "day_2_full": [],
+    "day_3_first10pct": [],
+    "day_3_full": [],
+    "day_4_first10pct": [],
+    "day_4_full": []
+  },
+  "family_volatility": {
+    "day_2_top": {
+      "PEBBLES": 18.506,
+      "MICROCHIP": 14.088,
+      "OXYGEN_SHAKE_EVENING": 13.067,
+      "ROBOT": 10.706,
+      "OXYGEN_SHAKE": 10.471,
+      "GALAXY_SOUNDS_PLANETARY": 10.148,
+      "TRANSLATOR_ASTRO": 10.112,
+      "GALAXY_SOUNDS_SOLAR": 10.086,
+      "OXYGEN_SHAKE_MORNING": 10.077,
+      "PANEL": 10.062
+    },
+    "day_3_top": {
+      "PEBBLES": 18.481,
+      "MICROCHIP": 14.159,
+      "OXYGEN_SHAKE_EVENING": 10.935,
+      "ROBOT": 10.268,
+      "OXYGEN_SHAKE_MORNING": 10.091,
+      "GALAXY_SOUNDS_DARK": 10.058,
+      "OXYGEN_SHAKE": 10.048,
+      "TRANSLATOR_ECLIPSE": 10.047,
+      "UV_VISOR": 10.047,
+      "PANEL": 10.038
+    },
+    "day_4_top": {
+      "PEBBLES": 19.075,
+      "ROBOT": 14.759,
+      "MICROCHIP": 14.158,
+      "OXYGEN_SHAKE_EVENING": 10.981,
+      "OXYGEN_SHAKE": 10.769,
+      "GALAXY_SOUNDS_PLANETARY": 10.104,
+      "TRANSLATOR_GRAPHITE": 10.085,
+      "SLEEP_POD_LAMB": 10.078,
+      "PANEL": 10.046,
+      "OXYGEN_SHAKE_MORNING": 10.044
+    }
+  }
+}
