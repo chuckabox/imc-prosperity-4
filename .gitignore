@@ -39,3 +39,4 @@ Thumbs.db
 
 # Cursor / local scratch
 uploads/
+.worktrees/
