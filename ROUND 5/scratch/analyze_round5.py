@@ -22,6 +22,30 @@ class SignalResult:
     score: float
 
 
+FAMILY_PREFIXES = [
+    "PEBBLES",
+    "SNACKPACK",
+    "UV_VISOR",
+    "GALAXY_SOUNDS",
+    "MICROCHIP",
+    "TRANSLATOR",
+    "SLEEP_POD",
+    "OXYGEN_SHAKE",
+    "PANEL",
+    "ROBOT",
+]
+
+
+def split_family(product: str) -> tuple[str, str]:
+    for prefix in FAMILY_PREFIXES:
+        if product.startswith(prefix + "_"):
+            return prefix, product[len(prefix) + 1 :]
+    parts = product.split("_", 1)
+    if len(parts) == 1:
+        return product, ""
+    return parts[0], parts[1]
+
+
 def load_prices(day: int) -> pd.DataFrame:
     df = pd.read_csv(ROOT / f"prices_round_5_day_{day}.csv", sep=";")
     keep = [
@@ -33,8 +57,9 @@ def load_prices(day: int) -> pd.DataFrame:
         "mid_price",
     ]
     df = df[keep].copy()
-    df["family"] = df["product"].str.rsplit("_", n=1).str[0]
-    df["suffix"] = df["product"].str.rsplit("_", n=1).str[-1]
+    split = df["product"].map(split_family)
+    df["family"] = split.map(lambda x: x[0])
+    df["suffix"] = split.map(lambda x: x[1])
     return df
 
 

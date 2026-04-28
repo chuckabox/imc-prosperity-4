@@ -1,19 +1,19 @@
 {
   "signal_quality": {
     "day_2": {
-      "trades": 44902,
-      "mean_edge_bps": -0.08152408233839163,
-      "win_rate": 0.4852790521580331
+      "trades": 65578,
+      "mean_edge_bps": -0.05217260731331401,
+      "win_rate": 0.48520845405471347
     },
     "day_3": {
-      "trades": 58791,
-      "mean_edge_bps": -0.013284473149824344,
-      "win_rate": 0.48820397679916994
+      "trades": 80277,
+      "mean_edge_bps": -0.003363783196455635,
+      "win_rate": 0.48827185868928835
     },
     "day_4": {
-      "trades": 51085,
-      "mean_edge_bps": 0.05986928654355628,
-      "win_rate": 0.48967407262405793
+      "trades": 75122,
+      "mean_edge_bps": 0.015178218598577646,
+      "win_rate": 0.4892175394691302
     }
   },
   "manual_trade_candidates": {
@@ -28,38 +28,38 @@
     "day_2_top": {
       "PEBBLES": 18.506,
       "MICROCHIP": 14.088,
-      "OXYGEN_SHAKE_EVENING": 13.067,
+      "OXYGEN_SHAKE": 10.966,
       "ROBOT": 10.706,
-      "OXYGEN_SHAKE": 10.471,
-      "GALAXY_SOUNDS_PLANETARY": 10.148,
-      "TRANSLATOR_ASTRO": 10.112,
-      "GALAXY_SOUNDS_SOLAR": 10.086,
-      "OXYGEN_SHAKE_MORNING": 10.077,
-      "PANEL": 10.062
+      "PANEL": 10.062,
+      "GALAXY_SOUNDS": 10.037,
+      "SLEEP_POD": 10.031,
+      "UV_VISOR": 10.029,
+      "TRANSLATOR": 10.01,
+      "SNACKPACK": 6.991
     },
     "day_3_top": {
       "PEBBLES": 18.481,
       "MICROCHIP": 14.159,
-      "OXYGEN_SHAKE_EVENING": 10.935,
       "ROBOT": 10.268,
-      "OXYGEN_SHAKE_MORNING": 10.091,
-      "GALAXY_SOUNDS_DARK": 10.058,
-      "OXYGEN_SHAKE": 10.048,
-      "TRANSLATOR_ECLIPSE": 10.047,
+      "OXYGEN_SHAKE": 10.24,
       "UV_VISOR": 10.047,
-      "PANEL": 10.038
+      "PANEL": 10.038,
+      "GALAXY_SOUNDS": 10.019,
+      "SLEEP_POD": 10.001,
+      "TRANSLATOR": 9.989,
+      "SNACKPACK": 6.902
     },
     "day_4_top": {
       "PEBBLES": 19.075,
       "ROBOT": 14.759,
       "MICROCHIP": 14.158,
-      "OXYGEN_SHAKE_EVENING": 10.981,
-      "OXYGEN_SHAKE": 10.769,
-      "GALAXY_SOUNDS_PLANETARY": 10.104,
-      "TRANSLATOR_GRAPHITE": 10.085,
-      "SLEEP_POD_LAMB": 10.078,
+      "OXYGEN_SHAKE": 10.671,
       "PANEL": 10.046,
-      "OXYGEN_SHAKE_MORNING": 10.044
+      "GALAXY_SOUNDS": 10.039,
+      "TRANSLATOR": 10.033,
+      "SLEEP_POD": 10.007,
+      "UV_VISOR": 10.003,
+      "SNACKPACK": 6.855
     }
   }
 }
