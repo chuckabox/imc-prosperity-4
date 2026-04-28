@@ -13,7 +13,7 @@ log_folders = glob.glob(os.path.join(str(runs_dir), "*"))
 for folder in log_folders:
     log_path = os.path.join(folder, "submission.log")
     metrics_path = os.path.join(folder, "metrics.json")
-    if not os.path.exists(log_path) or not os.path.exists(metrics_path):
+    if not os.path.exists(metrics_path):
         continue
 
     run_id = os.path.basename(folder)
@@ -39,47 +39,45 @@ for folder in log_folders:
             except ValueError:
                 pass
 
-    with open(log_path, "r", encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-        except Exception:
-            continue
-
-    activities_csv = data.get("activitiesLog", "")
-    if not activities_csv:
-        continue
-
-    lines = activities_csv.strip().split("\n")
-    header = lines[0].split(";")
-    try:
-        ts_idx = header.index("timestamp")
-        prod_idx = header.index("product")
-        mid_idx = header.index("mid_price")
-        pnl_idx = header.index("profit_and_loss")
-    except ValueError:
-        continue
-
     history = []
     market_prices = {}
-    row_counts = {}
+    if os.path.exists(log_path):
+        with open(log_path, "r", encoding="utf-8") as f:
+            try:
+                data = json.load(f)
+            except Exception:
+                data = {}
 
-    for line in lines[1:]:
-        cols = line.split(";")
-        if len(cols) < 10:
-            continue
-        sym = cols[prod_idx]
-        row_counts[sym] = row_counts.get(sym, 0) + 1
-        if row_counts[sym] % 200 != 0:
-            continue
+        activities_csv = data.get("activitiesLog", "")
+        if activities_csv:
+            lines = activities_csv.strip().split("\n")
+            header = lines[0].split(";")
+            try:
+                ts_idx = header.index("timestamp")
+                prod_idx = header.index("product")
+                mid_idx = header.index("mid_price")
+                pnl_idx = header.index("profit_and_loss")
+            except ValueError:
+                lines = []
 
-        ts = int(cols[ts_idx])
-        mid = float(cols[mid_idx])
-        pnl = float(cols[pnl_idx])
+            row_counts = {}
+            for line in lines[1:]:
+                cols = line.split(";")
+                if len(cols) < 10:
+                    continue
+                sym = cols[prod_idx]
+                row_counts[sym] = row_counts.get(sym, 0) + 1
+                if row_counts[sym] % 200 != 0:
+                    continue
 
-        if sym not in market_prices:
-            market_prices[sym] = []
-        market_prices[sym].append({"ts": ts, "mid": mid})
-        history.append({"ts": ts, "symbol": sym, "pnl": pnl})
+                ts = int(cols[ts_idx])
+                mid = float(cols[mid_idx])
+                pnl = float(cols[pnl_idx])
+
+                if sym not in market_prices:
+                    market_prices[sym] = []
+                market_prices[sym].append({"ts": ts, "mid": mid})
+                history.append({"ts": ts, "symbol": sym, "pnl": pnl})
 
     final_pnl_by_product = metrics.get("final_pnl_by_product", {})
 

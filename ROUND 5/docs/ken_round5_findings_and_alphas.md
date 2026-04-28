@@ -74,3 +74,15 @@ These manual actions were selected from raw order-book shock/reversal behavior, 
   - asymmetric clips for `PEBBLES_XL` and `MICROCHIP_SQUARE`,
   - dynamic hold (1 vs 2 ticks) when rebound remains strong,
   - spread-aware entry filter to skip expensive shocks.
+
+## Alpha + execution sweep update
+- Completed alpha parameter sweep (`ROUND 5/scratch/round5_alpha_sweep.csv`):
+  - robust winners are reversal-family settings, especially threshold `8` with hold `1-3`.
+  - robust shortlist saved to `ROUND 5/scratch/round5_alpha_sweep_robust.csv`.
+- Completed execution sweep on top of `reversal@8` (`ROUND 5/scratch/round5_execution_sweep.csv`):
+  - tested hold, spread cap, size scale, taker/passive mix.
+  - no robust positive-all-days configuration in this tested grid.
+- Conclusion:
+  - we have a valid directional alpha signal,
+  - but standalone execution around it is not enough to clear costs.
+  - next iteration must add signal-stacking filters (product/session/event gating) before expecting target pnl.
