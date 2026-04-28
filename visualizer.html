@@ -369,6 +369,7 @@
                 <span class="section-label">Data Source</span>
                 <div class="filter-row">
                     <div id="source-backtest-btn" class="select-pill source-pill active" onclick="setSourceFilter('backtest')">BACKTEST</div>
+                    <div id="source-i4bt-btn" class="select-pill source-pill" onclick="setSourceFilter('i4bt')">I4BT</div>
                     <div id="source-live-btn" class="select-pill source-pill" onclick="setSourceFilter('live')">LIVE LOGS</div>
                 </div>
                 <span class="section-label">Context Filter</span>
@@ -418,7 +419,17 @@
 
         <div id="tab-compare" class="tab-content hidden">
             <div class="panel" style="flex: 1.5;">
-                <span class="section-label">Backtest vs Live Comparison</span>
+                <span class="section-label">Multi-Source Comparison</span>
+                <div class="filter-row" style="margin-top:8px;">
+                    <div id="compare-source-a-backtest" class="select-pill source-pill active" onclick="setCompareSources('backtest', compareSources.b)">A: BACKTEST</div>
+                    <div id="compare-source-a-i4bt" class="select-pill source-pill" onclick="setCompareSources('i4bt', compareSources.b)">A: I4BT</div>
+                    <div id="compare-source-a-live" class="select-pill source-pill" onclick="setCompareSources('live', compareSources.b)">A: LIVE</div>
+                </div>
+                <div class="filter-row">
+                    <div id="compare-source-b-backtest" class="select-pill source-pill" onclick="setCompareSources(compareSources.a, 'backtest')">B: BACKTEST</div>
+                    <div id="compare-source-b-i4bt" class="select-pill source-pill" onclick="setCompareSources(compareSources.a, 'i4bt')">B: I4BT</div>
+                    <div id="compare-source-b-live" class="select-pill source-pill active" onclick="setCompareSources(compareSources.a, 'live')">B: LIVE</div>
+                </div>
                 <div id="compareNote" class="chart-note">Select one or more strategies to compare matching trader curves.</div>
                 <div class="chart-container"><canvas id="compareChart"></canvas></div>
             </div>
@@ -426,7 +437,7 @@
                 <div class="panel-header"><span class="section-label" style="margin:0;">Compare Summary</span></div>
                 <div class="table-scroll">
                     <table id="compareTable" class="sticky-table">
-                        <thead><tr><th>TRADER</th><th>BACKTEST PNL</th><th>LIVE PNL</th><th>DELTA (LIVE-BT)</th><th>COMMON TICKS</th><th>COVERAGE</th></tr></thead>
+                        <thead><tr><th>TRADER</th><th id="compare-col-a">A PNL</th><th id="compare-col-b">B PNL</th><th id="compare-col-delta">DELTA (B-A)</th><th>COMMON TICKS</th><th>COVERAGE</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -522,6 +533,7 @@
 
 <script src="backtest_comparison.js"></script>
 <script src="live_comparison.js"></script>
+<script src="i4bt_comparison.js"></script>
 <script>
     const COLORS = ['#00ff9d', '#00d1ff', '#ff4757', '#ffa502', '#cc44ff', '#eccc68', '#7bed9f', '#ff6b81', '#1e90ff', '#ffffff'];
     let currentFilters = { source: 'backtest', round: 5, day: 2 };
@@ -536,8 +548,11 @@
     let heatmapSortMetric = 'spread';
     let heatmapSortDirection = 'desc';
     let managerState = { groups: [], selectedDeleteIds: new Set() };
+    let compareSources = { a: 'backtest', b: 'live' };
     let charts = {};
     const LIVE_DATA_STORE = typeof LIVE_LOG_DATA !== 'undefined' ? LIVE_LOG_DATA : {};
+    const I4BT_DATA_STORE = typeof I4BT_DATA !== 'undefined' ? I4BT_DATA : {};
+    const SOURCE_LABELS = { backtest: 'BACKTEST', i4bt: 'I4BT', live: 'LIVE LOGS' };
     function colorForTraderName(name) {
         const s = String(name || '');
         let h = 0;
@@ -549,10 +564,14 @@
         return `hsl(${hue} ${sat}% ${lit}%)`;
     }
     function getDataStore() {
-        return currentFilters.source === 'live' ? LIVE_DATA_STORE : BACKTEST_DATA;
+        if (currentFilters.source === 'live') return LIVE_DATA_STORE;
+        if (currentFilters.source === 'i4bt') return I4BT_DATA_STORE;
+        return BACKTEST_DATA;
     }
     function getSourceStore(source) {
-        return source === 'live' ? LIVE_DATA_STORE : BACKTEST_DATA;
+        if (source === 'live') return LIVE_DATA_STORE;
+        if (source === 'i4bt') return I4BT_DATA_STORE;
+        return BACKTEST_DATA;
     }
     function getSourceFilteredIds(source, round, day) {
         const store = getSourceStore(source);
@@ -574,12 +593,25 @@
     }
     function updateSourcePills() {
         document.getElementById('source-backtest-btn')?.classList.toggle('active', currentFilters.source === 'backtest');
+        document.getElementById('source-i4bt-btn')?.classList.toggle('active', currentFilters.source === 'i4bt');
         document.getElementById('source-live-btn')?.classList.toggle('active', currentFilters.source === 'live');
+    }
+    function updateCompareSourcePills() {
+        ['backtest', 'i4bt', 'live'].forEach(src => {
+            document.getElementById(`compare-source-a-${src}`)?.classList.toggle('active', compareSources.a === src);
+            document.getElementById(`compare-source-b-${src}`)?.classList.toggle('active', compareSources.b === src);
+        });
+        const colA = document.getElementById('compare-col-a');
+        const colB = document.getElementById('compare-col-b');
+        const colD = document.getElementById('compare-col-delta');
+        if (colA) colA.textContent = `${SOURCE_LABELS[compareSources.a] || 'A'} PNL`;
+        if (colB) colB.textContent = `${SOURCE_LABELS[compareSources.b] || 'B'} PNL`;
+        if (colD) colD.textContent = `DELTA (${SOURCE_LABELS[compareSources.b] || 'B'}-${SOURCE_LABELS[compareSources.a] || 'A'})`;
     }
     function updateContextBadge() {
         const el = document.getElementById('contextBadge');
         if (!el) return;
-        const sourceLabel = currentFilters.source === 'live' ? 'LIVE LOGS' : 'BACKTEST';
+        const sourceLabel = SOURCE_LABELS[currentFilters.source] || 'BACKTEST';
         const dayLabel = currentFilters.day === 'total' ? 'TOTAL' : `D${currentFilters.day}`;
         el.textContent = `Viewing: ${sourceLabel} | R${currentFilters.round} ${dayLabel}`;
     }
@@ -604,11 +636,11 @@
         if (selectAllBtn) selectAllBtn.textContent = isLive ? 'SELECT ALL CLEAN CANDIDATES' : 'SELECT ALL DELETE CANDIDATES';
     }
     function setSourceFilter(source) {
-        if (source !== 'backtest' && source !== 'live') return;
+        if (!['backtest', 'i4bt', 'live'].includes(source)) return;
         currentFilters.source = source;
         const availableDays = getAvailableDays(currentFilters.round);
         const totalBtn = document.getElementById('dtotal-btn');
-        if (totalBtn) totalBtn.style.display = source === 'backtest' ? 'block' : 'none';
+        if (totalBtn) totalBtn.style.display = source === 'live' ? 'none' : 'block';
         if (source === 'live' && currentFilters.day === 'total') {
             currentFilters.day = availableDays.length ? availableDays[0] : 0;
         }
@@ -622,6 +654,12 @@
         renderSidebar();
         renderActiveTab();
         refreshDuplicateManager();
+    }
+    function setCompareSources(a, b) {
+        if (!['backtest', 'i4bt', 'live'].includes(a) || !['backtest', 'i4bt', 'live'].includes(b) || a === b) return;
+        compareSources = { a, b };
+        updateCompareSourcePills();
+        if (activeTab === 'compare') renderCompare();
     }
 
     function init() {
@@ -639,6 +677,7 @@
         updateStabilitySortIndicators();
         updateHeatmapSortIndicators();
         updateSourcePills();
+        updateCompareSourcePills();
         updateRefreshButton();
         updateManagerModeUI();
         setSourceFilter(currentFilters.source || 'backtest');
@@ -856,8 +895,8 @@
         });
     }
     function hasCompareCounterpart(run, source) {
-        const otherSource = source === 'backtest' ? 'live' : 'backtest';
-        const otherStore = getSourceStore(otherSource);
+        const otherSource = source === compareSources.a ? compareSources.b : compareSources.a;
+        const otherStore = getSourceStore(otherSource || 'live');
         return Object.values(otherStore).some(r => r.round === run.round && r.trader === run.trader);
     }
     function toggleSelect(id) {
@@ -1328,28 +1367,29 @@
         const compareNote = document.getElementById('compareNote');
         if (compareTableBody) compareTableBody.innerHTML = '';
         if (selectedIds.length === 0) {
-            if (compareNote) compareNote.textContent = 'Select one or more strategies in the sidebar to compare backtest vs live.';
+            if (compareNote) compareNote.textContent = 'Select one or more strategies in the sidebar to compare source A vs source B.';
             if (charts.compare) charts.compare.destroy();
             return;
         }
-        const btStore = getSourceStore('backtest');
-        const liveStore = getSourceStore('live');
+        const sourceAStore = getSourceStore(compareSources.a);
+        const sourceBStore = getSourceStore(compareSources.b);
         const round = currentFilters.round;
-        const btRoundRuns = Object.values(btStore).filter(r => r.round === round);
-        const liveRoundRuns = Object.values(liveStore).filter(r => r.round === round);
-        const btDays = [...new Set(btRoundRuns.map(r => r.day))].sort((a, b) => a - b).slice(0, 3);
-        const liveDays = [...new Set(liveRoundRuns.map(r => r.day))].sort((a, b) => a - b);
-        if (!btDays.length || !liveDays.length) {
-            if (compareNote) compareNote.textContent = `Missing ${!btDays.length ? 'backtest' : 'live'} data for round ${round}.`;
+        const sourceARoundRuns = Object.values(sourceAStore).filter(r => r.round === round);
+        const sourceBRoundRuns = Object.values(sourceBStore).filter(r => r.round === round);
+        const sourceADays = [...new Set(sourceARoundRuns.map(r => r.day))].sort((a, b) => a - b).slice(0, 3);
+        const sourceBDays = [...new Set(sourceBRoundRuns.map(r => r.day))].sort((a, b) => a - b);
+        if (!sourceADays.length || !sourceBDays.length) {
+            const missing = !sourceADays.length ? (SOURCE_LABELS[compareSources.a] || 'source A') : (SOURCE_LABELS[compareSources.b] || 'source B');
+            if (compareNote) compareNote.textContent = `Missing ${missing} data for round ${round}.`;
             if (charts.compare) charts.compare.destroy();
             return;
         }
 
         // Build a canonical multi-day x-axis from backtest timestamps: Day1 segment | Day2 segment | Day3 segment.
         const dayTsMap = new Map();
-        btDays.forEach(day => {
+        sourceADays.forEach(day => {
             const ts = new Set();
-            Object.values(btStore)
+            Object.values(sourceAStore)
                 .filter(r => r.round === round && r.day === day)
                 .forEach(r => (r.history || []).forEach(h => ts.add(h.ts)));
             dayTsMap.set(day, [...ts].sort((a, b) => a - b));
@@ -1357,7 +1397,7 @@
         const labels = [];
         const indexByDayTs = new Map();
         const dayZones = [];
-        btDays.forEach((day, zoneIdx) => {
+        sourceADays.forEach((day, zoneIdx) => {
             const start = labels.length;
             const tsList = dayTsMap.get(day) || [];
             tsList.forEach(ts => {
@@ -1369,7 +1409,7 @@
             dayZones.push({ day, start, end, zoneIdx });
         });
         if (!labels.length) {
-            if (compareNote) compareNote.textContent = `No backtest timeline data for round ${round}.`;
+            if (compareNote) compareNote.textContent = `No ${SOURCE_LABELS[compareSources.a] || 'source A'} timeline data for round ${round}.`;
             if (charts.compare) charts.compare.destroy();
             return;
         }
@@ -1411,19 +1451,19 @@
             let btCarry = 0;
             let liveCarry = 0;
 
-            btDays.forEach(day => {
-                let btId = null;
-                if (currentFilters.source === 'backtest' && selectedRun.day === day) btId = selectedId;
-                if (!btId) {
-                    const dayCandidates = Object.entries(btStore)
+            sourceADays.forEach(day => {
+                let sourceAId = null;
+                if (currentFilters.source === compareSources.a && selectedRun.day === day) sourceAId = selectedId;
+                if (!sourceAId) {
+                    const dayCandidates = Object.entries(sourceAStore)
                         .filter(([_, r]) => r.round === round && r.day === day && r.trader === trader)
                         .sort((a, b) => (b[1].final_pnl || 0) - (a[1].final_pnl || 0));
-                    btId = dayCandidates[0]?.[0] || null;
+                    sourceAId = dayCandidates[0]?.[0] || null;
                 }
-                if (!btId) return;
-                usedBtIds.add(btId);
-                const btCurve = buildEquityCurve(btStore[btId].history || []);
-                btTotalPnl += Number(btStore[btId].final_pnl || 0);
+                if (!sourceAId) return;
+                usedBtIds.add(sourceAId);
+                const btCurve = buildEquityCurve(sourceAStore[sourceAId].history || []);
+                btTotalPnl += Number(sourceAStore[sourceAId].final_pnl || 0);
                 const btMap = new Map(btCurve.map(p => [p.ts, p.pnl]));
                 btMap.forEach((pnl, ts) => {
                     const idx = indexByDayTs.get(`${day}:${ts}`);
@@ -1432,19 +1472,19 @@
                 const btDayFinal = btCurve.length ? Number(btCurve[btCurve.length - 1].pnl || 0) : 0;
                 btCarry += btDayFinal;
 
-                let liveId = null;
-                if (currentFilters.source === 'live' && selectedRun.day === day) liveId = selectedId;
-                if (!liveId) {
-                    const dayCandidates = Object.entries(liveStore)
+                let sourceBId = null;
+                if (currentFilters.source === compareSources.b && selectedRun.day === day) sourceBId = selectedId;
+                if (!sourceBId) {
+                    const dayCandidates = Object.entries(sourceBStore)
                         .filter(([_, r]) => r.round === round && r.day === day && r.trader === trader)
                         .sort((a, b) => (b[1].final_pnl || 0) - (a[1].final_pnl || 0));
-                    liveId = dayCandidates[0]?.[0] || null;
+                    sourceBId = dayCandidates[0]?.[0] || null;
                 }
-                if (!liveId) return;
-                usedLiveIds.add(liveId);
-                const liveCurve = buildEquityCurve(liveStore[liveId].history || []);
+                if (!sourceBId) return;
+                usedLiveIds.add(sourceBId);
+                const liveCurve = buildEquityCurve(sourceBStore[sourceBId].history || []);
                 const liveMap = new Map(liveCurve.map(p => [p.ts, p.pnl]));
-                liveLatestPnl = Number(liveStore[liveId].final_pnl || liveLatestPnl);
+                liveLatestPnl = Number(sourceBStore[sourceBId].final_pnl || liveLatestPnl);
                 liveMap.forEach((pnl, ts) => {
                     const idx = indexByDayTs.get(`${day}:${ts}`);
                     if (idx !== undefined) {
@@ -1464,7 +1504,7 @@
             const btRef = [...usedBtIds].slice(0, 2).join(',') || '-';
             const liveRef = [...usedLiveIds].slice(0, 2).join(',') || '-';
             datasets.push({
-                label: `${trader} BT (${btRef})`,
+                label: `${trader} ${SOURCE_LABELS[compareSources.a] || 'A'} (${btRef})`,
                 data: denseBtData,
                 borderColor: color,
                 backgroundColor: 'transparent',
@@ -1475,7 +1515,7 @@
                 tension: 0.15
             });
             datasets.push({
-                label: `${trader} LIVE (${liveRef})`,
+                label: `${trader} ${SOURCE_LABELS[compareSources.b] || 'B'} (${liveRef})`,
                 data: denseLiveData,
                 borderColor: '#ffffff',
                 backgroundColor: 'rgba(255, 165, 0, 0.26)',
@@ -1488,7 +1528,7 @@
             });
             const coverage = Math.round((commonTicks / Math.max(livePlottedPoints, 1)) * 100);
             summaryRows.push({
-                trader: `${trader} (BT:${btRef} | LIVE:${liveRef})`,
+                trader: `${trader} (${(SOURCE_LABELS[compareSources.a] || 'A')}:${btRef} | ${(SOURCE_LABELS[compareSources.b] || 'B')}:${liveRef})`,
                 btFinal: btTotalPnl,
                 liveFinal: liveLatestPnl,
                 delta: liveLatestPnl - btTotalPnl,
@@ -1611,7 +1651,7 @@
         summaryRows.forEach(row => {
             compareTableBody.innerHTML += `<tr><td><b>${row.trader}</b></td><td>${Math.round(row.btFinal).toLocaleString()}</td><td>${Math.round(row.liveFinal).toLocaleString()}</td><td style="color:${row.delta >= 0 ? 'var(--accent)' : 'var(--danger)'}">${Math.round(row.delta).toLocaleString()}</td><td>${row.commonTicks}</td><td>${row.coverage}%</td></tr>`;
         });
-        if (compareNote) compareNote.textContent = `Round ${round}: Backtest plotted across ${btDays.length} day zones; live is overlaid on matching day zones.`;
+        if (compareNote) compareNote.textContent = `Round ${round}: ${SOURCE_LABELS[compareSources.a] || 'A'} plotted across ${sourceADays.length} day zones; ${SOURCE_LABELS[compareSources.b] || 'B'} is overlaid on matching day zones.`;
     }
 
     function renderPerformance() {

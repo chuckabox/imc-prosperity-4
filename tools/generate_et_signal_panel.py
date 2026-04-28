@@ -13,7 +13,7 @@ import pandas as pd
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Generate normalized e_t signal panel for option-like strikes."
+        description="Generate normalized e_t signal panel."
     )
     p.add_argument(
         "--prices",
@@ -22,14 +22,20 @@ def parse_args() -> argparse.Namespace:
         help="One or more prices CSV files (semicolon-separated IMC format).",
     )
     p.add_argument(
+        "--mode",
+        choices=["option_like", "cross_section"],
+        default="option_like",
+        help="Signal mode: option_like (strike vs underlying) or cross_section (symbol vs group mean).",
+    )
+    p.add_argument(
         "--underlying",
-        required=True,
-        help="Underlying product symbol, e.g. VELVETFRUIT_EXTRACT",
+        default="",
+        help="Underlying product symbol (required for --mode option_like), e.g. VELVETFRUIT_EXTRACT",
     )
     p.add_argument(
         "--prefix",
         required=True,
-        help="Option symbol prefix, e.g. VEV",
+        help="Symbol group prefix, e.g. VEV or PEBBLES",
     )
     p.add_argument(
         "--rolling-window",
@@ -76,6 +82,12 @@ def option_symbols(df: pd.DataFrame, prefix: str) -> list[str]:
     return symbols
 
 
+def grouped_symbols(df: pd.DataFrame, prefix: str) -> list[str]:
+    symbols = [s for s in df["product"].unique().tolist() if s.startswith(prefix + "_")]
+    symbols.sort()
+    return symbols
+
+
 def compute_et_for_symbol(
     merged: pd.DataFrame,
     symbol: str,
@@ -101,6 +113,26 @@ def compute_et_for_symbol(
     roll_std = roll_std.replace(0, np.nan)
     s["e_t"] = s["raw_e"] / roll_std
     s["symbol"] = symbol
+    return s
+
+
+def compute_cross_section_et(
+    merged: pd.DataFrame,
+    symbol: str,
+    symbols_group: list[str],
+    rolling_window: int,
+) -> pd.DataFrame:
+    g = merged[merged["product"].isin(symbols_group)].copy()
+    g["group_mean"] = g.groupby("global_t")["mid_price"].transform("mean")
+    s = g[g["product"] == symbol].copy().sort_values("global_t").reset_index(drop=True)
+    s["theo"] = s["group_mean"]
+    s["raw_e"] = s["mid_price"] - s["theo"]
+    roll_std = s["raw_e"].rolling(window=rolling_window, min_periods=max(20, rolling_window // 5)).std()
+    roll_std = roll_std.replace(0, np.nan)
+    s["e_t"] = s["raw_e"] / roll_std
+    s["symbol"] = symbol
+    s["underlying_mid"] = np.nan
+    s["intrinsic"] = np.nan
     return s
 
 
@@ -170,11 +202,18 @@ def main() -> None:
     out_csv = Path(args.out_csv).resolve() if args.out_csv else None
 
     all_prices = load_prices(price_files)
-    symbols = option_symbols(all_prices, args.prefix)
-    if not symbols:
-        raise ValueError(f"No option symbols found for prefix {args.prefix}")
-    if args.underlying not in set(all_prices["product"].unique()):
-        raise ValueError(f"Underlying symbol {args.underlying} not found in prices data")
+    if args.mode == "option_like":
+        symbols = option_symbols(all_prices, args.prefix)
+        if not symbols:
+            raise ValueError(f"No option-like symbols found for prefix {args.prefix} (expected PREFIX_<number>)")
+        if not args.underlying:
+            raise ValueError("--underlying is required for --mode option_like")
+        if args.underlying not in set(all_prices["product"].unique()):
+            raise ValueError(f"Underlying symbol {args.underlying} not found in prices data")
+    else:
+        symbols = grouped_symbols(all_prices, args.prefix)
+        if not symbols:
+            raise ValueError(f"No grouped symbols found for prefix {args.prefix}")
 
     # Build a global timeline across files to get clean day boundaries on a single axis.
     frames = []
@@ -189,14 +228,20 @@ def main() -> None:
         global_offset += len(ts_sorted)
     global_df = pd.concat(frames, ignore_index=True)
 
-    under = global_df[global_df["product"] == args.underlying][["global_t", "mid_price"]].rename(
-        columns={"mid_price": "underlying_mid"}
-    )
-    merged = global_df.merge(under, on="global_t", how="left")
+    if args.mode == "option_like":
+        under = global_df[global_df["product"] == args.underlying][["global_t", "mid_price"]].rename(
+            columns={"mid_price": "underlying_mid"}
+        )
+        merged = global_df.merge(under, on="global_t", how="left")
+    else:
+        merged = global_df.copy()
 
     out_series = []
     for symbol in symbols:
-        out_series.append(compute_et_for_symbol(merged, symbol, args.rolling_window))
+        if args.mode == "option_like":
+            out_series.append(compute_et_for_symbol(merged, symbol, args.rolling_window))
+        else:
+            out_series.append(compute_cross_section_et(merged, symbol, symbols, args.rolling_window))
     et_df = pd.concat(out_series, ignore_index=True)
     bounds = day_boundaries(global_df)
 
@@ -208,6 +253,7 @@ def main() -> None:
     print(f"Wrote panel: {out_png}")
     if out_csv:
         print(f"Wrote series: {out_csv}")
+    print(f"Mode: {args.mode}")
     print(f"Symbols: {symbols}")
 
 

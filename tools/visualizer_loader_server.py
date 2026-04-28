@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from build_live_comparison import write_live_data_js
+from build_i4bt_comparison import write_i4bt_data_js
 
 
 class VisualizerHandler(SimpleHTTPRequestHandler):
@@ -33,7 +34,7 @@ class VisualizerHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         # Prevent stale UI/data after refetch; always validate with fresh fetch.
-        if path.endswith("visualizer.html") or path.endswith("backtest_comparison.js") or path.endswith("live_comparison.js"):
+        if path.endswith("visualizer.html") or path.endswith("backtest_comparison.js") or path.endswith("live_comparison.js") or path.endswith("i4bt_comparison.js"):
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")
@@ -62,12 +63,14 @@ class VisualizerHandler(SimpleHTTPRequestHandler):
             backtest_cleanup = self._clean_backtest_dataset()
             live_cleanup = self._clean_live_logs()
             live_stats = write_live_data_js(self.repo_root, "live_comparison.js")
+            i4bt_stats = write_i4bt_data_js("i4bt_comparison.js")
             result = {
                 "ok": True,
                 "backtest_rebuild": backtest_rebuild,
                 "backtest_cleanup": backtest_cleanup,
                 "live_cleanup": live_cleanup,
                 "live": live_stats,
+                "i4bt": i4bt_stats,
             }
             backtest_path = self.repo_root / "backtest_comparison.js"
             if backtest_path.exists():

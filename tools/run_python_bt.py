@@ -6,6 +6,7 @@ import os
 import shlex
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 
@@ -42,12 +43,21 @@ def main() -> int:
         print(f"ERROR: trader file not found: {trader}", file=sys.stderr)
         return 1
 
+    bt_out_dir = BT_ROOT / "backtests"
+    bt_out_dir.mkdir(parents=True, exist_ok=True)
+    trader_stem = trader.stem
+    day_tokens = "+".join(args.rounds_or_days)
+    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    out_file = bt_out_dir / f"{trader_stem}__{day_tokens}__{stamp}.log"
+
     cmd = [
         sys.executable,
         "-m",
         "prosperity4bt",
         str(trader),
         *args.rounds_or_days,
+        "--out",
+        str(out_file),
         "--data",
         str(Path(args.data).resolve()),
         "--no-vis",
@@ -62,7 +72,21 @@ def main() -> int:
     env["PYTHONPATH"] = str(REPO_ROOT) if not prev else str(REPO_ROOT) + os.pathsep + prev
 
     print("Running:", shlex.join(cmd))
-    return subprocess.run(cmd, cwd=str(BT_ROOT), env=env).returncode
+    rc = subprocess.run(cmd, cwd=str(BT_ROOT), env=env).returncode
+    if rc == 0:
+        meta = {
+            "trader_path": str(trader),
+            "rounds_or_days": list(args.rounds_or_days),
+            "data_root": str(Path(args.data).resolve()),
+            "created_at": datetime.now().isoformat(),
+            "engine": "i4bt",
+        }
+        out_file.with_suffix(".meta.json").write_text(
+            __import__("json").dumps(meta, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        print(f"Saved log: {out_file}")
+    return rc
 
 
 if __name__ == "__main__":
