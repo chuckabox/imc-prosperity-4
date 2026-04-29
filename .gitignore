@@ -40,3 +40,6 @@ Thumbs.db
 # Cursor / local scratch
 uploads/
 .worktrees/
+
+# Backtester outputs (very large, generated files)
+external/imc-prosperity-4-backtester/backtests/*.log

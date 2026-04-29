@@ -1,6 +1,6 @@
 # Visualizer Guide
 
-This document explains the current behavior of `visualizer.html`, including backtest + live-log workflows.
+This document explains the current behavior of `visualizer.html`, including multi-source workflows (Rust backtest + i4bt + live logs).
 
 ## Purpose
 
@@ -18,11 +18,17 @@ The visualizer helps compare strategy behavior and readiness via:
 Primary files:
 
 - `backtest_comparison.js` (`BACKTEST_DATA`)
+- `i4bt_comparison.js` (`I4BT_DATA`)
 - `live_comparison.js` (`LIVE_LOG_DATA`)
 
 Live data is generated from `ROUND */live_logs/**` by:
 
 - `tools/build_live_comparison.py`
+- API trigger via `tools/visualizer_loader_server.py` (`/api/load-data`)
+
+i4bt data is generated from `external/imc-prosperity-4-backtester/backtests/*.log` by:
+
+- `tools/build_i4bt_comparison.py`
 - API trigger via `tools/visualizer_loader_server.py` (`/api/load-data`)
 
 Typical run fields:
@@ -46,17 +52,17 @@ Open:
 Top tabs:
 
 - `OVERLAY`: core curve + leaderboard
-- `COMPARE`: backtest vs live overlay
+- `COMPARE`: multi-source overlay
 - `ATTRIBUTION`: product breakdown and asset leaderboard
 - `STABILITY`: day consistency matrix + heatmap
 - `MANAGER`: duplicate scan/cleanup
 
 Sidebar filters:
 
-- Source: `BACKTEST` / `LIVE LOGS`
+- Source: `BACKTEST` / `I4BT` / `LIVE LOGS`
 - Round: `R3` / `R4` / `R5`
 - Day:
-  - Backtest: `TOTAL`, `D0`, `D1`, `D2`, `D3`
+  - Backtest + i4bt: `TOTAL`, `D0`, `D1`, `D2`, `D3` (as available by source)
   - Live logs: day-only (`D#`), no `TOTAL`
 
 Header actions:
@@ -99,14 +105,15 @@ Special handling in `BACKTEST + TOTAL`:
 
 ## COMPARE Tab
 
-Compares selected strategies between backtest and live on the same chart.
+Compares selected strategies across multiple sources on the same chart.
 
 Key behavior:
 
 - Requires explicit strategy selection (empty selection shows no chart).
 - Uses round-level matching and multi-day zoning.
-- Backtest timeline is shown across day zones.
-- Live curves are overlaid where matching day data exists.
+- Source A and Source B are user-selectable (`BACKTEST` / `I4BT` / `LIVE`).
+- Optional `ALL 3: ON` overlays the third source on the same graph.
+- Source A timeline is used to define day zones.
 - Orange gap rendering shows divergence detail by segment.
 - Zoom/pan enabled:
   - wheel zoom (x-axis)
@@ -116,9 +123,10 @@ Key behavior:
 Summary table includes:
 
 - Trader
-- Backtest PnL
-- Live PnL
-- Delta (live - backtest)
+- Source A PnL
+- Source B PnL
+- Source C PnL (when `ALL 3: ON`)
+- Delta (B - A)
 - Common ticks
 - Coverage
 
@@ -172,8 +180,9 @@ Live-mode remove:
 When called via loader server API:
 
 - Runs backtest cleanup + rewrite
+- Rebuilds i4bt dataset
 - Runs live log cleanup + rebuild
-- Updates `backtest_comparison.js` and `live_comparison.js`
+- Updates `backtest_comparison.js`, `i4bt_comparison.js`, and `live_comparison.js`
 
 ## Export Snapshot
 
@@ -199,5 +208,7 @@ Useful for offline analysis or AI-assisted review.
 - UI + interaction logic: `visualizer.html`
 - Loader/API server: `tools/visualizer_loader_server.py`
 - Live data builder: `tools/build_live_comparison.py`
+- i4bt data builder: `tools/build_i4bt_comparison.py`
 - Backtest payload: `backtest_comparison.js`
+- i4bt payload: `i4bt_comparison.js`
 - Live payload: `live_comparison.js`

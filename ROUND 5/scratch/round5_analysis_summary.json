@@ -1,0 +1,65 @@
+{
+  "signal_quality": {
+    "day_2": {
+      "trades": 65578,
+      "mean_edge_bps": -0.05217260731331401,
+      "win_rate": 0.48520845405471347
+    },
+    "day_3": {
+      "trades": 80277,
+      "mean_edge_bps": -0.003363783196455635,
+      "win_rate": 0.48827185868928835
+    },
+    "day_4": {
+      "trades": 75122,
+      "mean_edge_bps": 0.015178218598577646,
+      "win_rate": 0.4892175394691302
+    }
+  },
+  "manual_trade_candidates": {
+    "day_2_first10pct": [],
+    "day_2_full": [],
+    "day_3_first10pct": [],
+    "day_3_full": [],
+    "day_4_first10pct": [],
+    "day_4_full": []
+  },
+  "family_volatility": {
+    "day_2_top": {
+      "PEBBLES": 18.506,
+      "MICROCHIP": 14.088,
+      "OXYGEN_SHAKE": 10.966,
+      "ROBOT": 10.706,
+      "PANEL": 10.062,
+      "GALAXY_SOUNDS": 10.037,
+      "SLEEP_POD": 10.031,
+      "UV_VISOR": 10.029,
+      "TRANSLATOR": 10.01,
+      "SNACKPACK": 6.991
+    },
+    "day_3_top": {
+      "PEBBLES": 18.481,
+      "MICROCHIP": 14.159,
+      "ROBOT": 10.268,
+      "OXYGEN_SHAKE": 10.24,
+      "UV_VISOR": 10.047,
+      "PANEL": 10.038,
+      "GALAXY_SOUNDS": 10.019,
+      "SLEEP_POD": 10.001,
+      "TRANSLATOR": 9.989,
+      "SNACKPACK": 6.902
+    },
+    "day_4_top": {
+      "PEBBLES": 19.075,
+      "ROBOT": 14.759,
+      "MICROCHIP": 14.158,
+      "OXYGEN_SHAKE": 10.671,
+      "PANEL": 10.046,
+      "GALAXY_SOUNDS": 10.039,
+      "TRANSLATOR": 10.033,
+      "SLEEP_POD": 10.007,
+      "UV_VISOR": 10.003,
+      "SNACKPACK": 6.855
+    }
+  }
+}
