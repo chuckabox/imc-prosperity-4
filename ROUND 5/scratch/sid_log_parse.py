@@ -3,7 +3,8 @@ import json
 import os
 from collections import defaultdict
 
-LOG = "/Users/siddhant/Desktop/prosperity/imc-prosperity-4/ROUND 5/live_logs/sid/v1.json"
+import sys
+LOG = sys.argv[1] if len(sys.argv) > 1 else "/Users/siddhant/Desktop/prosperity/imc-prosperity-4/ROUND 5/live_logs/sid/v1.json"
 
 with open(LOG, "r", encoding="utf-8") as f:
     blob = json.load(f)
