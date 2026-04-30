@@ -132,7 +132,8 @@
       "Bash(./target/release/rust_backtester.exe --trader 'C:/Users/ductv/Desktop/Projects/imc prosperity/imc-prosperity-4/ROUND 3/traders/ken/we found vfe gold.py' --dataset 'C:/Users/ductv/Desktop/Projects/imc prosperity/imc-prosperity-4/ROUND 3/data_capsule' --carry --products full)",
       "Bash(git config *)",
       "Bash(rtk ls *)",
-      "Bash(rtk read *)"
+      "Bash(rtk read *)",
+      "PowerShell(wsl bash -c \"/mnt/c/Users/peter/Desktop/IMC/imc-prosperity-4/external/prosperity_rust_backtester/target/release/rust_backtester --help\" 2>&1)"
     ]
   }
 }
