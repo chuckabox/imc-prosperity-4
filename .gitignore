@@ -43,4 +43,5 @@ uploads/
 
 # Backtester outputs (very large, generated files)
 external/imc-prosperity-4-backtester/backtests/*.log
+external/imc-prosperity-4-backtester/backtests/*.meta.json
 /backtests/
