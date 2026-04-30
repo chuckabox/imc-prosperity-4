@@ -90,3 +90,7 @@ peter fix:
 ```bash
 C:\Users\peter\anaconda3\Scripts\prosperity4btest.exe cli "ROUND 5/traders/peter/kingtrader3.py" 5
 ```
+
+# Alternate backtester
+
+PYTHONPATH="external/imc-prosperity-4-backtester" python3 -m prosperity4bt "ROUND 5/traders/peter/answer2.py" 5
