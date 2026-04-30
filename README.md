@@ -84,3 +84,9 @@ prosperity4btest cli "ROUND 5/traders/adin/Blue.py" 5
 Ensure you put the number 5 at the end to specify round 5. 
 Also don't forget quotations around the path to the file
 
+
+
+peter fix:
+```bash
+C:\Users\peter\anaconda3\Scripts\prosperity4btest.exe cli "ROUND 5/traders/peter/kingtrader3.py" 5
+```
