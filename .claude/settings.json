@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PYTHONPATH=prosperity4bt python3 -m prosperity4bt \"/Users/Adin/Library/CloudStorage/OneDrive-TheUniversityofQueensland/IMC Prosperity/imc-prosperity-4/ROUND 5/traders/ken/MATH1061.py\" 5 --no-out --no-vis --no-progress)",
+      "Bash(PYTHONPATH=prosperity4bt python3 -m prosperity4bt \"/Users/Adin/Library/CloudStorage/OneDrive-TheUniversityofQueensland/IMC Prosperity/imc-prosperity-4/ROUND 5/traders/adin/Blue.py\" 5 --no-out --no-vis --no-progress)",
+      "Bash(grep -v \": 0$\")",
+      "Bash(PYTHONPATH=prosperity4bt python3 -m prosperity4bt /tmp/blue_tune.py 5 --no-out --no-vis --no-progress)",
+      "Bash(sort -t: -k2 -nr)",
+      "Bash(chmod +x /tmp/sweep_blue.sh)",
+      "Bash(/tmp/sweep_blue.sh)",
+      "Bash(awk -F';' 'NR>1 && $4==\"MICROCHIP_OVAL\" {print $5,$6}' \"/Users/Adin/Library/CloudStorage/OneDrive-TheUniversityofQueensland/IMC Prosperity/imc-prosperity-4/external/imc-prosperity-4-backtester/prosperity4bt/resources/round5/trades_round_5_day_2.csv\")",
+      "Read(//private/tmp/**)",
+      "Bash(sort -n -t= -k1 /tmp/sweep_results.txt)",
+      "Bash(awk '{n=$1; gsub\\(\",\",\"\",n\\); print n+0, $0}' /tmp/sweep_results.txt)",
+      "Bash(chmod +x /tmp/sweep2.sh)",
+      "Bash(/tmp/sweep2.sh)",
+      "Bash(awk '{n=$1; gsub\\(\",\",\"\",n\\); print n+0, $0}' /tmp/sweep2_results.txt)",
+      "Bash(git push *)"
+    ]
+  }
+}
