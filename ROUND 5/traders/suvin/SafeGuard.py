@@ -1,6 +1,9 @@
-"""SafeGuard.py - Refined version of kingking.py
-Restores the profitable 'holding' core of kingking while adding a 
-dynamic entry buffer to reduce drawdown depth.
+"""SafeGuard.py - v3 (High Protection)
+Minimizes drawdown via a multi-stage pressure system:
+1. Multi-Stage Skew: 0.25 -> 0.40 -> 0.60 as family room shrinks.
+2. Multi-Stage Edge: Entry edge 1 -> 2 -> 3 as family room shrinks.
+3. Shock Filter: Skips quoting if mid-price shocks > max(10, 1.5*spread).
+4. Tighter Limits: 16/16/10 family caps.
 """
 
 import json
@@ -37,20 +40,20 @@ WHITELIST = (
     "PANEL_4X4",
 )
 
-# Balanced Limits: Slightly lower than kingking's 25/25/15 to reduce dip depth.
+# High Protection Limits: Significantly lower to ensure small dip magnitude.
 FAMILY_LIMITS = {
-    "ROBOT":      22,
-    "TRANSLATOR": 22,
-    "PANEL":      14,
+    "ROBOT":      16,
+    "TRANSLATOR": 16,
+    "PANEL":      10,
 }
 
 # ----- MM knobs -----
-MM_EDGE       = 1     # Base edge
+MM_EDGE       = 1     
 MM_CLIP       = 2     
 MM_SPREAD_MIN = 3     
-MM_SPREAD_MAX = 10    # Reverted to kingking
-INV_SKEW      = 0.25  # Reverted to kingking (prevents churning)
-INV_HARD_FRAC = 0.80  # Reverted to kingking
+MM_SPREAD_MAX = 10    
+INV_SKEW_BASE = 0.25  
+INV_HARD_FRAC = 0.70  
 
 
 def _family(sym: str) -> str:
@@ -63,15 +66,17 @@ def _family(sym: str) -> str:
 class Trader:
     def _load(self, td: str) -> Dict:
         if not td:
-            return {"last_ts": -1}
+            return {"last_ts": -1, "mids": {}}
         try:
             mem = json.loads(td)
             mem.setdefault("last_ts", -1)
+            mem.setdefault("mids", {})
             return mem
         except Exception:
-            return {"last_ts": -1}
+            return {"last_ts": -1, "mids": {}}
 
     def _save(self, mem: Dict) -> str:
+        # Keep traderData slim
         return json.dumps(mem, separators=(",", ":"))
 
     def _bba(self, state: TradingState, sym: str):
@@ -85,7 +90,10 @@ class Trader:
 
     def run(self, state: TradingState):
         mem = self._load(state.traderData)
+        if mem["last_ts"] >= 0 and state.timestamp < mem["last_ts"]:
+            mem = {"last_ts": -1, "mids": {}}
         mem["last_ts"] = state.timestamp
+        last_mids = mem["mids"]
 
         result: Dict[str, List[Order]] = defaultdict(list)
 
@@ -100,28 +108,42 @@ class Trader:
                 continue
 
             mid = 0.5 * (bid + ask)
-            pos = state.position.get(sym, 0)
             
+            # --- Shock Filter ---
+            prev_mid = last_mids.get(sym, mid)
+            last_mids[sym] = mid
+            if abs(mid - prev_mid) > max(10, 1.5 * spread):
+                continue
+
+            pos = state.position.get(sym, 0)
             fam = _family(sym)
             fam_lim = FAMILY_LIMITS.get(fam, SYM_LIMIT * 2)
             fam_used = self._family_pos(fam, state.position)
             fam_room = max(0, fam_lim - fam_used)
             
-            # Kingking logic: if family is full, STOP quoting to prevent churning at realized losses.
-            # This allows the trader to 'hold' through the dip and wait for mean reversion recovery.
+            # Kingking logic: if family is full, STOP quoting to prevent churning.
             if fam_room <= 0:
                 continue
 
-            # Inventory-skewed fair price.
-            fair = mid - INV_SKEW * pos
+            # --- Multi-Stage Pressure System ---
+            skew = INV_SKEW_BASE
+            if fam_room < 3: skew = 0.60
+            elif fam_room < 6: skew = 0.40
             
-            # Dynamic Entry Buffer: If we are near the family limit, 
-            # increase the required edge for entries to slow down loading.
-            # Entry on bid side means we are increasing pos (pos >= 0) or closing short (pos < 0).
-            # We only increase edge for true entries (increasing pos).
-            bid_edge = 2 if fam_room < 5 and pos >= 0 else MM_EDGE
-            ask_edge = 2 if fam_room < 5 and pos <= 0 else MM_EDGE
+            fair = mid - skew * pos
             
+            # Entry/Exit edges
+            bid_edge = MM_EDGE
+            ask_edge = MM_EDGE
+            
+            # Increase edge for entries as family fills up
+            if fam_room < 3:
+                if pos >= 0: bid_edge = 3
+                if pos <= 0: ask_edge = 3
+            elif fam_room < 6:
+                if pos >= 0: bid_edge = 2
+                if pos <= 0: ask_edge = 2
+
             mm_bid_px = int(round(fair - bid_edge))
             mm_ask_px = int(round(fair + ask_edge))
 
