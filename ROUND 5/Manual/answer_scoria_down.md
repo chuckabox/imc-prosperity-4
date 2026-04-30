@@ -1,6 +1,8 @@
-# Answer v6 — Round 5 Manual
+# Answer — "Scoria Down" (skip Scoria) — Round 5 Manual
 
-Builds on v5. Single change: **drops Scoria** entirely.
+**Use this answer if you believe Scoria will go DOWN or are unsure.**
+
+This file is the v5 base with one change: **drops Scoria entirely.** Skipping protects against being wrong on a weak directional read while still losing nothing if Scoria does drop (we just don't capture the profit).
 
 ## TL;DR vs v5
 
