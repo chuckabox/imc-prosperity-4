@@ -2,7 +2,6 @@ import json
 import math
 from collections import defaultdict
 from typing import Dict, List, Tuple
-
 from datamodel import Order, TradingState
 
 # ANSWER3.PY: Universal MM (from answer2) + dual-Z mean-reversion skew.
