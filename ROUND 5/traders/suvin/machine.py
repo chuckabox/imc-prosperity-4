@@ -6,11 +6,15 @@ from datamodel import Order, TradingState
 
 LIMIT = 10
 MM_CLIP = 5
-INV_SKEW = 0.35 # ADJUSTMENT 1: Increased from 0.25
+INV_SKEW = 0.35 
 LEADER = "GALAXY_SOUNDS_BLACK_HOLES"
 LAG = "SLEEP_POD_POLYESTER"
 LL_LOOKBACK = 100
-MOMENTUM_WINDOW = 10 # ADJUSTMENT 2: Shorter momentum window
+MOMENTUM_WINDOW = 10 
+
+# --- NEW SAFETY PARAMETERS ---
+MUTE_THRESHOLD = 1.5  # If the alpha signal is stronger than this, stop quoting the wrong way
+EDGE_WIDEN = 0.25     # Widen spread per unit of inventory
 
 class Trader:
     def _load(self, td: str) -> Dict:
@@ -39,7 +43,6 @@ class Trader:
         return max(d.buy_orders.keys()), min(d.sell_orders.keys())
 
     def _get_corr_sign(self, x: List[float], y: List[float]) -> float:
-        # ADJUSTMENT 3: NumPy vectorization for latency reduction
         if len(x) < 50 or len(y) < 50: return 1.0
         cov_matrix = np.cov(x, y)
         return 1.0 if cov_matrix[0, 1] >= 0 else -1.0
@@ -59,10 +62,9 @@ class Trader:
         
         ll_skew = 0.0
         if len(mem["bh_hist"]) >= LL_LOOKBACK:
-            # ADJUSTMENT 2: Compare to recent history, not the start of the 100-tick window
             move = mem["bh_hist"][-1] - mem["bh_hist"][-MOMENTUM_WINDOW]
             sign = self._get_corr_sign(mem["bh_hist"], mem["poly_hist"])
-            ll_skew = move * sign * 0.15 # Increased multiplier to react slightly harder
+            ll_skew = move * sign * 0.15 
 
         for sym in state.order_depths.keys():
             bid, ask = self._bba(state, sym)
@@ -72,20 +74,31 @@ class Trader:
             pos = state.position.get(sym, 0)
             
             fair = mid - (INV_SKEW * pos)
-            
             if sym == LAG:
                 fair += ll_skew
                 
-            mm_bid = min(int(round(fair - 1)), ask - 1)
-            mm_ask = max(int(round(fair + 1)), bid + 1)
+            # OPTIMIZATION 1: Asymmetric Spread Widening
+            # If we are holding long inventory, require a much lower bid to buy more.
+            bid_edge = 1 + max(0, pos * EDGE_WIDEN)
+            ask_edge = 1 + max(0, -pos * EDGE_WIDEN)
+                
+            mm_bid = min(int(round(fair - bid_edge)), ask - 1)
+            mm_ask = max(int(round(fair + ask_edge)), bid + 1)
             
-            # ADJUSTMENT 4: Defensive Quoting at limits
-            if pos >= LIMIT - 2: mm_bid -= 1 
-            if pos <= -(LIMIT - 2): mm_ask += 1
+            # OPTIMIZATION 2: Alpha-Driven Quote Muting (The Killswitch)
+            # If the alpha signal predicts a massive drop, DO NOT BUY.
+            mute_bids = (sym == LAG and ll_skew < -MUTE_THRESHOLD)
+            # If the alpha signal predicts a massive spike, DO NOT SELL.
+            mute_asks = (sym == LAG and ll_skew > MUTE_THRESHOLD)
             
-            if pos < LIMIT:
+            # OPTIMIZATION 3: Inventory Hard-Stops
+            # Stop quoting entirely when at LIMIT - 1 to avoid getting toxic flow at the extremes
+            can_bid = pos < (LIMIT - 1) and not mute_bids
+            can_ask = pos > -(LIMIT - 1) and not mute_asks
+
+            if can_bid:
                 result[sym].append(Order(sym, mm_bid, min(MM_CLIP, LIMIT - pos)))
-            if pos > -LIMIT:
+            if can_ask:
                 result[sym].append(Order(sym, mm_ask, -min(MM_CLIP, LIMIT + pos)))
 
         return dict(result), 0, self._save(mem)
