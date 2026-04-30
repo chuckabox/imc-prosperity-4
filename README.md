@@ -71,3 +71,16 @@ ROUND 3/        Round 3 traders, analysis docs, and data capsule
 tools/          Backtester launchers, dashboard, and analysis scripts
 external/       Rust engine source (GeyzsoN fork)
 ```
+
+
+
+
+# New Backtest instructions
+
+```bash
+prosperity4btest cli "ROUND 5/traders/adin/Blue.py" 5
+```
+
+Ensure you put the number 5 at the end to specify round 5. 
+Also don't forget quotations around the path to the file
+
