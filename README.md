@@ -3,8 +3,6 @@
 Our full run through **IMC Prosperity 4**: a 5-round algorithmic + manual trading
 competition across the planets **Intara**, **Solvenar**, and **Ignith**.
 
-Crew tag: `oneIsLuckTwoIsSkill`
-
 ## Final result
 
 | Leaderboard | Rank |
