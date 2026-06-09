@@ -1,4 +1,8 @@
-# IMC Prosperity 4 — Team Pixelers
+<div align="center">
+<img src="docs/results/prosperity.imc.com_game%20(1).png" width="100%" alt="IMC Prosperity 4 - mission complete"/>
+</div>
+
+# IMC Prosperity 4 - Team Pixelers
 
 Our full run through **IMC Prosperity 4**: a 5-round algorithmic + manual trading
 competition across the planets **Intara**, **Solvenar**, and **Ignith**.
@@ -12,7 +16,7 @@ competition across the planets **Intara**, **Solvenar**, and **Ignith**.
 | Manual | #348 |
 | Country | #127 |
 
-**Final PnL: 141,726 XIRECs.** Manual trading was our edge all competition — top-350
+**Final PnL: 141,726 XIRECs.** Manual trading was our edge all competition - top-350
 manual finish versus a mid-pack algo. Round 1 manual placed **1st in the world**.
 
 <table>
@@ -32,12 +36,12 @@ manual finish versus a mid-pack algo. Round 1 manual placed **1st in the world**
 | Siddhant Malik | Manual challenge submissions |
 | Adin Sreekesh | Manual challenge submissions |
 
-> Manual challenges (a big chunk of our PnL) were submitted by **Siddhant** and **Adin** —
+> Manual challenges (a big chunk of our PnL) were submitted by **Siddhant** and **Adin** -
 > that's why their names don't show on the algorithm uploads.
 
 ## Results at a glance
 
-> Round 3 was a hard leaderboard reset ("Gloves off") — the running total restarts there.
+> Round 3 was a hard leaderboard reset ("Gloves off") - the running total restarts there.
 
 | Rd | Planet | Final algo (author) | Algo PnL | Manual PnL | Round total | Running | Position |
 |----|--------|---------------------|---------:|-----------:|------------:|--------:|---------:|
@@ -53,7 +57,7 @@ manual finish versus a mid-pack algo. Round 1 manual placed **1st in the world**
 
 ## Round by round
 
-### Round 1 — Intara: "First Intarian goods"
+### Round 1 - Intara: "First Intarian goods"
 First two goods: **Ash-coated Osmium** and **Intarian Pepper Root**. Position **1872nd**.
 
 - **Algo:** `128-trader_robust_peter_v12.py` (Peter Ma) → **+85,640** (rank 3030)
@@ -64,20 +68,20 @@ First two goods: **Ash-coated Osmium** and **Intarian Pepper Root**. Position **
 <table>
 <tr>
 <td width="50%"><img src="docs/results/image-1.png" width="100%"/><br><sub>Algo result</sub></td>
-<td width="50%"><img src="docs/results/image-3.png" width="100%"/><br><sub>Manual — Dryland Flax</sub></td>
+<td width="50%"><img src="docs/results/image-3.png" width="100%"/><br><sub>Manual - Dryland Flax</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/results/image-4.png" width="100%"/><br><sub>Manual — Ember Mushroom</sub></td>
+<td width="50%"><img src="docs/results/image-4.png" width="100%"/><br><sub>Manual - Ember Mushroom</sub></td>
 <td width="50%"></td>
 </tr>
 </table>
 
-### Round 2 — Intara: "Limited Market Access"
+### Round 2 - Intara: "Limited Market Access"
 Market Access Fee mechanic + the **Invest & Expand** budget challenge. Hit the 200k
 mission goal. Position **3291st**.
 
 - **Algo:** `138-Holy_grailllll.py` (Peter Ma) → **+81,187** (rank 2693)
-- **Manual:** invested 50,000 budget — Research 23% / Scale 77% / Speed 0% → **+24,233** (rank 736)
+- **Manual:** invested 50,000 budget - Research 23% / Scale 77% / Speed 0% → **+24,233** (rank 736)
 
 <table>
 <tr>
@@ -90,7 +94,7 @@ mission goal. Position **3291st**.
 </tr>
 </table>
 
-### Round 3 — Solvenar: "Options require decisions" *(leaderboard reset)*
+### Round 3 - Solvenar: "Options require decisions" *(leaderboard reset)*
 New goods: **Hydrogel Packs**, **Velvetfruit Extract**, and Velvetfruit Extract
 Vouchers (options). Position **2185th**.
 
@@ -108,7 +112,7 @@ Vouchers (options). Position **2185th**.
 </tr>
 </table>
 
-### Round 4 — Solvenar: "Hello, I'm Mark"
+### Round 4 - Solvenar: "Hello, I'm Mark"
 Counterparty IDs ("Mark N") added to the data; re-evaluate the VEV options book.
 Position **1207th**.
 
@@ -126,7 +130,7 @@ Position **1207th**.
 </tr>
 </table>
 
-### Round 5 — Solvenar + Ignith: "The final stretch"
+### Round 5 - Solvenar + Ignith: "The final stretch"
 50 new goods, plus a one-time manual market on the neighbouring planet **Ignith**
 (1,000,000 budget, "Ashflow Alpha" news). Position **1521st**.
 
@@ -145,10 +149,10 @@ Position **1207th**.
 
 ## What worked
 
-- **Manual challenges carried us** — final manual rank #348 vs algo #3085. Round 1
+- **Manual challenges carried us** - final manual rank #348 vs algo #3085. Round 1
   manual won the world; Round 3 manual placed 22nd.
 - **Consistent algo market-making** on the simple goods (Rounds 1–2) banked steady PnL.
-- The **options rounds (3–5) were rough** on the algo side — the exotic VEV/Aether
+- The **options rounds (3–5) were rough** on the algo side - the exotic VEV/Aether
   books and the 50-good final round dragged the algorithmic score down.
 
 ## Repository structure
