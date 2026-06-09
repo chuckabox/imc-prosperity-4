@@ -1986,3 +1986,756 @@ Prosperity Discord
 
 main menu finished: ![alt text](prosperity.imc.com_game.png)
 leaderboard of everything: ![alt text](prosperity.imc.com_leaderboard.png)
+
+Leaderboard
+
+
+View Prizes
+Pixelers
+POSITION
+#1521
+XIREC
+141,726
+
+Overall
+#1521
+
+
+Algorithmic
+#3085
+
+
+Manual
+#348
+
+
+Country
+#127
+
+Overall
+Team Standings
+Search...
+
+All countries
+Country
+
+Champions Circle
+01
+🇺🇸
+Seven Deuce Capital
+
+United States
+
+1,551,759
+02
+🇺🇸
+rat_hunters
+
+United States
+
+1,459,764
+03
+🇦🇺
+broke like joc
+
+Australia
+
+1,401,157
+04
+🇳🇱
+Une Baguette Fromage
+
+Netherlands
+
+1,386,318
+05
+🇭🇺
+professional ppt makers
+
+Hungary
+
+1,354,745
+Elite Contenders
+06
+🇺🇸
+Team Declan
+
+United States
+
+1,325,108
+07
+🇻🇳
+Talyxion - TA
+
+Vietnam
+
+1,303,484
+08
+🇩🇪
+moonshot67
+
+Germany
+
+1,263,445
+09
+🇦🇺
+Fair Value
+
+Australia
+
+1,203,166
+10
+🇬🇧
+DU Trading
+
+United Kingdom
+
+1,193,592
+11
+🇬🇧
+OMI
+
+United Kingdom
+
+1,159,501
+12
+🇦🇺
+Vibing
+
+Australia
+
+1,139,158
+13
+🇬🇧
+the trader joes
+
+United Kingdom
+
+1,080,536
+14
+🇺🇸
+404BrainNotFound
+
+United States
+
+1,038,925
+15
+🇺🇸
+Little Apple Legends
+
+United States
+
+1,011,032
+16
+🇺🇸
+RugPullers
+
+United States
+
+1,004,425
+17
+🇦🇺
+Holy Trinity
+
+Australia
+
+1,003,890
+18
+🇩🇪
+tudx
+
+Germany
+
+994,024
+19
+🇺🇸
+JaneRT
+
+United States
+
+993,413
+20
+🇺🇸
+ColumbiaU Traders
+
+United States
+
+967,659
+21
+🇦🇺
+big rocks
+
+Australia
+
+962,685
+22
+🇦🇹
+StyrianKFU Quants
+
+Austria
+
+956,497
+23
+🇦🇺
+BASTION
+
+Australia
+
+956,286
+24
+🇺🇸
+Spicy Chicken
+
+United States
+
+934,213
+25
+🇦🇹
+PowderDays
+
+Austria
+
+927,550
+26
+🇺🇸
+CCC_v2
+
+United States
+
+904,115
+27
+🇦🇺
+caringbah quant traders
+
+Australia
+
+900,350
+28
+🇩🇰
+DTU_Quant_Lab
+
+Denmark
+
+897,597
+29
+🇪🇸
+Farrers
+
+Spain
+
+896,165
+30
+🇺🇸
+Penguin
+
+United States
+
+892,778
+31
+🇹🇼
+1112233
+
+Taiwan
+
+888,377
+32
+🇮🇳
+Gamblr
+
+India
+
+879,258
+33
+🇮🇹
+Quan t Hold Us
+
+Italy
+
+874,965
+34
+🇧🇪
+Mythos
+
+Belgium
+
+873,648
+35
+🇦🇶
+Blank
+
+Antarctica
+
+853,363
+36
+🇺🇸
+jackhetech
+
+United States
+
+844,720
+37
+🇬🇧
+Domus Traders
+
+United Kingdom
+
+818,587
+38
+🇺🇸
+StimulatedPlatypuses
+
+United States
+
+815,684
+39
+🇨🇦
+SatoruGojo
+
+Canada
+
+813,540
+40
+🇩🇪
+VHP Capital
+
+Germany
+
+801,122
+41
+🇷🇴
+kelly_criterionites
+
+Romania
+
+800,787
+42
+🇺🇸
+KCQuant
+
+United States
+
+796,401
+43
+🇮🇳
+maxout
+
+India
+
+794,819
+44
+🇨🇭
+parsec
+
+Switzerland
+
+790,729
+45
+🇵🇱
+C-offe-plus_plus
+
+Poland
+
+789,659
+46
+🇪🇸
+GPB_Provisional
+
+Spain
+
+785,410
+47
+🇺🇸
+FinnaTrade
+
+United States
+
+768,010
+48
+🇳🇿
+ItzYaBoi_DabKing_YT
+
+New Zealand
+
+752,031
+49
+🇬🇧
+Lagrange Multiplier
+
+United Kingdom
+
+737,631
+50
+🇺🇸
+GoBears
+
+United States
+
+734,228
+51
+🇳🇱
+Plain N Spicy
+
+Netherlands
+
+731,748
+52
+🇬🇧
+InfNullity
+
+United Kingdom
+
+730,165
+53
+🇸🇬
+88th street
+
+Singapore
+
+729,032
+54
+🇸🇬
+HireMePLSSSSSSSSSSSSSSS
+
+Singapore
+
+723,956
+55
+🇸🇬
+Alpha Bbeta
+
+Singapore
+
+720,938
+56
+🇺🇸
+VP123
+
+United States
+
+720,650
+57
+🇺🇸
+Ryan Challman
+
+United States
+
+713,119
+58
+🇳🇱
+TheBigSpoof
+
+Netherlands
+
+707,507
+59
+🇧🇪
+Thriller
+
+Belgium
+
+704,635
+60
+🇦🇺
+63-bit integers
+
+Australia
+
+700,334
+61
+🇺🇸
+Schrodingers Alpha
+
+United States
+
+699,439
+62
+🇫🇷
+Karman
+
+France
+
+694,719
+63
+🇬🇧
+Pull The Trigger
+
+United Kingdom
+
+694,664
+64
+🇬🇧
+Chewbacca
+
+United Kingdom
+
+690,073
+65
+🇺🇸
+Zolu
+
+United States
+
+689,563
+66
+🇮🇳
+Phil_Hellmuth
+
+India
+
+688,040
+67
+🇺🇸
+Qu4nt D3stroy3rs
+
+United States
+
+681,221
+68
+🇯🇵
+Quant Finance at UTokyo
+
+Japan
+
+676,755
+69
+🇦🇺
+Shove with junk
+
+Australia
+
+673,236
+70
+🇧🇬
+Rakia SMG
+
+Bulgaria
+
+672,033
+71
+🇺🇸
+volmaxxing
+
+United States
+
+670,133
+72
+🇦🇹
+alphaholics
+
+Austria
+
+669,632
+73
+🇺🇸
+JSR
+
+United States
+
+669,624
+74
+🇬🇧
+nEvermind
+
+United Kingdom
+
+663,740
+75
+🇦🇺
+MarginCallers
+
+Australia
+
+658,241
+76
+🇭🇰
+Path of Progress
+
+Hong Kong
+
+657,811
+77
+🇺🇸
+RMK Partners
+
+United States
+
+656,061
+78
+🇺🇸
+i am see
+
+United States
+
+655,112
+79
+🇬🇧
+Alistair
+
+United Kingdom
+
+652,788
+80
+🇮🇳
+Mayank0415
+
+India
+
+652,201
+81
+🇬🇧
+Arepo
+
+United Kingdom
+
+647,643
+82
+🇨🇭
+The Big 4
+
+Switzerland
+
+646,466
+83
+🇺🇸
+MFAMSMC River Trading 2
+
+United States
+
+644,968
+84
+🇨🇳
+AXin
+
+China
+
+644,165
+85
+🇬🇧
+mop
+
+United Kingdom
+
+639,713
+86
+🇨🇭
+Eigen
+
+Switzerland
+
+632,168
+87
+🇨🇦
+Ad astra per aspera
+
+Canada
+
+630,604
+88
+🇺🇸
+porridge
+
+United States
+
+630,514
+89
+🇺🇸
+bear
+
+United States
+
+629,555
+90
+🇦🇺
+yuh
+
+Australia
+
+629,323
+91
+🇨🇭
+Cyg X-1
+
+Switzerland
+
+624,609
+92
+🇬🇧
+A manger
+
+United Kingdom
+
+623,617
+93
+🇺🇸
+Dark Forest Hunter
+
+United States
+
+622,469
+94
+🇩🇪
+Omega Seekers
+
+Germany
+
+619,716
+95
+🇮🇳
+Trident Titans
+
+India
+
+612,910
+96
+🇬🇧
+La Bottega
+
+United Kingdom
+
+610,039
+97
+🇬🇧
+Anyways
+
+United Kingdom
+
+607,425
+98
+🇦🇺
+Orbital Edge
+
+Australia
+
+605,535
+99
+🇮🇳
+GremlinInc
+
+India
+
+604,666
+100
+🇦🇺
+Claude Opus 46
+
+Australia
+
+603,392
+
+
+01
+
+02
+
+03
+...
+
+
+39
+
+40
+
+41
+
+
+IMC Prosperity 4 - A trading challenge of cosmic proportions | IMC Prosperity 4-90000

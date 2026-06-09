@@ -150,7 +150,11 @@
       "Bash(awk -F/ 'NF==2{print}')",
       "Bash(sed -i 's#ROUND 3/Sid/#ROUND 3/traders/sid/#g' \"ROUND 3/traders/sid/INDEX.md\")",
       "Bash(sed -i 's#ROUND 3/data_capsule_day2_first10pct#ROUND 3/data_capsule/slices/day2_first10pct#g' \"ROUND 3/traders/ken/PROMPT_greek_generation.md\")",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(grep -iE \"image-[0-9]+\\\\.png|prosperity\\\\.imc|\\\\.png$\")",
+      "Bash(grep -iE \"\\\\.png$\")",
+      "Bash(git check-ignore *)",
+      "Bash(mv image-1.png image-2.png image-3.png image-4.png image-5.png image-6.png image-7.png image-8.png image-9.png image-10.png image-11.png image-12.png image-13.png image-14.png image-15.png image.png prosperity.imc.com_game.png prosperity.imc.com_leaderboard.png docs/results/)"
     ]
   }
 }
