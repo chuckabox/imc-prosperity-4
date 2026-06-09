@@ -71,7 +71,7 @@ Add a greek-aware overlay on top of the current RV engine:
 For every meaningful change, run:
 
 1) Upload-like slice:
-`python tools/run_prosperity4bt.py --trader "ROUND 3/traders/ken/we found greek.py" --dataset "ROUND 3/data_capsule_day2_first10pct" --day 2 --no-progress`
+`python tools/run_prosperity4bt.py --trader "ROUND 3/traders/ken/we found greek.py" --dataset "ROUND 3/data_capsule/slices/day2_first10pct" --day 2 --no-progress`
 
 2) Full day2:
 `python tools/run_prosperity4bt.py --trader "ROUND 3/traders/ken/we found greek.py" --dataset "ROUND 3/data_capsule" --day 2 --no-progress`

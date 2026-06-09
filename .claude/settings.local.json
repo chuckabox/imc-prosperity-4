@@ -135,7 +135,22 @@
       "Bash(rtk read *)",
       "PowerShell(wsl bash -c \"/mnt/c/Users/peter/Desktop/IMC/imc-prosperity-4/external/prosperity_rust_backtester/target/release/rust_backtester --help\" 2>&1)",
       "Bash(sed -n '4,1834p')",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(awk -F/ '{print $1}')",
+      "Bash(awk -F/ '{print $2}')",
+      "Bash(git grep *)",
+      "Bash(awk -F/ 'NF==3 && $2==\"config\"')",
+      "Bash(cd \"c:/Users/peter/Desktop/imc-prosperity-4\" *)",
+      "Read(//c/Users/peter/Desktop/imc-prosperity-4/ROUND%205/traders/peter/**)",
+      "Bash(set -e)",
+      "Bash(git mv *)",
+      "Bash(mkdir -p \"ROUND 3/data_capsule/slices\")",
+      "Bash(mkdir -p \"ROUND 4/data_capsule/slices\")",
+      "Bash(mkdir -p \"ROUND 4/results\")",
+      "Bash(awk -F/ 'NF==2{print}')",
+      "Bash(sed -i 's#ROUND 3/Sid/#ROUND 3/traders/sid/#g' \"ROUND 3/traders/sid/INDEX.md\")",
+      "Bash(sed -i 's#ROUND 3/data_capsule_day2_first10pct#ROUND 3/data_capsule/slices/day2_first10pct#g' \"ROUND 3/traders/ken/PROMPT_greek_generation.md\")",
+      "Bash(git rm *)"
     ]
   }
 }

@@ -98,7 +98,7 @@ TOTAL: +3,300/day × 3 days = +9,900 ≈ 10K ✓
 cd /Users/siddhant/Desktop/prosperity/imc-prosperity-4
 
 python tools/run_prosperity4bt.py \
-  --trader "ROUND 3/Sid/GOAT-V7.py" \
+  --trader "ROUND 3/traders/sid/GOAT-V7.py" \
   --dataset "ROUND 3/data_capsule" \
   --day 0
 ```
@@ -106,15 +106,15 @@ python tools/run_prosperity4bt.py \
 ### Full Test (All 3 days)
 ```bash
 python tools/run_prosperity4bt.py \
-  --trader "ROUND 3/Sid/GOAT-V7.py" \
+  --trader "ROUND 3/traders/sid/GOAT-V7.py" \
   --dataset "ROUND 3/data_capsule"
 ```
 
 ### Compare All Versions (V3 vs V4 vs V7)
 ```bash
-python tools/run_prosperity4bt.py --trader "ROUND 3/Sid/GOAT-V3.py" --dataset "ROUND 3/data_capsule"
-python tools/run_prosperity4bt.py --trader "ROUND 3/Sid/GOAT-V4-VOLATILITY-ARBITRAGE.py" --dataset "ROUND 3/data_capsule"
-python tools/run_prosperity4bt.py --trader "ROUND 3/Sid/GOAT-V7.py" --dataset "ROUND 3/data_capsule"
+python tools/run_prosperity4bt.py --trader "ROUND 3/traders/sid/GOAT-V3.py" --dataset "ROUND 3/data_capsule"
+python tools/run_prosperity4bt.py --trader "ROUND 3/traders/sid/GOAT-V4-VOLATILITY-ARBITRAGE.py" --dataset "ROUND 3/data_capsule"
+python tools/run_prosperity4bt.py --trader "ROUND 3/traders/sid/GOAT-V7.py" --dataset "ROUND 3/data_capsule"
 ```
 
 Results appear in: `external/prosperity_rust_backtester/runs/p4bt-*/metrics.json`
@@ -280,7 +280,7 @@ You have the best strategy possible because:
 ## 📂 Files at a Glance
 
 ```
-ROUND 3/Sid/
+ROUND 3/traders/sid/
 ├── GOAT-V7.py                          ← The live trader algorithm
 ├── GOAT-V7-STRATEGY.md                 ← Complete 10k PnL game plan
 ├── V7-VISUAL-SUMMARY.md                ← Pictures & quick ref (START HERE)
