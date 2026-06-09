@@ -19,12 +19,8 @@ competition across the planets **Intara**, **Solvenar**, and **Ignith**.
 **Final PnL: 141,726 XIRECs.** Manual trading was our edge all competition - top-350
 manual finish versus a mid-pack algo. Round 1 manual placed **1st in the world**.
 
-<table>
-<tr>
-<td width="50%"><img src="docs/results/prosperity.imc.com_leaderboard.png" width="100%"/><br><sub>Final overall leaderboard</sub></td>
-<td width="50%"><img src="docs/results/prosperity.imc.com_game.png" width="100%"/><br><sub>Mission complete</sub></td>
-</tr>
-</table>
+![Final overall leaderboard](docs/results/prosperity.imc.com_leaderboard.png)
+![Mission complete](docs/results/prosperity.imc.com_game.png)
 
 ## Team
 
@@ -65,16 +61,9 @@ First two goods: **Ash-coated Osmium** and **Intarian Pepper Root**. Position **
   - Dryland Flax: BUY 9,999 @ 30 → +9,999
   - Ember Mushroom: BUY 19,999 @ 20 → +77,996
 
-<table>
-<tr>
-<td width="50%"><img src="docs/results/image-1.png" width="100%"/><br><sub>Algo result</sub></td>
-<td width="50%"><img src="docs/results/image-3.png" width="100%"/><br><sub>Manual - Dryland Flax</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/results/image-4.png" width="100%"/><br><sub>Manual - Ember Mushroom</sub></td>
-<td width="50%"></td>
-</tr>
-</table>
+![Algo result](docs/results/image-1.png)
+![Manual - Dryland Flax](docs/results/image-3.png)
+![Manual - Ember Mushroom](docs/results/image-4.png)
 
 ### Round 2 - Intara: "Limited Market Access"
 Market Access Fee mechanic + the **Invest & Expand** budget challenge. Hit the 200k
@@ -83,16 +72,9 @@ mission goal. Position **3291st**.
 - **Algo:** `138-Holy_grailllll.py` (Peter Ma) → **+81,187** (rank 2693)
 - **Manual:** invested 50,000 budget - Research 23% / Scale 77% / Speed 0% → **+24,233** (rank 736)
 
-<table>
-<tr>
-<td width="50%"><img src="docs/results/image-5.png" width="100%"/><br><sub>Algo result</sub></td>
-<td width="50%"><img src="docs/results/image-6.png" width="100%"/><br><sub>Manual</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/results/image-7.png" width="100%"/><br><sub>Manual</sub></td>
-<td width="50%"></td>
-</tr>
-</table>
+![Algo result](docs/results/image-5.png)
+![Manual](docs/results/image-6.png)
+![Manual](docs/results/image-7.png)
 
 ### Round 3 - Solvenar: "Options require decisions" *(leaderboard reset)*
 New goods: **Hydrogel Packs**, **Velvetfruit Extract**, and Velvetfruit Extract
@@ -101,16 +83,9 @@ Vouchers (options). Position **2185th**.
 - **Algo:** `107-chefclaude.py` (Viet Duc Tran) → **−5,452** (rank 2702)
 - **Manual:** Celestial Gardeners' Guild bids 766 / 866 → **+79,622** (rank 22)
 
-<table>
-<tr>
-<td width="50%"><img src="docs/results/image-9.png" width="100%"/><br><sub>Algo result</sub></td>
-<td width="50%"><img src="docs/results/image-8.png" width="100%"/><br><sub>Manual</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/results/image-10.png" width="100%"/><br><sub>Manual</sub></td>
-<td width="50%"></td>
-</tr>
-</table>
+![Algo result](docs/results/image-9.png)
+![Manual](docs/results/image-8.png)
+![Manual](docs/results/image-10.png)
 
 ### Round 4 - Solvenar: "Hello, I'm Mark"
 Counterparty IDs ("Mark N") added to the data; re-evaluate the VEV options book.
@@ -119,16 +94,9 @@ Position **1207th**.
 - **Algo:** `35-pot.py` (Suvin Chin Chandran) → **+16,536** (rank 1353)
 - **Manual:** Aether Crystal exotic options (puts/calls/chooser/binary/knock-out) → **+54,821** (rank 344)
 
-<table>
-<tr>
-<td width="50%"><img src="docs/results/image-11.png" width="100%"/><br><sub>Algo result</sub></td>
-<td width="50%"><img src="docs/results/image-12.png" width="100%"/><br><sub>Manual</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/results/image-13.png" width="100%"/><br><sub>Manual</sub></td>
-<td width="50%"></td>
-</tr>
-</table>
+![Algo result](docs/results/image-11.png)
+![Manual](docs/results/image-12.png)
+![Manual](docs/results/image-13.png)
 
 ### Round 5 - Solvenar + Ignith: "The final stretch"
 50 new goods, plus a one-time manual market on the neighbouring planet **Ignith**
@@ -138,12 +106,8 @@ Position **1207th**.
 - **Manual:** Ignith market basket (Thermalite/Magma ink/Sulfur reactor long; Obsidian
   cutlery/Lava cake/Ashes of the Phoenix short, etc.) → **+76,537** (rank 691)
 
-<table>
-<tr>
-<td width="50%"><img src="docs/results/image-14.png" width="100%"/><br><sub>Algo result</sub></td>
-<td width="50%"><img src="docs/results/image-15.png" width="100%"/><br><sub>Manual</sub></td>
-</tr>
-</table>
+![Algo result](docs/results/image-14.png)
+![Manual](docs/results/image-15.png)
 
 ---
 
