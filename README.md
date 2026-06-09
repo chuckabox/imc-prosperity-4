@@ -19,7 +19,7 @@ competition across the planets **Intara**, **Solvenar**, and **Ignith**.
 **Final PnL: 141,726 XIRECs.** Manual trading was our edge all competition - top-350
 manual finish versus a mid-pack algo. Round 1 manual placed **1st in the world**.
 
-![Final overall leaderboard](docs/results/prosperity.imc.com_leaderboard.png)
+![Final overall leaderboard](docs/results/prosperity.imc.com_leaderboard%20-%20Copy.png)
 ![Mission complete](docs/results/prosperity.imc.com_game.png)
 
 ## Team
