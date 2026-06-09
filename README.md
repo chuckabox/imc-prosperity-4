@@ -24,13 +24,13 @@ manual finish versus a mid-pack algo. Round 1 manual placed **1st in the world**
 
 ## Team
 
-| Member | Role highlights |
-|--------|-----------------|
-| Peter Ma | Algo (Rounds 1–2 final submissions) |
-| Viet Duc Tran | Algo (Rounds 3 & 5 final submissions) |
-| Suvin Chin Chandran | Algo (Round 4 final submission) |
-| Siddhant Malik | Manual challenge submissions |
-| Adin Sreekesh | Manual challenge submissions |
+| Member |
+|--------|
+| Peter Ma |
+| Viet Duc Tran |
+| Suvin Chin Chandran |
+| Siddhant Malik |
+| Adin Sreekesh |
 
 > Manual challenges (a big chunk of our PnL) were submitted by **Siddhant** and **Adin** -
 > that's why their names don't show on the algorithm uploads.
