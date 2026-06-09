@@ -32,9 +32,6 @@ manual finish versus a mid-pack algo. Round 1 manual placed **1st in the world**
 | Siddhant Malik |
 | Adin Sreekesh |
 
-> Manual challenges (a big chunk of our PnL) were submitted by **Siddhant** and **Adin** -
-> that's why their names don't show on the algorithm uploads.
-
 ## Results at a glance
 
 > Round 3 was a hard leaderboard reset ("Gloves off") - the running total restarts there.
